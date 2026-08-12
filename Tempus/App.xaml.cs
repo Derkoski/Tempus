@@ -147,7 +147,7 @@ public partial class App : Application
             Reason = "",
             OpenTasks = snapshot.Tasks.Count(t => !t.IsCompleted),
             UnreadMail = snapshot.UnreadMail,
-            Time = TimeStatusResolver.Resolve(snapshot.Agenda, now, _thresholds),
+            Time = TimeStatusResolver.Resolve(snapshot.Agenda, now, _thresholds, _workDay),
             Boundary = WorkDayResolver.Resolve(now, _workDay),
             LastSyncAt = snapshot.LastSuccessAt,
         };

@@ -12,6 +12,15 @@ internal enum TimeMood
     /// <summary>Livre, e a próxima reunião está longe. Verde discreto.</summary>
     Free,
 
+    /// <summary>
+    /// Fora do expediente. Laranja, sem preenchimento.
+    /// <para>
+    /// Não é <see cref="Free"/>: verde diz "aproveite o tempo livre de trabalho", e às 19:48 de
+    /// uma terça isso é a mensagem errada. Laranja é o empurrão de que o dia já acabou.
+    /// </para>
+    /// </summary>
+    OffHours,
+
     /// <summary>Em reunião, dentro do horário. Azul: ocupado, nada errado.</summary>
     InMeeting,
 
@@ -52,6 +61,12 @@ internal sealed record TimeStatus
     /// regressiva de se confundir com o vermelho de "você invadiu a próxima call" (D-012).
     /// </summary>
     public bool IsFilled => Mood is TimeMood.EndingSoon or TimeMood.Imminent or TimeMood.Overrun;
+
+    /// <summary>
+    /// Peso da fonte. Fora do expediente entra em negrito sem preenchimento: o recado é firme
+    /// ("pare"), mas não é uma urgência que exija ação imediata.
+    /// </summary>
+    public bool IsBold => IsFilled || Mood is TimeMood.OffHours;
 }
 
 internal sealed record TimeThresholds
@@ -81,7 +96,10 @@ internal static class TimeStatusResolver
     /// (regra 8 do CLAUDE.md).
     /// </summary>
     public static TimeStatus Resolve(
-        IReadOnlyList<AgendaItem> agenda, DateTimeOffset now, TimeThresholds thresholds)
+        IReadOnlyList<AgendaItem> agenda,
+        DateTimeOffset now,
+        TimeThresholds thresholds,
+        WorkDayOptions workDay)
     {
         var relevant = agenda.Where(e => !e.IsAllDay).OrderBy(e => e.Start).ToList();
 
@@ -98,9 +116,21 @@ internal static class TimeStatusResolver
             .OrderByDescending(e => e.End)
             .FirstOrDefault();
 
-        return justEnded is not null
-            ? Overrun(justEnded, next, now)
-            : Between(next, now, thresholds);
+        if (justEnded is not null) return Overrun(justEnded, next, now);
+
+        // Compromisso marcado ganha do relógio: uma reunião às 19h existe, e o expediente ter
+        // acabado não a torna menos real. Fora-de-expediente só fala quando não há nada agendado.
+        if (next is null && WorkDayResolver.OffHoursLabel(now, workDay) is { } label)
+        {
+            return new TimeStatus
+            {
+                Mood = TimeMood.OffHours,
+                Text = label,
+                Detail = "Fora do horário de trabalho",
+            };
+        }
+
+        return Between(next, now, thresholds);
     }
 
     private static TimeStatus InMeeting(

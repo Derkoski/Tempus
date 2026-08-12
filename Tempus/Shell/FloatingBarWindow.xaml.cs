@@ -166,7 +166,7 @@ internal partial class FloatingBarWindow : Window
 
         TimeText.Text = time.Text;
         TimeText.Foreground = new SolidColorBrush(foreground);
-        TimeText.FontWeight = time.IsFilled ? FontWeights.SemiBold : FontWeights.Normal;
+        TimeText.FontWeight = time.IsBold ? FontWeights.SemiBold : FontWeights.Normal;
 
         // Preenchimento só nos humores que pedem antecipação; os calmos ficam com texto tingido.
         TimeArea.Background = new SolidColorBrush(background);

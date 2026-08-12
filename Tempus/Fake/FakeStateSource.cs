@@ -96,7 +96,8 @@ internal sealed class FakeStateSource
             OpenTasks = _tasks.Count(t => !t.IsCompleted),
             UnreadMail = Mail,
             LastSyncAt = DateTimeOffset.Now,
-            Time = TimeStatusResolver.Resolve(_agenda, DateTimeOffset.Now, TimeThresholds.Default),
+            Time = TimeStatusResolver.Resolve(
+                _agenda, DateTimeOffset.Now, TimeThresholds.Default, WorkDayOptions.Default),
         };
 
     /// <summary>

@@ -2,8 +2,15 @@ namespace Tempus.Domain;
 
 internal sealed record WorkDayOptions
 {
+    public int StartHour { get; init; } = 8;
+    public int StartMinute { get; init; }
     public int MiddayHour { get; init; } = 12;
     public int MiddayMinute { get; init; }
+
+    /// <summary>Volta do almoço. A janela entre o meio-dia e este horário conta como fora do expediente.</summary>
+    public int LunchEndHour { get; init; } = 13;
+    public int LunchEndMinute { get; init; }
+
     public int EndHour { get; init; } = 17;
     public int EndMinute { get; init; }
 
@@ -74,6 +81,42 @@ internal static class WorkDayResolver
 
     private static DateTimeOffset At(DateTimeOffset now, int hour, int minute) =>
         new(now.Year, now.Month, now.Day, hour, minute, 0, now.Offset);
+
+    /// <summary>
+    /// Fora do expediente: fim de semana, feriado, ou fora da janela de trabalho do dia.
+    /// <para>
+    /// Sem isto, às 19:48 de uma terça a barra diz "Livre" em verde — tecnicamente verdade e
+    /// completamente enganoso. Você não está livre, o dia acabou.
+    /// </para>
+    /// </summary>
+    public static bool IsOffHours(DateTimeOffset now, WorkDayOptions options) =>
+        OffHoursLabel(now, options) is not null;
+
+    /// <summary>
+    /// O rótulo de fora-de-expediente, ou <c>null</c> se está em horário de trabalho.
+    /// <para>
+    /// Cada situação ganha a palavra certa em vez de um texto único: no almoço "Dia Encerrado"
+    /// seria falso, e num sábado "Fora de expediente" é mais longo e diz menos que "Folga".
+    /// Todas compartilham o mesmo tratamento visual — laranja e negrito.
+    /// </para>
+    /// <para>
+    /// Capitalizadas como rótulo, não como frase. São uma família de estados curtos, e a
+    /// capitalização as distingue das mensagens da barra, que seguem capitalização de sentença
+    /// ("Login do Google expirou — clique para entrar").
+    /// </para>
+    /// </summary>
+    public static string? OffHoursLabel(DateTimeOffset now, WorkDayOptions options)
+    {
+        if (!IsWorkingDay(DateOnly.FromDateTime(now.Date), options)) return "Folga";
+
+        if (now >= At(now, options.EndHour, options.EndMinute)) return "Dia Encerrado";
+        if (now < At(now, options.StartHour, options.StartMinute)) return "Dia Encerrado";
+
+        var lunchStart = At(now, options.MiddayHour, options.MiddayMinute);
+        var lunchEnd = At(now, options.LunchEndHour, options.LunchEndMinute);
+
+        return now >= lunchStart && now < lunchEnd ? "Almoço" : null;
+    }
 
     public static bool IsWorkingDay(DateOnly date, WorkDayOptions options)
     {

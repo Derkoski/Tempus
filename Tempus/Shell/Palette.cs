@@ -95,6 +95,9 @@ internal sealed record Palette(
     public (Color Background, Color Foreground) For(TimeStatus time) => time.Mood switch
     {
         TimeMood.Free => (Colors.Transparent, FreeForeground),
+        // Laranja no texto, sem preenchimento: firme o bastante para você notar que o dia acabou,
+        // discreto o bastante para não competir com um alarme de verdade.
+        TimeMood.OffHours => (Colors.Transparent, AttentionBackground),
         TimeMood.InMeeting => (Colors.Transparent, InMeetingForeground),
         TimeMood.Approaching => (Colors.Transparent, AttentionBackground),
         TimeMood.EndingSoon => (AttentionBackground, AttentionForeground),
