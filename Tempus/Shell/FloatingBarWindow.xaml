@@ -1,0 +1,127 @@
+<Window x:Class="Tempus.Shell.FloatingBarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:ClassModifier="internal"
+        Title="Tempus"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        AllowsTransparency="False"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        FontSize="12">
+
+  <Window.Resources>
+    <!-- Ícones vêm do Segoe Fluent Icons (Win11) com Segoe MDL2 Assets como reserva. -->
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+  </Window.Resources>
+
+  <Grid x:Name="Root" Margin="8,0">
+    <Grid.ColumnDefinitions>
+      <!-- Contagem regressiva do expediente: aparece só perto de 12:00 e 17:00. -->
+      <ColumnDefinition Width="Auto" />
+      <!-- Situação temporal: flexível, cede espaço ao alarme quando houver um. -->
+      <ColumnDefinition Width="*" MinWidth="0" />
+      <!-- Motivo: só o necessário, e nada quando não há alarme. -->
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+
+    <!-- Fim de expediente. Vive fora dos dois vocabulários de cor: é um gradiente contínuo, não
+         uma escala de estados, e some completamente fora da janela de aviso. -->
+    <Border x:Name="BoundaryArea"
+            Grid.Column="0"
+            CornerRadius="4"
+            Padding="6,2"
+            MinWidth="38"
+            Margin="0,0,8,0"
+            VerticalAlignment="Center"
+            Visibility="Collapsed"
+            Cursor="Hand">
+      <TextBlock x:Name="BoundaryText"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 FontWeight="SemiBold"
+                 Text="" />
+    </Border>
+
+    <!-- Situação temporal (D-011, D-012). Vocabulário de cor próprio: verde livre, azul em
+         reunião, âmbar se aproximando, vermelho iminente. Texto tingido nos estados calmos;
+         preenchido só no que pede antecipação. -->
+    <Border x:Name="TimeArea"
+            Grid.Column="1"
+            CornerRadius="4"
+            Padding="6,2"
+            VerticalAlignment="Center"
+            HorizontalAlignment="Left"
+            Background="Transparent"
+            Cursor="Hand">
+      <TextBlock x:Name="TimeText"
+                 VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis"
+                 Text="—" />
+    </Border>
+
+    <!-- Motivo do alarme: o único elemento preenchido por padrão, e vazio na maior parte do dia -->
+    <Border x:Name="ReasonChip"
+            Grid.Column="2"
+            CornerRadius="4"
+            Padding="7,2"
+            Margin="8,0,0,0"
+            VerticalAlignment="Center"
+            Background="Transparent"
+            Cursor="Hand"
+            ToolTipService.InitialShowDelay="300">
+      <TextBlock x:Name="ReasonText"
+                 VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis"
+                 Text="" />
+    </Border>
+
+    <!-- Contador de tarefas -->
+    <StackPanel x:Name="TasksArea"
+                Grid.Column="3"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="10,0,0,0"
+                Cursor="Hand"
+                Background="Transparent">
+      <TextBlock x:Name="TasksIcon"
+                 FontFamily="{StaticResource IconFont}"
+                 FontSize="12"
+                 VerticalAlignment="Center"
+                 Margin="0,0,3,0"
+                 Text="&#xE73E;" />
+      <TextBlock x:Name="TasksCount"
+                 VerticalAlignment="Center"
+                 MinWidth="16"
+                 FontWeight="SemiBold"
+                 Text="—" />
+    </StackPanel>
+
+    <!-- Contador de e-mail -->
+    <StackPanel x:Name="MailArea"
+                Grid.Column="4"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="8,0,0,0"
+                Cursor="Hand"
+                Background="Transparent">
+      <TextBlock x:Name="MailIcon"
+                 FontFamily="{StaticResource IconFont}"
+                 FontSize="12"
+                 VerticalAlignment="Center"
+                 Margin="0,0,3,0"
+                 Text="&#xE715;" />
+      <TextBlock x:Name="MailCount"
+                 VerticalAlignment="Center"
+                 MinWidth="16"
+                 FontWeight="SemiBold"
+                 Text="—" />
+    </StackPanel>
+  </Grid>
+</Window>

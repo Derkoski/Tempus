@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Tempus</AssemblyName>
+    <RootNamespace>Tempus</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Gerado por scripts/make-icon.ps1 — ampulheta branca sobre azul, 9 tamanhos. -->
+    <ApplicationIcon>Assets\tempus.ico</ApplicationIcon>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4206" />
+    <PackageReference Include="Google.Apis.Gmail.v1" Version="1.75.0.4225" />
+    <PackageReference Include="Google.Apis.Tasks.v1" Version="1.74.0.3958" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
+  </ItemGroup>
+
+</Project>

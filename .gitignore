@@ -54,3 +54,6 @@ secrets/
 *.log
 Thumbs.db
 desktop.ini
+
+## Backups locais de config
+*.bak

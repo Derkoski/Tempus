@@ -1,0 +1,51 @@
+namespace Tempus.Domain;
+
+/// <summary>Como uma tarefa aberta chega até a UI. Espelha o essencial do Google Tasks.</summary>
+internal sealed record TaskItem
+{
+    public required string Id { get; init; }
+
+    /// <summary>
+    /// Lista do Google Tasks a que pertence. Necessário para escrever: a API endereça tarefa por
+    /// (lista, id), não por id sozinho.
+    /// </summary>
+    public string? ListId { get; init; }
+
+    public required string Title { get; init; }
+
+    /// <summary>Vencimento. O Google Tasks guarda data sem hora, então <see cref="DateOnly"/>.</summary>
+    public DateOnly? Due { get; init; }
+
+    public bool IsCompleted { get; init; }
+
+    public TaskBucket Bucket(DateOnly today) => Due switch
+    {
+        null => TaskBucket.NoDate,
+        var d when d < today => TaskBucket.Overdue,
+        var d when d == today => TaskBucket.Today,
+        _ => TaskBucket.Later,
+    };
+}
+
+/// <summary>
+/// Agrupamento do painel S2. A ordem do enum é a ordem de exibição — vencidas primeiro,
+/// porque são as únicas que alimentam um sinal de severidade (<c>TaskOverdue</c>).
+/// </summary>
+internal enum TaskBucket
+{
+    Overdue,
+    Today,
+    Later,
+    NoDate,
+}
+
+internal static class TaskBucketNames
+{
+    public static string Label(this TaskBucket bucket) => bucket switch
+    {
+        TaskBucket.Overdue => "Vencidas",
+        TaskBucket.Today => "Hoje",
+        TaskBucket.Later => "Depois",
+        _ => "Sem data",
+    };
+}
