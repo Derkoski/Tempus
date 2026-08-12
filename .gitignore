@@ -1,0 +1,56 @@
+## Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]64/
+*.dll
+*.exe
+*.pdb
+
+## Claude Code — settings.json é compartilhado, o .local é pessoal
+.claude/settings.local.json
+
+## Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.csproj.user
+
+## NuGet
+*.nupkg
+packages/
+!packages/build/
+
+## Publish
+publish/
+*.publishsettings
+PublishProfiles/
+
+## Test / coverage
+[Tt]est[Rr]esult*/
+coverage*.xml
+*.coverage
+
+## SEGREDOS — nunca commitar (ver docs/DECISIONS.md D-003)
+client_secret*.json
+credentials.json
+token.json
+tokens/
+*.tokens
+appsettings.Local.json
+appsettings.Secrets.json
+secrets/
+.env
+.env.*
+
+## Misc
+*.log
+Thumbs.db
+desktop.ini
