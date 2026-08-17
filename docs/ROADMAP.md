@@ -53,7 +53,7 @@ O fallback de iCal fica arquivado, sem necessidade de uso.
 - [x] Escrita: concluir e criar tarefa (antecipado da Fase 4 — a UI já existia e sem isso mentiria)
 - [x] Estado `Offline` por `NeedsAuth`, `NotConfigured` ou sync > 10 min, com contadores em `—`
 - [x] Re-consent sem reiniciar o app
-- [ ] **Credenciais do GCP** — depende do usuário; é o go/no-go de 1a
+- [x] **Credenciais do GCP** — em uso; a barra roda com dados reais da conta
 
 **Desvio consciente do plano original:** sem `syncToken`. Ele serve para sincronizar um calendário
 inteiro e é **incompatível com `timeMin`/`timeMax`** — e o que a barra precisa é só "os eventos de
@@ -73,22 +73,54 @@ do `SPEC.md`.
       — os três estilos verificados por `GetWindowLongPtr`
 - [x] Posicionamento via rect do `Shell_TrayWnd`, com teto rígido contra a bandeja
 - [x] Largura de 12 slots (480px): 5 slots deixavam ~64px de texto, pequeno demais
-- [x] Reafirmação de ordem Z a cada 1s — ver "Achado da Fase 2" em D-002
+- [x] Reafirmação de ordem Z — ver "Achado da Fase 2" em D-002. O heartbeat de 1s sozinho deixava
+      a barra ~500ms atrás da taskbar a cada troca de janela; passou a ser orientada a evento
+      (`EVENT_SYSTEM_FOREGROUND`) com o heartbeat como rede de segurança (D-014)
 - [x] Robustez escrita: `TaskbarCreated`, `WM_DPICHANGED`, `WM_DISPLAYCHANGE`, lock/unlock
 - [x] Esconder em tela cheia via `SHQueryUserNotificationState`
 - [x] Layout: relógio · motivo · contador de tarefas · contador de e-mail
 - [x] Consumo em repouso: 0,13% de um núcleo (critério de aceite 10)
 - [x] Painéis S2 e S3 construídos, com dados falsos e o laço painel→barra
-- [ ] **Verificar que os painéis abrem.** Escritos e compilando, mas nunca exercitados: a única
-      tentativa com coordenadas corretas ocorreu enquanto a barra ainda estava atrás da taskbar,
-      então o clique foi para o explorer. Não testado ≠ quebrado.
+- [x] **Verificar que os painéis abrem** — feito em 2026-08-17. S3 aberto por clique sintético no
+      menu de contexto e capturado em tela; S2 exercitado pelo usuário. Ambos renderizam dados
+      reais. A tentativa anterior falhou porque a barra ainda estava atrás da taskbar e o clique ia
+      para o explorer — era o bug da ordem Z (D-014), não os painéis.
 - [ ] Exercitar `TaskbarCreated` com restart real do explorer (o handler existe, nunca rodou)
-- [ ] Verificar `WindowFromPoint` como teste de propriedade dos pixels, não só de retângulo
+- [x] Verificar propriedade dos pixels, não só de retângulo — feito por sonda de ordem Z contra
+      `Shell_TrayWnd` (D-014), que é melhor que o `WindowFromPoint` previsto: compara a ordem
+      inteira em vez de um pixel só, sem falso negativo em sobreposição parcial
 
 **Risco que esta fase mata:** o posicionamento sobre a taskbar ser inviável na prática. Segue de
 pé, mas o achado da ordem Z mostrou que a fragilidade prevista em D-002 é real e se manifesta em
 minutos de uso, não em updates do Windows. Se reaparecer sob outra forma, `TraySurface` entra sem
 tocar em lógica de domínio.
+
+---
+
+## Pausas de descanso — *em andamento, pedida em 2026-08-17*
+
+**Entrega:** 15 minutos de descanso na manhã e na tarde, encaixados na janela livre mais próxima
+do meio de cada período.
+
+Fora do numeramento das fases porque não estava no plano: veio do uso. Não depende da Fase 3 e não
+a bloqueia.
+
+- [ ] `BreakSlot` — função pura de (agenda, expediente, hora) → duas janelas de 15 min. Procura a
+      partir do meio do período para os dois lados: manhã 08:00–12:00 (meio às 10:00), tarde
+      13:00–17:00 (meio às 15:00)
+- [ ] Recalculada a cada sync: se marcarem reunião em cima, a pausa **se move** sozinha
+- [ ] Slot no painel S3 o dia todo; na barra, texto ambiente só durante a janela
+- [ ] **Três níveis de controle**, decididos com o usuário:
+      1. *Instalação:* nasce **desabilitada**. Só quem quer liga.
+      2. *Ligada:* a folga existe **todo dia**, sem precisar pedir.
+      3. *Por dia:* dá para dispensar a de hoje, e vale só para hoje.
+- [ ] Sem cor de alerta: não gasta âmbar nem vermelho (regra 1). Entrada no `SEVERITY.md`
+- [ ] Caso sem solução: período sem 15 min livres não inventa pausa nem alarma
+
+**Decisão de escopo:** vive só no Tempus, sem virar evento no Google Calendar. Evita subir de
+`CalendarReadonly` para escopo de escrita numa conta corporativa, e mantém a pausa móvel — um
+evento real ficaria parado no horário errado. Promover a evento real fica para *se* o problema
+virar "colegas marcam por cima"; o cálculo da janela é o mesmo nos dois casos.
 
 ---
 
@@ -109,8 +141,11 @@ tocar em lógica de domínio.
 - [ ] Persistência da supressão de `DayEnded` até a virada do dia
 - [ ] Testes das invariantes I1–I8
 - [ ] Toasts com AUMID registrado, com deduplicação e supressão em apresentação
-- [ ] Feriados nacionais computados localmente, com Páscoa por Meeus/Gauss (D-008)
-- [ ] Sinais de fronteira do dia com 12:00 e 17:00 configuráveis, e `DayEnded.CountMode` (D-007)
+- [x] Feriados computados localmente, com Páscoa por Meeus/Jones/Butcher (D-008) — `BrazilianHolidays`,
+      cobrindo nacionais, Paraná e Pato Branco, mais emendas por lista manual
+- [x] Fronteiras do dia configuráveis (D-007) — `WorkDayOptions` (08:00/12:00/13:00/17:00) e
+      `BoundaryStatus` com gradiente verde→âmbar→vermelho na janela final
+- [ ] `DayEnded.CountMode` (D-007) — **não implementado**; é o que resta do item acima
 
 **Marco:** ao fim desta fase o produto já entrega o valor central. Fases 4 e 5 são
 complementos.
@@ -133,11 +168,19 @@ complementos.
 
 **Entrega:** contador de não-lidos real.
 
-- [ ] Adicionar `gmail.readonly` ao consent (restricted, mas permitido em Testing mode para test
-      users — exige novo consent, não exige verificação)
-- [ ] `users.labels.get` no `UNREAD` → `messagesUnread`, polling de 120s, sem tocar em conteúdo
-- [ ] Contador sempre neutro, nunca colorindo a barra (`SEVERITY.md` §2.4)
-- [ ] Critério de aceite 7 do `SPEC.md` verificado
+*Entregue fora de ordem, junto com a Fase 1 — o escopo saía no mesmo consent e o contador já
+existia na barra sem dado por trás.*
+
+- [x] `gmail.readonly` no consent (restricted, permitido em Testing mode para test users)
+- [x] Contagem de não-lidos, polling de 60s, sem tocar em conteúdo
+- [x] Contador sempre neutro, nunca colorindo a barra (`SEVERITY.md` §2.4)
+- [ ] Critério de aceite 7 do `SPEC.md` verificado formalmente
+
+**Desvio consciente:** conta **conversas** via `users.threads.list` com query, e não
+`messagesUnread` do rótulo `UNREAD` como este roadmap previa. O caminho planejado errava por dois
+motivos — contava mensagens em vez de conversas (uma thread com 5 respostas virava 5, e o Gmail
+mostra 1) e o rótulo `INBOX` abrange Promoções, Social e Atualizações. Só identificadores de
+conversa trafegam; nenhum assunto, remetente ou corpo é lido.
 
 *Fase encolhida por D-006: a detecção de microfone que morava aqui saiu do escopo, e
 `MeetingRanIntoNext` passou a ser baseado apenas em cronograma, entregue na Fase 3.*
