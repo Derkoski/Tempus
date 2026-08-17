@@ -66,6 +66,23 @@ internal sealed record ShellState
     public string? Lookahead { get; init; }
 
     /// <summary>
+    /// As pausas de descanso ainda de pé hoje. Vazio quando a funcionalidade está desligada — que
+    /// é o padrão de instalação — ou quando a folga do dia foi dispensada.
+    /// </summary>
+    public IReadOnlyList<BreakSlot> Breaks { get; init; } = [];
+
+    /// <summary>
+    /// A funcionalidade está ligada mas a folga de hoje foi dispensada. Distinto de
+    /// <see cref="Breaks"/> vazio por falta de espaço na agenda: só este habilita "Restaurar
+    /// pausa de hoje" no menu.
+    /// </summary>
+    public bool BreaksDismissed { get; init; }
+
+    /// <summary>A pausa acontecendo agora, se houver. É o que a barra mostra como texto ambiente.</summary>
+    public BreakSlot? BreakNow(DateTimeOffset now) =>
+        Breaks.FirstOrDefault(b => b.IsRunningAt(now));
+
+    /// <summary>
     /// True quando o nível 3 passou de 5 min sem reconhecimento e deve piscar
     /// âmbar↔vermelho (§1.1). Só faz sentido com <see cref="Severity"/> == Critical.
     /// </summary>

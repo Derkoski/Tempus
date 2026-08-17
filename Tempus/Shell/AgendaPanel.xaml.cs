@@ -39,13 +39,18 @@ internal partial class AgendaPanel : Window
 
     public void ShowAt(NativeMethods.RECT anchor) => _host.ShowAt(anchor);
 
-    public void Render(IReadOnlyList<AgendaItem> agenda, DateTimeOffset now)
+    public void Render(
+        IReadOnlyList<AgendaItem> agenda,
+        IReadOnlyList<BreakSlot> breaks,
+        DateTimeOffset now)
     {
         var events = agenda
             .Where(e => !e.IsAllDay) // dia inteiro é marcador, não compromisso (SEVERITY.md §2.1)
             .OrderBy(e => e.Start)
             .ToList();
 
+        // A contagem do cabeçalho ignora as pausas: ela responde "quantos compromissos tenho", e
+        // descanso não é compromisso. Inflá-la faria o dia parecer mais cheio do que é.
         HeaderCount.Text = events.Count switch
         {
             0 => "sem compromissos",
@@ -55,7 +60,7 @@ internal partial class AgendaPanel : Window
 
         Timeline.Children.Clear();
 
-        if (events.Count == 0)
+        if (events.Count == 0 && breaks.Count == 0)
         {
             Timeline.Children.Add(new TextBlock
             {
@@ -69,16 +74,107 @@ internal partial class AgendaPanel : Window
 
         var next = events.FirstOrDefault(e => e.Start > now);
 
-        for (var i = 0; i < events.Count; i++)
-        {
-            var current = events[i];
-            Timeline.Children.Add(BuildEventRow(current, now, isNext: current == next));
+        // Reuniões e pausas entram numa linha do tempo só, ordenadas por horário. O intervalo
+        // entre linhas passa a considerar a pausa — sem isso o painel diria "45 min livre" num
+        // vão que já tem descanso marcado dentro.
+        var blocks = events
+            .Select(e => new TimelineBlock(e.Start, e.End, e, null))
+            .Concat(breaks.Select(b => new TimelineBlock(b.Start, b.End, null, b)))
+            .OrderBy(b => b.Start)
+            .ToList();
 
-            if (i + 1 < events.Count)
-                Timeline.Children.Add(BuildGapRow(new AgendaGap(events[i + 1].Start - current.End)));
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            var current = blocks[i];
+
+            Timeline.Children.Add(current switch
+            {
+                { Event: { } item } => BuildEventRow(item, now, isNext: item == next),
+                { Break: { } pause } => BuildBreakRow(pause, now),
+                _ => new TextBlock(),
+            });
+
+            if (i + 1 < blocks.Count)
+                Timeline.Children.Add(BuildGapRow(new AgendaGap(blocks[i + 1].Start - current.End)));
         }
 
         RepositionAfterLayout();
+    }
+
+    /// <summary>Uma linha da timeline: ou uma reunião, ou uma pausa. Nunca as duas.</summary>
+    private readonly record struct TimelineBlock(
+        DateTimeOffset Start,
+        DateTimeOffset End,
+        AgendaItem? Event,
+        BreakSlot? Break);
+
+    /// <summary>
+    /// Uma pausa de descanso.
+    /// <para>
+    /// Deliberadamente diferente de uma reunião: sem fundo de serviço, sem marca de convite, e com
+    /// o título em itálico no verde de "Livre". Nenhuma cor nova entra por causa dela (regra 1) —
+    /// o que a distingue é a forma, não o tom.
+    /// </para>
+    /// </summary>
+    private UIElement BuildBreakRow(BreakSlot pause, DateTimeOffset now)
+    {
+        var isRunning = pause.IsRunningAt(now);
+        var isPast = pause.HasEndedBy(now);
+
+        var row = new Border
+        {
+            CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(6, 7, 8, 7),
+            Background = Brushes.Transparent,
+            ToolTip = isPast
+                ? $"{pause.Label} — já passou"
+                : $"{pause.Label} — até {pause.End.ToLocalTime():HH:mm}{Environment.NewLine}Levante e descanse",
+        };
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var marker = new Border
+        {
+            Width = 3,
+            CornerRadius = new CornerRadius(2),
+            Margin = new Thickness(0, 1, 9, 1),
+            Background = new SolidColorBrush(
+                isRunning ? _palette.FreeForeground : Colors.Transparent),
+        };
+        Grid.SetColumn(marker, 0);
+
+        var time = new TextBlock
+        {
+            Text = $"{pause.Start.ToLocalTime():HH:mm}–{pause.End.ToLocalTime():HH:mm}",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0),
+            FontWeight = isRunning ? FontWeights.SemiBold : FontWeights.Normal,
+            Foreground = new SolidColorBrush(_palette.Muted),
+        };
+        Grid.SetColumn(time, 1);
+
+        var title = new TextBlock
+        {
+            Text = pause.Label,
+            FontStyle = FontStyles.Italic,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = isPast ? 0.45 : 1.0,
+            Foreground = new SolidColorBrush(_palette.FreeForeground),
+        };
+        Grid.SetColumn(title, 3);
+
+        grid.Children.Add(marker);
+        grid.Children.Add(time);
+        grid.Children.Add(title);
+
+        row.Child = grid;
+        return row;
     }
 
     private UIElement BuildEventRow(AgendaItem item, DateTimeOffset now, bool isNext)

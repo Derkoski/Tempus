@@ -802,3 +802,79 @@ me deve uma resposta" faz o painel falar o mesmo idioma da barra, em vez de inve
 - **Regra aprendida, que vale além deste caso:** distinção por preenchimento não sobrevive à
   distância de leitura da barra. Quando forma for o único recurso, use formas de silhueta
   diferente — nunca a mesma silhueta cheia e vazada.
+
+---
+
+## D-019 — Pausas de descanso: locais, móveis e opt-in
+
+**Status:** Aceita · 2026-08-17 · pedida em uso, fora do plano das fases
+
+**Contexto.** Pedido do usuário: 15 minutos de descanso na manhã e na tarde, encaixados no meio de
+cada período, numa janela sem call marcada. A justificativa é levantar da cadeira.
+
+**Decisão.** `BreakPlanner.Plan(agenda, agora, expediente, opções)` — função pura (regra 8) que
+devolve até duas janelas. Manhã é `StartHour`→`MiddayHour`, tarde é `LunchEndHour`→`EndHour`, então
+a feature herda o expediente configurável do D-007 sem inventar horário próprio.
+
+A busca varre a grade de 5 em 5 minutos e escolhe a janela livre **mais próxima do meio** do
+período — não a primeira que couber. Cinco minutos é fino o bastante para achar folga em agenda
+cheia e grosso o bastante para a pausa cair em horário redondo, que é como as pessoas leem hora.
+
+### Vive só no Tempus
+
+Não vira evento no Google Calendar. Dois motivos, e o segundo é o que decide:
+
+1. Escrever no Calendar exigiria subir de `CalendarReadonly` para escopo de escrita, com novo
+   consent numa conta corporativa — custo real por um benefício hipotético.
+2. **Um evento real ficaria parado.** A pausa é recalculada a cada rodada de sync, então uma
+   reunião marcada em cima empurra o descanso para a próxima janela livre. Evento no Calendar
+   perderia exatamente a propriedade que torna a feature útil em agenda que muda.
+
+Promover a evento real fica reservado para *se* o problema virar "colegas marcam por cima". O
+cálculo da janela é o mesmo nos dois casos, então nada se joga fora.
+
+### Três níveis de controle, e por que são três
+
+| Nível | Onde | Padrão |
+|-------|------|--------|
+| Existe a funcionalidade? | `appsettings` → `Breaks.Enabled` | **false** |
+| Tem folga hoje? | automático, todo dia | sim |
+| Quero a de hoje? | menu da barra | sim, até dispensar |
+
+O liga/desliga **não** está no menu de propósito. Se estivesse, o dia ruim — o dia em que a agenda
+está cheia e a pausa importa mais — seria exatamente o dia em que a mão desligaria a feature de
+vez. Separar "não quero hoje" de "não quero nunca" preserva a segunda decisão de ser tomada a
+frio.
+
+Nascer desabilitada é pedido explícito do usuário: quem nunca ouviu falar da folga não deve ser
+surpreendido por um bloco novo no painel.
+
+### Detalhes que custaram pensamento
+
+**A dispensa guarda a data, não um booleano.** Um booleano exigiria limpeza na virada do dia, e um
+dia em que a limpeza não roda é um dia sem pausa. Comparar datas não tem esse modo de falha:
+qualquer dia diferente do gravado tem folga. Fica em `%APPDATA%\Tempus\break-dismissed` porque a
+barra reinicia — dispensar e ver a pausa voltar dez minutos depois ensinaria a não confiar no
+gesto.
+
+**O filtro é `fim > agora`, não `início > agora`.** Uma pausa em curso continua candidata e vence
+por estar no ideal. Com o filtro ingênuo o relógio empurraria a pausa para a frente a cada rodada
+e ela nunca terminaria de acontecer.
+
+**Eventos de dia inteiro não bloqueiam.** Ocupam as 8 horas e não impedem ninguém de levantar da
+cadeira. Tratá-los como ocupado apagaria as duas pausas de qualquer dia com férias ou aniversário
+no calendário.
+
+**Nenhuma cor nova** (regra 1). No painel a pausa é itálico no verde de "Livre", sem fundo de
+serviço e sem marca de convite — distinguida por forma, não por tom. Na barra ela toma o slot do
+lookahead durante os 15 minutos, em vez de ganhar espaço próprio: "levante da cadeira" vale mais
+que "próximo compromisso" naquele momento, e a barra não cresce por um estado que dura 15 min.
+
+**Consequências.** A contagem do cabeçalho do S3 ignora pausas — ela responde "quantos
+compromissos tenho", e descanso não é compromisso. O vão entre linhas passa a considerar a pausa,
+senão o painel diria "45 min livre" num intervalo que já tem descanso dentro.
+
+Verificado em 2026-08-17 contra a agenda real: pausa da tarde em 14:50–15:05 (meio da tarde é
+14:52:30), ausência correta da pausa da manhã ao meio-dia, e o ciclo dispensar→restaurar gravando
+e limpando o arquivo. **Não verificado visualmente:** o texto ambiente na barra, que só aparece
+durante os 15 minutos e com o humor em `Free`.

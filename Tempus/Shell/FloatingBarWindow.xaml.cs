@@ -96,6 +96,7 @@ internal partial class FloatingBarWindow : Window
     public Palette CurrentPalette => _palette;
 
     public event EventHandler? Acknowledged;
+    public event EventHandler? BreakDismissToggled;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
@@ -220,6 +221,18 @@ internal partial class FloatingBarWindow : Window
     /// </summary>
     private void RenderLookahead(ShellState state)
     {
+        // A pausa em curso toma este slot do lookahead em vez de ganhar espaço próprio. Durante os
+        // 15 minutos, "levante da cadeira" vale mais que "próximo compromisso" — e a barra não
+        // cresce por causa de um estado que dura quinze minutos por período.
+        if (!state.IsOffline
+            && state.Severity == Severity.Calm
+            && state.Time.Mood is TimeMood.Free
+            && state.BreakNow(DateTimeOffset.Now) is { } pause)
+        {
+            RenderBreak(pause);
+            return;
+        }
+
         var show = !state.IsOffline
             && state.Severity == Severity.Calm
             && state.Time.Mood is TimeMood.OffHours or TimeMood.Free
@@ -235,6 +248,25 @@ internal partial class FloatingBarWindow : Window
         LookaheadText.Text = state.Lookahead;
         LookaheadText.Foreground = new SolidColorBrush(_palette.Muted);
         LookaheadText.ToolTip = $"Próximo compromisso{Environment.NewLine}Clique para abrir a agenda";
+    }
+
+    /// <summary>
+    /// A pausa acontecendo agora.
+    /// <para>
+    /// Reusa o verde de "Livre" em vez de estrear uma cor: descanso é a mesma família de estado
+    /// calmo, e cada cor nova custa legibilidade a todas as outras (regra 1). O que distingue a
+    /// pausa de "Livre" é a palavra, não o tom.
+    /// </para>
+    /// </summary>
+    private void RenderBreak(BreakSlot pause)
+    {
+        var left = (int)Math.Ceiling((pause.End - DateTimeOffset.Now).TotalMinutes);
+
+        LookaheadText.Visibility = Visibility.Visible;
+        LookaheadText.Text = $"Pausa · {Math.Max(1, left)} min";
+        LookaheadText.Foreground = new SolidColorBrush(_palette.FreeForeground);
+        LookaheadText.ToolTip =
+            $"{pause.Label} — até {pause.End:HH:mm}{Environment.NewLine}Levante e descanse";
     }
 
     /// <summary>
@@ -544,6 +576,17 @@ internal partial class FloatingBarWindow : Window
         {
             menu.Items.Add(new Separator());
             menu.Items.Add(MenuItemFor("Reconhecer alerta", Acknowledged));
+        }
+
+        // Só o gesto do dia aparece aqui. Ligar e desligar a funcionalidade é decisão de
+        // instalação e mora no appsettings — colocá-la no menu convidaria a desligar de vez num
+        // dia ruim, que é justamente o dia em que a pausa importa mais.
+        if (_state.Breaks.Count > 0 || _state.BreaksDismissed)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MenuItemFor(
+                _state.BreaksDismissed ? "Restaurar pausas de hoje" : "Hoje não quero pausa",
+                BreakDismissToggled));
         }
 
         // Sempre disponível, e não só no estado Offline: mudar de escopo exige um novo consent

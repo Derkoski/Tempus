@@ -25,6 +25,8 @@ public partial class App : Application
     private SyncSnapshot _snapshot = SyncSnapshot.Starting;
     private TimeThresholds _thresholds = TimeThresholds.Default;
     private WorkDayOptions _workDay = WorkDayOptions.Default;
+    private BreakOptions _breaks = BreakOptions.Default;
+    private BreakDismissalStore? _dismissals;
 
     private FakeStateSource? _demo;
 
@@ -45,6 +47,8 @@ public partial class App : Application
         var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         _thresholds = ThresholdsLoader.Load(settingsPath);
         _workDay = ThresholdsLoader.LoadWorkDay(settingsPath);
+        _breaks = ThresholdsLoader.LoadBreaks(settingsPath);
+        _dismissals = new BreakDismissalStore(GoogleOptions.DataDirectory);
 
         var surface = new FloatingBarSurface(BarOptions.Load(settingsPath));
         _surface = surface;
@@ -52,6 +56,18 @@ public partial class App : Application
         surface.MailRequested += (_, _) => Open("https://mail.google.com");
         surface.MeetingActivated += (_, url) => Open(url);
         surface.ExitRequested += (_, _) => Shutdown();
+
+        // Gesto do dia, não configuração: ligar/desligar a funcionalidade é do appsettings, e só
+        // dispensar a folga de hoje passa pelo menu.
+        surface.BreakDismissToggled += (_, _) =>
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+
+            if (_dismissals!.IsDismissed(today)) _dismissals.Restore();
+            else _dismissals.Dismiss(today);
+
+            Rerender();
+        };
 
         if (e.Args.Contains("--demo", StringComparer.OrdinalIgnoreCase))
             StartDemo(surface);
@@ -80,7 +96,8 @@ public partial class App : Application
         {
             _snapshot = snapshot;
             Rerender();
-            surface.RefreshOpenPanel(snapshot.Tasks, snapshot.Agenda);
+            surface.RefreshOpenPanel(
+                snapshot.Tasks, snapshot.Agenda, PlanBreaks(snapshot.Agenda, DateTimeOffset.Now));
         });
 
         surface.ReauthRequested += (_, _) => OnReauthRequested();
@@ -94,7 +111,7 @@ public partial class App : Application
         };
         surface.AgendaRequested += (_, _) =>
         {
-            surface.ToggleAgenda(_snapshot.Agenda);
+            surface.ToggleAgenda(_snapshot.Agenda, PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now));
             _ = sync.RefreshAsync();
         };
         surface.TaskCreated += (_, title) => _ = sync.CreateTaskAsync(title);
@@ -141,6 +158,8 @@ public partial class App : Application
             };
         }
 
+        var breaks = PlanBreaks(snapshot.Agenda, now);
+
         return new ShellState
         {
             Severity = Severity.Calm,
@@ -150,9 +169,25 @@ public partial class App : Application
             Time = TimeStatusResolver.Resolve(snapshot.Agenda, now, _thresholds, _workDay),
             Boundary = WorkDayResolver.Resolve(now, _workDay),
             Lookahead = Domain.Lookahead.Describe(snapshot.Upcoming, now),
+            Breaks = breaks,
+            BreaksDismissed = BreaksEnabledButDismissed(now),
             LastSyncAt = snapshot.LastSuccessAt,
         };
     }
+
+    /// <summary>
+    /// As pausas de hoje, ou vazio se a funcionalidade está desligada ou a folga foi dispensada.
+    /// A dispensa mora aqui, e não no <see cref="BreakPlanner"/>, para o planejador continuar puro.
+    /// </summary>
+    private IReadOnlyList<BreakSlot> PlanBreaks(IReadOnlyList<AgendaItem> agenda, DateTimeOffset now)
+    {
+        if (BreaksEnabledButDismissed(now)) return [];
+
+        return BreakPlanner.Plan(agenda, now, _workDay, _breaks);
+    }
+
+    private bool BreaksEnabledButDismissed(DateTimeOffset now) =>
+        _breaks.Enabled && _dismissals?.IsDismissed(DateOnly.FromDateTime(now.Date)) == true;
 
     private void Rerender()
     {
@@ -176,16 +211,19 @@ public partial class App : Application
         surface.ReauthRequested += (_, _) => surface.Render(demo.Reconnect());
         surface.SyncRequested += (_, _) => surface.Render(demo.Advance());
         surface.TasksRequested += (_, _) => surface.ToggleTasks(demo.Tasks);
-        surface.AgendaRequested += (_, _) => surface.ToggleAgenda(demo.Agenda);
+        surface.AgendaRequested += (_, _) =>
+            surface.ToggleAgenda(demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
         surface.TaskToggled += (_, id) =>
         {
             surface.Render(demo.ToggleTask(id));
-            surface.RefreshOpenPanel(demo.Tasks, demo.Agenda);
+            surface.RefreshOpenPanel(
+                demo.Tasks, demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
         };
         surface.TaskCreated += (_, title) =>
         {
             surface.Render(demo.CreateTask(title));
-            surface.RefreshOpenPanel(demo.Tasks, demo.Agenda);
+            surface.RefreshOpenPanel(
+                demo.Tasks, demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
         };
 
         surface.Render(demo.Current);

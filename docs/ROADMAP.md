@@ -97,7 +97,7 @@ tocar em lógica de domínio.
 
 ---
 
-## Pausas de descanso — *em andamento, pedida em 2026-08-17*
+## Pausas de descanso ✅ *pedida e entregue em 2026-08-17*
 
 **Entrega:** 15 minutos de descanso na manhã e na tarde, encaixados na janela livre mais próxima
 do meio de cada período.
@@ -105,17 +105,19 @@ do meio de cada período.
 Fora do numeramento das fases porque não estava no plano: veio do uso. Não depende da Fase 3 e não
 a bloqueia.
 
-- [ ] `BreakSlot` — função pura de (agenda, expediente, hora) → duas janelas de 15 min. Procura a
-      partir do meio do período para os dois lados: manhã 08:00–12:00 (meio às 10:00), tarde
-      13:00–17:00 (meio às 15:00)
-- [ ] Recalculada a cada sync: se marcarem reunião em cima, a pausa **se move** sozinha
-- [ ] Slot no painel S3 o dia todo; na barra, texto ambiente só durante a janela
-- [ ] **Três níveis de controle**, decididos com o usuário:
-      1. *Instalação:* nasce **desabilitada**. Só quem quer liga.
+- [x] `BreakPlanner` — função pura de (agenda, expediente, hora) → até duas janelas de 15 min.
+      Varre a grade de 5 min e escolhe a livre **mais próxima do meio** do período, não a primeira
+      que couber
+- [x] Recalculada a cada sync: se marcarem reunião em cima, a pausa **se move** sozinha
+- [x] Slot no painel S3 o dia todo; na barra, texto ambiente só durante a janela
+- [x] **Três níveis de controle**, decididos com o usuário:
+      1. *Instalação:* nasce **desabilitada** (`appsettings` → `Breaks.Enabled`). Só quem quer liga.
       2. *Ligada:* a folga existe **todo dia**, sem precisar pedir.
-      3. *Por dia:* dá para dispensar a de hoje, e vale só para hoje.
-- [ ] Sem cor de alerta: não gasta âmbar nem vermelho (regra 1). Entrada no `SEVERITY.md`
-- [ ] Caso sem solução: período sem 15 min livres não inventa pausa nem alarma
+      3. *Por dia:* "Hoje não quero pausa" no menu da barra, persistido por data em `%APPDATA%`
+- [x] Sem cor nova: itálico no verde de "Livre", sem fundo de serviço (regra 1). Ver D-019
+- [x] Caso sem solução: período sem 15 min livres não inventa pausa nem alarma
+- [ ] **Texto ambiente na barra não verificado visualmente** — só aparece durante os 15 min e com
+      o humor em `Free`; a verificação caiu no almoço
 
 **Decisão de escopo:** vive só no Tempus, sem virar evento no Google Calendar. Evita subir de
 `CalendarReadonly` para escopo de escrita numa conta corporativa, e mantém a pausa móvel — um

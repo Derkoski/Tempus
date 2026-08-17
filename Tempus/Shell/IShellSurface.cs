@@ -26,16 +26,25 @@ internal interface IShellSurface : IDisposable
     void ToggleTasks(IReadOnlyList<TaskItem> tasks);
 
     /// <summary>Abre o painel S3, ou fecha se já estiver aberto.</summary>
-    void ToggleAgenda(IReadOnlyList<AgendaItem> agenda);
+    void ToggleAgenda(IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks);
 
     /// <summary>
     /// Redesenha o painel aberto, se houver, sem alternar visibilidade. Usado quando os dados
     /// mudam por baixo de um painel já aberto — concluir uma tarefa, por exemplo.
     /// </summary>
-    void RefreshOpenPanel(IReadOnlyList<TaskItem> tasks, IReadOnlyList<AgendaItem> agenda);
+    void RefreshOpenPanel(
+        IReadOnlyList<TaskItem> tasks,
+        IReadOnlyList<AgendaItem> agenda,
+        IReadOnlyList<BreakSlot> breaks);
 
     /// <summary>Usuário clicou no alerta — "eu vi" (<c>SEVERITY.md</c> §1.1).</summary>
     event EventHandler? Acknowledged;
+
+    /// <summary>
+    /// Alterna a dispensa da folga de <b>hoje</b>. Não liga nem desliga a funcionalidade: isso é
+    /// configuração de instalação, mora no appsettings e não tem gesto na barra.
+    /// </summary>
+    event EventHandler? BreakDismissToggled;
 
     /// <summary>Usuário clicou na barra offline e quer reautenticar (<c>SEVERITY.md</c> §6).</summary>
     event EventHandler? ReauthRequested;

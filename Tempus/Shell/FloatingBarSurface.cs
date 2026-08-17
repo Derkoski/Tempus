@@ -19,6 +19,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         _window = new FloatingBarWindow(options);
 
         _window.Acknowledged += (_, e) => Acknowledged?.Invoke(this, e);
+        _window.BreakDismissToggled += (_, e) => BreakDismissToggled?.Invoke(this, e);
         _window.ReauthRequested += (_, e) => ReauthRequested?.Invoke(this, e);
         _window.TasksRequested += (_, e) => TasksRequested?.Invoke(this, e);
         _window.AgendaRequested += (_, e) => AgendaRequested?.Invoke(this, e);
@@ -29,6 +30,7 @@ internal sealed class FloatingBarSurface : IShellSurface
     }
 
     public event EventHandler? Acknowledged;
+    public event EventHandler? BreakDismissToggled;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
@@ -67,7 +69,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         panel.ShowAt(anchor);
     }
 
-    public void ToggleAgenda(IReadOnlyList<AgendaItem> agenda)
+    public void ToggleAgenda(IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks)
     {
         if (_agenda is not null)
         {
@@ -84,14 +86,17 @@ internal sealed class FloatingBarSurface : IShellSurface
         panel.Dismissed += (_, _) => CloseAgenda();
 
         _agenda = panel;
-        panel.Render(agenda, DateTimeOffset.Now);
+        panel.Render(agenda, breaks, DateTimeOffset.Now);
         panel.ShowAt(anchor);
     }
 
-    public void RefreshOpenPanel(IReadOnlyList<TaskItem> tasks, IReadOnlyList<AgendaItem> agenda)
+    public void RefreshOpenPanel(
+        IReadOnlyList<TaskItem> tasks,
+        IReadOnlyList<AgendaItem> agenda,
+        IReadOnlyList<BreakSlot> breaks)
     {
         _tasks?.Render(tasks);
-        _agenda?.Render(agenda, DateTimeOffset.Now);
+        _agenda?.Render(agenda, breaks, DateTimeOffset.Now);
     }
 
     private void CloseTasks()
