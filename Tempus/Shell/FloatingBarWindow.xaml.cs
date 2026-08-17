@@ -102,6 +102,7 @@ internal partial class FloatingBarWindow : Window
     public event EventHandler? AgendaRequested;
     public event EventHandler? MailRequested;
     public event EventHandler? SyncRequested;
+    public event EventHandler? SettingsRequested;
     public event EventHandler? ExitRequested;
 
     /// <summary>Entrar na call nomeada no slot de tempo. Carrega a URL do Meet (D-016).</summary>
@@ -593,6 +594,8 @@ internal partial class FloatingBarWindow : Window
         // mesmo com o login válido, e sem esta entrada não haveria como pedir isso.
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("Reconectar ao Google", ReauthRequested));
+
+        menu.Items.Add(MenuItemFor("Configurações…", SettingsRequested));
 
         menu.Items.Add(new Separator());
         menu.Items.Add(MenuItemFor("Sair", ExitRequested));

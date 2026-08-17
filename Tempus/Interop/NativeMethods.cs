@@ -168,4 +168,43 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    private const int DwmwaUseImmersiveDarkMode = 20;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hWnd, int attr, ref int value, int size);
+
+    /// <summary>
+    /// Pinta a barra de título de escuro. Ela pertence ao Windows, não ao WPF, então uma janela de
+    /// conteúdo escuro nasce com título claro se ninguém pedir o contrário.
+    /// <para>
+    /// Falha silenciosa por design: em build que não conheça o atributo a chamada devolve erro e
+    /// nada acontece — barra de título clara é cosmético, não vale derrubar a janela por isso.
+    /// </para>
+    /// </summary>
+    public static void UseDarkTitleBar(IntPtr handle, bool dark)
+    {
+        if (handle == IntPtr.Zero) return;
+
+        var value = dark ? 1 : 0;
+        _ = DwmSetWindowAttribute(handle, DwmwaUseImmersiveDarkMode, ref value, sizeof(int));
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private const int SwRestore = 9;
+
+    /// <summary>
+    /// Traz uma janela para a frente. Existe porque a barra é <c>WS_EX_NOACTIVATE</c> (D-002) e
+    /// diálogos abertos a partir dela herdam o não-foco — nascem atrás de tudo, e o usuário conclui
+    /// que o clique no menu não funcionou.
+    /// </summary>
+    public static void BringToFront(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero) return;
+
+        _ = ShowWindow(handle, SwRestore);
+        _ = SetForegroundWindow(handle);
+    }
 }

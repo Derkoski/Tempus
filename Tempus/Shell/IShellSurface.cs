@@ -59,6 +59,9 @@ internal interface IShellSurface : IDisposable
 
     event EventHandler? SyncRequested;
 
+    /// <summary>Abrir a tela de configuração (D-020).</summary>
+    event EventHandler? SettingsRequested;
+
     event EventHandler? ExitRequested;
 
     /// <summary>Tarefa marcada ou desmarcada no painel S2. Carrega o id.</summary>

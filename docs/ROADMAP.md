@@ -126,6 +126,24 @@ virar "colegas marcam por cima"; o cálculo da janela é o mesmo nos dois casos.
 
 ---
 
+## Tela de configuração ✅ *pedida e entregue em 2026-08-17*
+
+**Entrega:** e-mail, expediente e pausas configuráveis por UI, com o dado pessoal fora do repo.
+
+- [x] Duas camadas: `appsettings.json` é padrão de fábrica, `%APPDATA%\Tempus\settings.json` são as
+      escolhas do usuário
+- [x] E-mail **removido do repositório** — `LoginHint` vazio no padrão de fábrica
+- [x] Tela com Conta, Expediente e Pausas; ajuste fino continua no JSON
+- [x] Primeira execução exige o e-mail, com o botão rotulado "Sair" em vez de "Cancelar"
+- [x] `--demo` escapa da exigência: existe para rodar sem conta
+- [x] Item "Configurações…" no menu da barra, com mudanças valendo sem reiniciar
+- [x] Tema escuro nos controles e na barra de título
+
+Ver D-020, incluindo os três achados da verificação: diálogo herdando o não-foco da barra,
+controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
+
+---
+
 ## Fase 3 — Máquina de estados, cores e toasts
 
 **Entrega:** a barra reage aos dados reais da Fase 1 com as cores e avisos corretos.

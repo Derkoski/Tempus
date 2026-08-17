@@ -878,3 +878,69 @@ Verificado em 2026-08-17 contra a agenda real: pausa da tarde em 14:50–15:05 (
 14:52:30), ausência correta da pausa da manhã ao meio-dia, e o ciclo dispensar→restaurar gravando
 e limpando o arquivo. **Não verificado visualmente:** o texto ambiente na barra, que só aparece
 durante os 15 minutos e com o humor em `Free`.
+
+---
+
+## D-020 — Configuração em duas camadas, com tela própria
+
+**Status:** Aceita · 2026-08-17
+
+**Contexto.** O e-mail do usuário estava **commitado** no `appsettings.json`, e qualquer ajuste
+exigia editar JSON na pasta de instalação. Pedido: tirar o dado pessoal do código e dar uma tela,
+principalmente para a primeira execução.
+
+Uma suspeita foi verificada e descartada antes de virar decisão: achei que atualizar o app
+sobrescreveria a configuração, mas o `install.ps1` **já preserva** o `appsettings.json` existente
+no destino. Perda em atualização não era o problema.
+
+**Decisão.** Duas camadas:
+
+| Camada | Onde | Papel |
+|--------|------|-------|
+| Padrão de fábrica | `appsettings.json`, no repo | valores iniciais, **sem dado pessoal** |
+| Escolhas do usuário | `%APPDATA%\Tempus\settings.json` | sobrepõe o padrão |
+
+`%APPDATA%` e não a pasta de instalação por três motivos: fica ao lado do `client_secret.json` e
+dos tokens, num lugar só para "seus dados"; não exige permissão de escrita em Program Files; e
+está **fora do repositório por construção**, então não há como commitar por acidente — que é
+exatamente o acidente que originou esta decisão (regra 5).
+
+Cada campo do arquivo do usuário é **anulável**, e `null` significa "não escolhi, use o padrão".
+Sem isso um campo ausente viraria o default do tipo — `StartHour = 0` em vez de 8 — e o arquivo do
+usuário sobrescreveria em silêncio configuração que ele nunca tocou.
+
+**Escopo da tela:** e-mail, expediente e pausas. O ajuste fino — limiares de tempo, query do Gmail,
+âncora e largura da barra — fica no JSON. São coisas que se mexe uma vez e nunca mais; promovê-las
+a UI custaria manutenção a cada opção nova sem ganhar uso.
+
+### Primeira execução exige o e-mail
+
+Escolha do usuário, tomada com a ressalva à vista: o app **funciona** sem `login_hint` — ele só
+deixa de pré-selecionar a conta no consent semanal (D-003). Exigir o campo bloqueia algo que
+tecnicamente rodaria.
+
+Mitigação: na primeira execução o botão vira **"Sair"** em vez de "Cancelar". Se fechar encerra o
+app, o rótulo tem que dizer isso — um "Cancelar" que mata o processo seria uma armadilha.
+
+O modo `--demo` escapa da exigência: ele existe para exercitar a UI sem conta, e pedir conta o
+inutilizaria.
+
+### Três achados da verificação
+
+**Diálogo herda o não-foco da barra.** A barra é `WS_EX_NOACTIVATE` (D-002), e a janela aberta a
+partir do menu dela nascia **atrás de tudo** — o usuário clicaria em "Configurações…" e concluiria
+que nada aconteceu. Corrigido com `SetForegroundWindow` explícito. Vale para qualquer janela futura
+aberta a partir da barra.
+
+**Controles do WPF não herdam tema.** A primeira versão ficou com texto escuro sobre painel escuro
+e caixas brancas no meio do dark. `Window.Foreground` não alcança `TextBox`, `CheckBox` nem
+`Button`. Resolvido com estilos usando `DynamicResource`, alimentados pela `Palette` em código. A
+barra de título é do Windows e precisou de `DWMWA_USE_IMMERSIVE_DARK_MODE` à parte.
+
+**Propriedade derivada vazava para o arquivo.** `HasLoginHint` é calculada, e o serializador a
+gravava no JSON. Inofensiva na leitura, mas passa a mentir assim que o e-mail muda por fora.
+`[JsonIgnore]`.
+
+**Consequências.** `appsettings.json` passa a ser documentação de padrões, não configuração viva —
+o comentário do `LoginHint` agora diz explicitamente para não preencher ali. Quem já tinha o e-mail
+no arquivo antigo não perde nada: a tela abre na primeira execução e grava no lugar novo.

@@ -28,6 +28,13 @@ internal sealed record Palette(
 {
     private static Color Hex(string hex) => (Color)ColorConverter.ConvertFromString(hex)!;
 
+    /// <summary>
+    /// Derivado da luminância do fundo do painel, e não de um campo separado: um booleano poderia
+    /// discordar das cores, e a pergunta "esta paleta é escura?" já tem resposta nelas.
+    /// </summary>
+    public bool IsDark =>
+        (0.299 * PanelBackground.R) + (0.587 * PanelBackground.G) + (0.114 * PanelBackground.B) < 128;
+
     /// <summary>Taskbar escura — o caso padrão no Windows 11.</summary>
     public static readonly Palette Dark = new(
         BarBackground: Hex("#FF1F1F1F"),

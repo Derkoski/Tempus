@@ -27,6 +27,9 @@ public partial class App : Application
     private WorkDayOptions _workDay = WorkDayOptions.Default;
     private BreakOptions _breaks = BreakOptions.Default;
     private BreakDismissalStore? _dismissals;
+    private UserSettingsStore? _userStore;
+    private UserSettings _user = new();
+    private string _settingsPath = string.Empty;
 
     private FakeStateSource? _demo;
 
@@ -46,9 +49,24 @@ public partial class App : Application
 
         var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         _thresholds = ThresholdsLoader.Load(settingsPath);
-        _workDay = ThresholdsLoader.LoadWorkDay(settingsPath);
-        _breaks = ThresholdsLoader.LoadBreaks(settingsPath);
         _dismissals = new BreakDismissalStore(GoogleOptions.DataDirectory);
+        _userStore = new UserSettingsStore(GoogleOptions.DataDirectory);
+        _settingsPath = settingsPath;
+
+        // Duas camadas: appsettings é padrão de fábrica, %APPDATA% é o que o usuário escolheu.
+        var google = GoogleOptions.Load(settingsPath);
+        _user = _userStore.Load();
+        ApplyUserSettings();
+
+        var isDemo = e.Args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
+
+        // Primeira execução: sem e-mail configurado a tela é obrigatória (D-020). O modo demo
+        // escapa — ele existe para exercitar a UI sem conta, e exigir conta o inutilizaria.
+        if (!isDemo && !_user.HasLoginHint && !ShowSettings(isFirstRun: true))
+        {
+            Shutdown();
+            return;
+        }
 
         var surface = new FloatingBarSurface(BarOptions.Load(settingsPath));
         _surface = surface;
@@ -69,10 +87,12 @@ public partial class App : Application
             Rerender();
         };
 
-        if (e.Args.Contains("--demo", StringComparer.OrdinalIgnoreCase))
+        surface.SettingsRequested += (_, _) => ShowSettings(isFirstRun: false);
+
+        if (isDemo)
             StartDemo(surface);
         else
-            StartGoogle(surface, GoogleOptions.Load(settingsPath), SyncOptions.Load(settingsPath));
+            StartGoogle(surface, google with { LoginHint = _user.LoginHint }, SyncOptions.Load(settingsPath));
 
         surface.Show();
 
@@ -173,6 +193,42 @@ public partial class App : Application
             BreaksDismissed = BreaksEnabledButDismissed(now),
             LastSyncAt = snapshot.LastSuccessAt,
         };
+    }
+
+    /// <summary>
+    /// Reaplica as escolhas do usuário sobre os padrões de fábrica. Cada campo ausente no arquivo
+    /// do usuário mantém o padrão — ver <see cref="UserSettings"/> sobre o porquê dos anuláveis.
+    /// </summary>
+    private void ApplyUserSettings()
+    {
+        var workDayDefaults = ThresholdsLoader.LoadWorkDay(_settingsPath);
+        var breakDefaults = ThresholdsLoader.LoadBreaks(_settingsPath);
+
+        _workDay = _user.WorkDay?.ApplyTo(workDayDefaults) ?? workDayDefaults;
+        _breaks = _user.Breaks?.ApplyTo(breakDefaults) ?? breakDefaults;
+    }
+
+    /// <summary>
+    /// Abre a tela de configuração. Devolve <c>false</c> só quando a primeira execução foi fechada
+    /// sem preencher — o único caso em que o app não tem como seguir.
+    /// </summary>
+    private bool ShowSettings(bool isFirstRun)
+    {
+        var window = new SettingsWindow(
+            Palette.FromSystemTheme(), _user.LoginHint, _workDay, _breaks, isFirstRun);
+
+        window.ShowDialog();
+
+        if (window.Result is not { } saved) return !window.ShouldExit;
+
+        _user = saved;
+        _userStore!.Save(saved);
+        ApplyUserSettings();
+
+        // Mudança de expediente ou de pausa vale na hora; trocar o e-mail só afeta o próximo
+        // consent, então não há o que reiniciar.
+        Rerender();
+        return true;
     }
 
     /// <summary>

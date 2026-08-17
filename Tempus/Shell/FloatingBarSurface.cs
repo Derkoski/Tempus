@@ -25,6 +25,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         _window.AgendaRequested += (_, e) => AgendaRequested?.Invoke(this, e);
         _window.MailRequested += (_, e) => MailRequested?.Invoke(this, e);
         _window.SyncRequested += (_, e) => SyncRequested?.Invoke(this, e);
+        _window.SettingsRequested += (_, e) => SettingsRequested?.Invoke(this, e);
         _window.ExitRequested += (_, e) => ExitRequested?.Invoke(this, e);
         _window.MeetingActivated += (_, url) => MeetingActivated?.Invoke(this, url);
     }
@@ -36,6 +37,7 @@ internal sealed class FloatingBarSurface : IShellSurface
     public event EventHandler? AgendaRequested;
     public event EventHandler? MailRequested;
     public event EventHandler? SyncRequested;
+    public event EventHandler? SettingsRequested;
     public event EventHandler? ExitRequested;
     public event EventHandler<string>? TaskToggled;
     public event EventHandler<string>? TaskCreated;
