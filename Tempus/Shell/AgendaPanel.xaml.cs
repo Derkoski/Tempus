@@ -91,14 +91,15 @@ internal partial class AgendaPanel : Window
             CornerRadius = new CornerRadius(5),
             Padding = new Thickness(6, 7, 8, 7),
             Background = Brushes.Transparent,
-            Cursor = item.MeetUrl is null ? Cursors.Arrow : Cursors.Hand,
+            Cursor = item.Conference is null ? Cursors.Arrow : Cursors.Hand,
         };
 
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // faixa de estado
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // horário
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // resposta ao convite
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // selo de estado
 
         // Faixa vertical marcando o evento em curso.
         var marker = new Border
@@ -130,22 +131,39 @@ internal partial class AgendaPanel : Window
             FontWeight = isRunning ? FontWeights.SemiBold : FontWeights.Normal,
             Foreground = new SolidColorBrush(isPast ? _palette.Muted : _palette.BarForeground),
         };
-        Grid.SetColumn(title, 2);
+
+        // O serviço da call é o fundo do título (D-017). Fica na coluna estrelada, então o
+        // Border acompanha a largura e o texto dentro continua truncando com reticências.
+        var titleHost = new Border
+        {
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(item.Conference is null ? 0 : 6, 2, 6, 2),
+            Margin = new Thickness(item.Conference is null ? 0 : -6, 0, 0, 0),
+            Background = new SolidColorBrush(ProviderTint(item.Conference, isPast)),
+            Child = title,
+        };
+        Grid.SetColumn(titleHost, 3);
 
         grid.Children.Add(marker);
         grid.Children.Add(time);
-        grid.Children.Add(title);
+        grid.Children.Add(titleHost);
+
+        if (BuildRsvpMark(item.Rsvp, isPast) is { } mark)
+        {
+            Grid.SetColumn(mark, 2);
+            grid.Children.Add(mark);
+        }
 
         var badge = BuildBadge(isRunning, isNext, isPast);
         if (badge is not null)
         {
-            Grid.SetColumn(badge, 3);
+            Grid.SetColumn(badge, 4);
             grid.Children.Add(badge);
         }
 
         row.Child = grid;
 
-        if (item.MeetUrl is { } url)
+        if (item.Conference is { } conference)
         {
             var hover = new SolidColorBrush(_palette.RowHover);
             row.MouseEnter += (_, _) => row.Background = hover;
@@ -153,12 +171,99 @@ internal partial class AgendaPanel : Window
             row.MouseLeftButtonUp += (_, e) =>
             {
                 e.Handled = true;
-                MeetingActivated?.Invoke(this, url);
+                MeetingActivated?.Invoke(this, conference.Url);
             };
-            row.ToolTip = "Clique para entrar na call";
+            row.ToolTip = $"Clique para entrar no {conference.ProviderName}";
         }
 
         return row;
+    }
+
+    /// <summary>
+    /// Fundo do título na cor do serviço (D-017). Tingido, e não saturado: quase todo evento tem
+    /// call, e chapado o painel viraria uma parede de azul e verde onde nada se destaca.
+    /// Transparente quando não há call — a ausência já diz "presencial".
+    /// </summary>
+    private Color ProviderTint(Conference? conference, bool isPast)
+    {
+        if (conference is null) return Colors.Transparent;
+
+        var c = _palette.ForProvider(conference.Provider);
+
+        // Evento passado desbota junto com o resto da linha: o que já acabou não deve competir
+        // com o que ainda vai acontecer.
+        var alpha = (byte)(isPast ? 0x22 : 0x4D);
+
+        return Color.FromArgb(alpha, c.R, c.G, c.B);
+    }
+
+    /// <summary>
+    /// Sua resposta ao convite (D-018).
+    /// <para>
+    /// Três <b>formas distintas</b> — ✓, ?, ● — e não variações de um mesmo círculo. A primeira
+    /// versão distinguia por preenchimento (cheio vs. anel vazado) para economizar cor, e falhou
+    /// no uso real: a 9px, cheio e vazado só se distinguem de perto. Forma diferente se lê de
+    /// relance; preenchimento, não.
+    /// </para>
+    /// <para>
+    /// Só o pendente colore. Aceito é o estado normal e não precisa competir com nada; "não
+    /// respondi" é o único que exige ação, e usa o âmbar de atenção do próprio modelo de
+    /// severidade — a mesma cor querendo dizer a mesma coisa.
+    /// </para>
+    /// </summary>
+    private UIElement? BuildRsvpMark(Rsvp rsvp, bool isPast)
+    {
+        if (rsvp is Rsvp.None) return null;
+
+        var margin = new Thickness(0, 0, 9, 0);
+
+        UIElement mark = rsvp switch
+        {
+            Rsvp.NeedsAction => new Border
+            {
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
+                Margin = new Thickness(1, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Background = new SolidColorBrush(_palette.AttentionBackground),
+            },
+
+            // E73E é o mesmo CheckMark do contador de tarefas — check já significa "resolvido"
+            // no resto da barra, e repetir o símbolo é coerência, não preguiça.
+            Rsvp.Accepted => new TextBlock
+            {
+                Text = "",
+                FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
+                FontSize = 10,
+                Margin = margin,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(_palette.Muted),
+            },
+
+            _ => new TextBlock
+            {
+                Text = "?",
+                FontWeight = FontWeights.Bold,
+                FontSize = 11,
+                Margin = margin,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(_palette.Muted),
+            },
+        };
+
+        if (mark is FrameworkElement fe)
+        {
+            fe.Opacity = isPast ? 0.4 : 1.0;
+            fe.ToolTip = rsvp switch
+            {
+                Rsvp.Accepted => "Você aceitou",
+                Rsvp.Tentative => "Você marcou como talvez",
+                _ => "Você ainda não respondeu",
+            };
+        }
+
+        return mark;
     }
 
     private UIElement? BuildBadge(bool isRunning, bool isNext, bool isPast)

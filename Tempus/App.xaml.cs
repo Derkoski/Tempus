@@ -149,6 +149,7 @@ public partial class App : Application
             UnreadMail = snapshot.UnreadMail,
             Time = TimeStatusResolver.Resolve(snapshot.Agenda, now, _thresholds, _workDay),
             Boundary = WorkDayResolver.Resolve(now, _workDay),
+            Lookahead = Domain.Lookahead.Describe(snapshot.Upcoming, now),
             LastSyncAt = snapshot.LastSuccessAt,
         };
     }

@@ -215,7 +215,7 @@ internal sealed class GoogleSync : IDisposable
                 if (!await ConnectAsync(interactive: false, ct)) return;
             }
 
-            var agenda = await ReadAgendaAsync(ct);
+            var (agenda, upcoming) = await ReadAgendaAsync(ct);
             var (tasks, defaultList) = await ReadTasksAsync(ct);
             var unread = await ReadUnreadMailAsync(ct);
 
@@ -223,6 +223,7 @@ internal sealed class GoogleSync : IDisposable
             {
                 Health = SyncHealth.Ok,
                 Agenda = agenda,
+                Upcoming = upcoming,
                 Tasks = tasks,
                 UnreadMail = unread,
                 DefaultTaskListId = defaultList,
@@ -265,29 +266,43 @@ internal sealed class GoogleSync : IDisposable
 
     // ---------------------------------------------------------------- leitura
 
-    private async Task<IReadOnlyList<AgendaItem>> ReadAgendaAsync(
-        CancellationToken ct)
+    /// <summary>Quantos dias além de hoje a consulta cobre, para alimentar o <see cref="Lookahead"/>.</summary>
+    private const int LookaheadDays = 8;
+
+    /// <summary>
+    /// Uma única consulta cobre hoje e a semana seguinte; o resultado é fatiado depois. Duas
+    /// consultas separadas dobrariam as requisições para obter o mesmo, e uma semana de eventos
+    /// são poucos KB.
+    /// </summary>
+    private async Task<(IReadOnlyList<AgendaItem> Today, IReadOnlyList<AgendaItem> Upcoming)>
+        ReadAgendaAsync(CancellationToken ct)
     {
         var dayStart = new DateTimeOffset(DateTime.Today);
 
         var request = _calendar!.Events.List("primary");
         request.TimeMinDateTimeOffset = dayStart;
-        request.TimeMaxDateTimeOffset = dayStart.AddDays(1);
+        request.TimeMaxDateTimeOffset = dayStart.AddDays(LookaheadDays);
         request.SingleEvents = true; // expande recorrências em ocorrências
         request.ShowDeleted = false;
         request.MaxResults = 250;
         request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
 
         var response = await request.ExecuteAsync(ct);
-        var items = new List<AgendaItem>();
+
+        var today = new List<AgendaItem>();
+        var upcoming = new List<AgendaItem>();
+        var tomorrow = DateTime.Today.AddDays(1);
 
         foreach (var ev in response.Items ?? [])
         {
             if (ShouldIgnore(ev)) continue;
-            if (Map(ev) is { } item) items.Add(item);
+            if (Map(ev) is not { } item) continue;
+
+            if (item.Start.ToLocalTime().Date < tomorrow) today.Add(item);
+            else upcoming.Add(item);
         }
 
-        return items;
+        return (today, upcoming);
     }
 
     /// <summary>Regras do <c>SEVERITY.md</c> §2.1 sobre o que não é compromisso de verdade.</summary>
@@ -328,18 +343,48 @@ internal sealed class GoogleSync : IDisposable
             Start = start,
             End = end,
             IsAllDay = isAllDay,
-            MeetUrl = ExtractMeetUrl(ev),
+            Conference = ExtractConference(ev),
+            Rsvp = ExtractRsvp(ev),
         };
     }
 
-    private static string? ExtractMeetUrl(Event ev)
+    /// <summary>
+    /// Sua resposta ao convite (D-018). Sem lista de convidados não há resposta a dar — é
+    /// compromisso próprio, e marcar "pendente" nele seria cobrar uma ação que não existe.
+    /// </summary>
+    private static Rsvp ExtractRsvp(Event ev)
     {
-        if (!string.IsNullOrWhiteSpace(ev.HangoutLink)) return ev.HangoutLink;
+        var self = ev.Attendees?.FirstOrDefault(a => a.Self == true);
+        if (self is null) return Rsvp.None;
 
+        return self.ResponseStatus switch
+        {
+            "accepted" => Rsvp.Accepted,
+            "tentative" => Rsvp.Tentative,
+            "needsAction" => Rsvp.NeedsAction,
+            // "declined" não chega aqui: ShouldIgnore descarta antes.
+            _ => Rsvp.None,
+        };
+    }
+
+    /// <summary>
+    /// Acha a call em cascata, do campo estruturado ao texto livre (D-017).
+    /// <para>
+    /// As duas primeiras fontes são campos que o Google preenche: o que está ali <b>é</b> a call,
+    /// então qualquer URL serve. As duas últimas são texto digitado por gente, e aí só passa
+    /// provedor reconhecido — um convite carrega rastreador, anexo e link de descadastro, e abrir
+    /// o primeiro que aparecer seria um clique no escuro.
+    /// </para>
+    /// </summary>
+    private static Conference? ExtractConference(Event ev)
+    {
         var video = ev.ConferenceData?.EntryPoints?
             .FirstOrDefault(e => e.EntryPointType == "video");
 
-        return string.IsNullOrWhiteSpace(video?.Uri) ? null : video.Uri;
+        return Conference.FromUrl(video?.Uri)
+            ?? Conference.FromUrl(ev.HangoutLink)
+            ?? Conference.FindIn(ev.Location)
+            ?? Conference.FindIn(ev.Description);
     }
 
     private async Task<(IReadOnlyList<TaskItem> Tasks, string? DefaultList)>

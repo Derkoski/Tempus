@@ -56,6 +56,16 @@ internal sealed record TimeStatus
     public string? Detail { get; init; }
 
     /// <summary>
+    /// Link da call da reunião a que este estado se refere, quando ela tem uma. É o que faz o
+    /// clique no slot entrar na call em vez de abrir a agenda (D-016).
+    /// <para>
+    /// Só a URL, sem o provedor: a barra não sinaliza serviço — essa distinção vive no painel S3
+    /// (D-017).
+    /// </para>
+    /// </summary>
+    public string? CallUrl { get; init; }
+
+    /// <summary>
     /// Estados preenchidos são os que pedem antecipação; os demais ficam só com o texto tingido.
     /// A escalada acontece na <b>forma</b>, não só na cor — é o que impede o vermelho de contagem
     /// regressiva de se confundir com o vermelho de "você invadiu a próxima call" (D-012).
@@ -138,19 +148,21 @@ internal static class TimeStatusResolver
     {
         var remaining = current.End - now;
 
-        // Estando numa reunião, o que importa é quando ela acaba — e, logo depois, o que vem.
-        var text = $"{current.Title} · faltam {Humanize(remaining)}";
-        if (next is not null) text += $" → {next.Title}";
-
         // Vira âmbar perto do fim SEMPRE, inclusive sem nada depois. O custo de estourar não é
         // seu — é do tempo das outras pessoas, que ficou comprometido pela duração marcada. Ter a
         // tarde livre não devolve os 22 minutos a quem estava na reunião.
         var endingSoon = remaining <= TimeSpan.FromMinutes(thresholds.EndingSoonMinutes);
 
+        // Estando numa reunião, o que importa é quando ela acaba — e, logo depois, o que vem.
+        var text = $"{(endingSoon ? "Encerrando" : "Ocupado")} · {current.Title}, "
+            + $"faltam {Humanize(remaining)}";
+        if (next is not null) text += $" → {next.Title}";
+
         return new TimeStatus
         {
             Mood = endingSoon ? TimeMood.EndingSoon : TimeMood.InMeeting,
             Text = text,
+            CallUrl = current.Conference?.Url,
             Detail = next is null
                 ? $"Termina às {current.End.ToLocalTime():HH:mm}"
                 : $"Termina às {current.End.ToLocalTime():HH:mm} · {next.Title} às {next.Start.ToLocalTime():HH:mm}",
@@ -162,13 +174,16 @@ internal static class TimeStatusResolver
         var over = now - ended.End;
         var invading = next is not null && next.Start <= now;
 
-        var text = $"{ended.Title} · passou {Humanize(over)}";
+        var text = $"Estourou · {ended.Title}, passou {Humanize(over)}";
         if (invading) text += $" · {next!.Title} já começou";
 
         return new TimeStatus
         {
             Mood = TimeMood.Overrun,
             Text = text,
+            // A que invadiu, quando existe: às 12:22 o que importa é entrar na que já começou,
+            // não voltar para a que devia ter acabado.
+            CallUrl = (invading ? next!.Conference ?? ended.Conference : ended.Conference)?.Url,
             Detail = $"Estava marcada até {ended.End.ToLocalTime():HH:mm}",
         };
     }
@@ -195,16 +210,23 @@ internal static class TimeStatusResolver
             _ => TimeMood.Free,
         };
 
-        // Livre com folga: o "Livre" vem primeiro porque é a informação que se lê de relance.
-        // Perto da hora, o título passa à frente, porque aí o que importa é o que vai começar.
-        var text = mood == TimeMood.Free
-            ? $"Livre · {next.Title} em {Humanize(until)}"
-            : $"{next.Title} em {Humanize(until)}";
+        // O rótulo de estado vem sempre primeiro, em todos os humores (D-015): é a resposta que se
+        // lê de relance, e ela tem que estar sempre no mesmo lugar para o olho não precisar
+        // interpretar a frase antes de saber se está livre ou ocupado.
+        var label = mood switch
+        {
+            TimeMood.Imminent => "Começando",
+            TimeMood.Approaching => "Em breve",
+            _ => "Livre",
+        };
+
+        var text = $"{label} · {next.Title} em {Humanize(until)}";
 
         return new TimeStatus
         {
             Mood = mood,
             Text = text,
+            CallUrl = next.Conference?.Url,
             Detail = $"{next.Title} às {next.Start.ToLocalTime():HH:mm}",
         };
     }

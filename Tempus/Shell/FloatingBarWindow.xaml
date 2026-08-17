@@ -52,19 +52,42 @@
     <!-- Situação temporal (D-011, D-012). Vocabulário de cor próprio: verde livre, azul em
          reunião, âmbar se aproximando, vermelho iminente. Texto tingido nos estados calmos;
          preenchido só no que pede antecipação. -->
-    <Border x:Name="TimeArea"
-            Grid.Column="1"
-            CornerRadius="4"
-            Padding="6,2"
-            VerticalAlignment="Center"
-            HorizontalAlignment="Left"
-            Background="Transparent"
-            Cursor="Hand">
-      <TextBlock x:Name="TimeText"
+    <!-- Grid, e não StackPanel: um StackPanel horizontal mede os filhos com largura infinita, o
+         que desliga o TextTrimming e troca as reticências por um corte a seco na borda da coluna.
+         Aqui o lookahead pega o que precisa (Auto, com teto) e a situação temporal trunca no que
+         sobra — a ordem certa quando os dois competem, que é só em Free e OffHours. -->
+    <Grid Grid.Column="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="0" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+
+      <Border x:Name="TimeArea"
+              Grid.Column="0"
+              CornerRadius="4"
+              Padding="6,2"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Center"
+              Background="Transparent"
+              Cursor="Hand">
+        <TextBlock x:Name="TimeText"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis"
+                   Text="—" />
+      </Border>
+
+      <!-- O que vem depois de hoje. Ocupa o vazio que sobrava quando o dia acabava, e some
+           assim que houver alarme: informação de conforto não disputa espaço com alerta. -->
+      <TextBlock x:Name="LookaheadText"
+                 Grid.Column="1"
                  VerticalAlignment="Center"
+                 Margin="10,0,0,0"
+                 MaxWidth="230"
                  TextTrimming="CharacterEllipsis"
-                 Text="—" />
-    </Border>
+                 Visibility="Collapsed"
+                 Cursor="Hand"
+                 Text="" />
+    </Grid>
 
     <!-- Motivo do alarme: o único elemento preenchido por padrão, e vazio na maior parte do dia -->
     <Border x:Name="ReasonChip"

@@ -56,23 +56,32 @@ vermelho de alarme preenche o chip, **pisca após 5 min** e só sai com clique.
 
 Este é o estado que fica visível o dia inteiro, então a cor tem que informar sem cansar.
 
-| Humor | Quando | Cor | Forma | Exemplo |
-|-------|--------|-----|-------|---------|
-| `Free` | livre, próxima reunião a mais de 15 min | verde dessaturado | texto | `Livre · Daily em 2h15` |
-| `Free` | livre, nada mais hoje | verde dessaturado | texto | `Livre` |
-| `InMeeting` | em reunião, dentro do horário | azul | texto | `Refino · faltam 25 min → Review` |
-| `Approaching` | próxima em ≤15 min | âmbar | texto | `Daily em 12 min` |
-| `EndingSoon` | reunião atual acaba em ≤5 min | âmbar | **preenchido** | `Refino · faltam 4 min` |
-| `Overrun` | passou do fim marcado, até 10 min depois | vermelho | **preenchido** | `Weekly · passou 22 min` |
-| `Imminent` | próxima em ≤5 min | vermelho | **preenchido** | `Daily em 4 min` |
-| `Unknown` | `Offline` | cinza | texto | `—` |
+**Todo humor lidera com um rótulo de estado** (D-015). O rótulo é a resposta que se lê de relance,
+e ela fica sempre na mesma posição — o olho não precisa interpretar a frase para saber se está
+livre ou ocupado. O título da reunião vem depois, como detalhe.
+
+| Humor | Quando | Rótulo | Cor | Forma | Exemplo |
+|-------|--------|--------|-----|-------|---------|
+| `Free` | livre, próxima reunião a mais de 15 min | `Livre` | verde dessaturado | texto | `Livre · Daily em 2h15` |
+| `Free` | livre, nada mais hoje | `Livre` | verde dessaturado | texto | `Livre` |
+| `Approaching` | próxima em ≤15 min | `Em breve` | âmbar | texto | `Em breve · Daily em 12 min` |
+| `Imminent` | próxima em ≤5 min | `Começando` | vermelho | **preenchido** | `Começando · Daily em 4 min` |
+| `InMeeting` | em reunião, dentro do horário | `Ocupado` | azul | texto | `Ocupado · Refino, faltam 25 min → Review` |
+| `EndingSoon` | reunião atual acaba em ≤5 min | `Encerrando` | âmbar | **preenchido** | `Encerrando · Refino, faltam 4 min` |
+| `Overrun` | passou do fim marcado, até 10 min depois | `Estourou` | vermelho | **preenchido** | `Estourou · Weekly, passou 22 min` |
+| `OffHours` | fora do expediente, sem nada agendado | `Dia Encerrado` · `Almoço` · `Folga` | laranja | texto **negrito** | `Dia Encerrado` |
+| `Unknown` | `Offline` | `—` | cinza | texto | `—` |
 
 Notas de design:
 
 - **Verde é dessaturado de propósito.** É o estado mais frequente do dia; saturado, a barra
   gritaria o tempo todo e a cor perderia função.
-- **Livre com folga põe "Livre" primeiro**, porque é o que se lê de relance. Perto da hora, o
-  título da reunião passa à frente — aí o que importa é *o que* vai começar.
+- **`OffHours` já era só rótulo** e continua sendo — ele não tem título de reunião para exibir,
+  porque só fala quando não há nada agendado.
+- **A cor de provedor do painel S3 não é deste vocabulário.** O ponto verde/azul que identifica
+  Meet e Zoom (D-017) é marca de identidade, não estado: não escala, não pisca, não se resolve.
+  Ele vive só no S3, onde a I1 não se aplica, e **não** deve ser encaixado nesta tabela nem na
+  escala de severidade do §1.
 - **`EndingSoon` dispara mesmo sem nada em seguida** (corrigido em D-013). O custo de estourar
   não é seu — é do tempo das outras pessoas, comprometido pela duração marcada. Ter a tarde livre
   não devolve os 22 minutos a quem estava na reunião.
@@ -349,7 +358,29 @@ Mecânica:
 
 ## 9. Questões abertas
 
-Nenhuma. As questões das duas primeiras rodadas foram fechadas em D-006, D-007, D-008, D-009,
-D-010 e nas seções §2.1, §7 e §8.
+### Q-01 — A barra da Fase 1 alarma sem oferecer saída
+
+**Aberta em 2026-08-17, encontrada em uso.** O usuário procurou "um botão para marcar a reunião
+como concluída" e não achou — porque não existe no caminho de dados reais. `Acknowledged` só está
+ligado no modo demo, e `BuildState` nunca liga `CanAcknowledge`: sem a flag, não há clique nem
+item de menu.
+
+Isso é consequência esperada de a máquina de severidade ser da Fase 3, mas produz um estado que
+**contradiz a regra 2 do projeto** — "todo nível 3 é reconhecível; nenhum é inescapável". A barra
+já exibe texto de alarme com dados reais ("Daily acabou — Review já começou", em vermelho) vindo
+do humor temporal (§1.5), que não passa pela escala 0–3 e por isso escapou da regra.
+
+Decidido em 2026-08-17 **deixar para a Fase 3**, que é a dona do assunto e vai tratá-lo por
+inteiro. Registrado aqui para que não seja redescoberto como bug.
+
+A questão de projeto que a Fase 3 precisa responder: **o que exatamente o clique silencia, e até
+quando?** Só aquela ocorrência (§7 já define identidade de ocorrência), ou o humor temporal
+inteiro até a próxima transição? Reconhecer "Daily acabou" deve calar também "Review já começou",
+que é um fato diferente sobre outro evento?
+
+---
+
+As questões das duas primeiras rodadas foram fechadas em D-006, D-007, D-008, D-009, D-010 e nas
+seções §2.1, §7 e §8.
 
 Ao abrir uma nova, registrar aqui em vez de assumir em silêncio no código.

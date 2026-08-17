@@ -28,6 +28,10 @@ internal static class NativeMethods
     public const int WM_DISPLAYCHANGE = 0x007E;
     public const int WM_SETTINGCHANGE = 0x001A;
 
+    // ---- WinEvents ----
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
     // ---- AppBar (só para consultar estado da taskbar, nunca para registrar uma) ----
     public const uint ABM_GETSTATE = 0x0000_0004;
     public const int ABS_AUTOHIDE = 0x0000_0001;
@@ -132,6 +136,17 @@ internal static class NativeMethods
 
     [DllImport("shell32.dll")]
     public static extern int SHQueryUserNotificationState(out UserNotificationState state);
+
+    public delegate void WinEventProc(IntPtr hook, uint evt, IntPtr hwnd,
+        int objectId, int childId, uint threadId, uint timestamp);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr module,
+        WinEventProc callback, uint processId, uint threadId, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnhookWinEvent(IntPtr hook);
 
     // GetWindowLongPtr/SetWindowLongPtr só existem em 64-bit; em 32-bit os nomes são sem Ptr.
     public static IntPtr GetWindowLongAuto(IntPtr hWnd, int nIndex) =>

@@ -25,6 +25,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         _window.MailRequested += (_, e) => MailRequested?.Invoke(this, e);
         _window.SyncRequested += (_, e) => SyncRequested?.Invoke(this, e);
         _window.ExitRequested += (_, e) => ExitRequested?.Invoke(this, e);
+        _window.MeetingActivated += (_, url) => MeetingActivated?.Invoke(this, url);
     }
 
     public event EventHandler? Acknowledged;

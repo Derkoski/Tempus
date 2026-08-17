@@ -60,6 +60,12 @@ internal sealed record ShellState
     public BoundaryStatus? Boundary { get; init; }
 
     /// <summary>
+    /// O que vem depois de hoje, para o dia que já acabou não deixar a barra vazia.
+    /// Cede lugar assim que houver um alarme — informação de conforto nunca disputa com alerta.
+    /// </summary>
+    public string? Lookahead { get; init; }
+
+    /// <summary>
     /// True quando o nível 3 passou de 5 min sem reconhecimento e deve piscar
     /// âmbar↔vermelho (§1.1). Só faz sentido com <see cref="Severity"/> == Critical.
     /// </summary>

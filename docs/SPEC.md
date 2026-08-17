@@ -47,9 +47,12 @@ com alerta:
     âncora, sem cor        motivo/estado (colorido)
 ```
 
-- **O que vem a seguir** ocupa o slot esquerdo. Onde antes havia um relógio — redundante, porque
-  o Windows já mostra a hora a três centímetros dali (D-011). Hora absoluta em destaque, título
-  em texto secundário, truncado. Nunca colore. Clicar abre a agenda (S3).
+- **A situação temporal** ocupa o slot esquerdo. Onde antes havia um relógio — redundante, porque
+  o Windows já mostra a hora a três centímetros dali (D-011). Lidera com rótulo de estado
+  (`Livre`, `Ocupado`, `Encerrando`, `Estourou`…), título depois, truncado (D-015). Tem
+  vocabulário de cor **próprio**, ambiente, separado da escala de alarme (D-012 — a versão
+  anterior desta linha dizia "nunca colore" e ficou obsoleta). Clicar entra na call quando há
+  link de Meet; sem link, abre a agenda (S3) — D-016.
 - **Motivo/estado** é a área que muda de cor. É o único elemento que colore, e fica **vazio**
   quando não há nada exigindo ação. Os dois slots têm papéis distintos e não se repetem: o
   esquerdo é âncora ("o que vem depois", sempre presente), o do meio é alarme ("algo precisa de
@@ -90,8 +93,11 @@ vencimento (Vencidas / Hoje / Depois / Sem data). Permite:
 ### S3 — Painel de agenda
 
 Abre acima da barra. Timeline do dia com os eventos, destacando o atual e o próximo, e
-mostrando visualmente os intervalos (ou a falta deles) entre eventos consecutivos. Clique num
-evento com link de Meet abre a call.
+mostrando visualmente os intervalos (ou a falta deles) entre eventos consecutivos.
+
+Clique num evento com call abre a call — Meet, Zoom ou Teams, com o link achado em cascata a
+partir de `conferenceData`, `hangoutLink`, `location` e `description` (D-017). Um **ponto colorido**
+identifica o serviço: verde Meet, azul Zoom. Evento sem ponto é presencial e não é clicável.
 
 ### S4 — Toasts
 

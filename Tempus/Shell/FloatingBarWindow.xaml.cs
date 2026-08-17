@@ -23,12 +23,17 @@ internal partial class FloatingBarWindow : Window
 {
     private const int SanityCheckEveryTicks = 2; // timer de 1s → verificação a cada 2s
 
+    /// <summary>Quantas reafirmações a rajada dispara depois de uma troca de janela ativa (D-014).</summary>
+    private const int SettleTicks = 24; // 24 × ~16ms ≈ 380ms de cobertura
+
     private readonly BarOptions _options;
     private readonly SolidColorBrush _chipBrush = new(Colors.Transparent);
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _settleTimer;
 
     private IntPtr _handle;
     private HwndSource? _source;
+    private ForegroundWatcher? _foreground;
     private uint _taskbarCreatedMessage;
     private Palette _palette = Palette.FromSystemTheme();
     private ShellState _state = ShellState.Starting;
@@ -36,6 +41,7 @@ internal partial class FloatingBarWindow : Window
     private bool _isBarVisible;
     private bool _isBlinking;
     private int _tick;
+    private int _settleRemaining;
     private bool _disposed;
 
     public FloatingBarWindow(BarOptions options)
@@ -52,15 +58,31 @@ internal partial class FloatingBarWindow : Window
 
         ReasonChip.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnReasonClicked(); };
         TimeArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
+        LookaheadText.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
         TasksArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(TasksRequested); };
         MailArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(MailRequested); };
         MouseRightButtonUp += (_, e) => { e.Handled = true; ShowContextMenu(); };
 
-        _timer = new DispatcherTimer(DispatcherPriority.Background)
+        // Prioridade Normal, e não Background: em Background o tick é adiável indefinidamente
+        // quando a thread de UI está ocupada, e é exatamente aí que a ordem Z precisa dele.
+        // Uma chamada de SetWindowPos por segundo não é trabalho que mereça ficar na fila.
+        _timer = new DispatcherTimer(DispatcherPriority.Normal)
         {
             Interval = TimeSpan.FromSeconds(1),
         };
         _timer.Tick += OnTick;
+
+        // Parado em repouso; só roda nos ~380ms que seguem uma troca de janela ativa.
+        //
+        // 16ms e não 50ms porque o intervalo é o teto da latência: uma erguida da taskbar logo
+        // após um tick fica atrás até o tick seguinte. Medido com rajada de 50ms, as durações
+        // saíam em múltiplos exatos de 15,6ms (a granularidade padrão do timer do Windows), pior
+        // caso 79ms. A 16ms o piso do timer vira o teto da falha — um frame.
+        _settleTimer = new DispatcherTimer(DispatcherPriority.Normal)
+        {
+            Interval = TimeSpan.FromMilliseconds(16),
+        };
+        _settleTimer.Tick += OnSettleTick;
 
         SystemEvents.DisplaySettingsChanged += OnSystemChanged;
         SystemEvents.SessionSwitch += OnSessionSwitch;
@@ -81,6 +103,9 @@ internal partial class FloatingBarWindow : Window
     public event EventHandler? SyncRequested;
     public event EventHandler? ExitRequested;
 
+    /// <summary>Entrar na call nomeada no slot de tempo. Carrega a URL do Meet (D-016).</summary>
+    public event EventHandler<string>? MeetingActivated;
+
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -98,6 +123,10 @@ internal partial class FloatingBarWindow : Window
 
         _source = HwndSource.FromHwnd(_handle);
         _source?.AddHook(WndProc);
+
+        // Instalado aqui, na thread de UI, porque é nela que o callback será entregue (D-014).
+        _foreground = new ForegroundWatcher();
+        _foreground.Changed += OnForegroundChanged;
 
         ApplyPalette();
         Reposition();
@@ -146,6 +175,7 @@ internal partial class FloatingBarWindow : Window
         MailIcon.Foreground = iconBrush;
 
         RenderTime(state);
+        RenderLookahead(state);
         RenderBoundary(state);
 
         Background = new SolidColorBrush(
@@ -171,9 +201,40 @@ internal partial class FloatingBarWindow : Window
         // Preenchimento só nos humores que pedem antecipação; os calmos ficam com texto tingido.
         TimeArea.Background = new SolidColorBrush(background);
 
+        var action = time.CallUrl is { Length: > 0 }
+            ? "Clique para entrar na call"
+            : "Clique para abrir a agenda";
+
         TimeArea.ToolTip = state.IsOffline
             ? "Sem sincronização — não sei o que vem a seguir"
-            : $"{time.Detail ?? time.Text}{Environment.NewLine}Clique para abrir a agenda";
+            : $"{time.Detail ?? time.Text}{Environment.NewLine}{action}";
+    }
+
+    /// <summary>
+    /// O que vem depois de hoje. Ocupa o espaço que sobrava com o dia encerrado.
+    /// <para>
+    /// Cede lugar em três situações, e a ordem importa: sem sincronização não sabemos de nada;
+    /// com alarme ativo o alerta tem prioridade absoluta sobre informação de conforto; e durante
+    /// o expediente o slot de tempo já responde o que vem a seguir, então repetir seria ruído.
+    /// </para>
+    /// </summary>
+    private void RenderLookahead(ShellState state)
+    {
+        var show = !state.IsOffline
+            && state.Severity == Severity.Calm
+            && state.Time.Mood is TimeMood.OffHours or TimeMood.Free
+            && !string.IsNullOrEmpty(state.Lookahead);
+
+        if (!show)
+        {
+            LookaheadText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        LookaheadText.Visibility = Visibility.Visible;
+        LookaheadText.Text = state.Lookahead;
+        LookaheadText.Foreground = new SolidColorBrush(_palette.Muted);
+        LookaheadText.ToolTip = $"Próximo compromisso{Environment.NewLine}Clique para abrir a agenda";
     }
 
     /// <summary>
@@ -306,8 +367,9 @@ internal partial class FloatingBarWindow : Window
     /// ela para de receber cliques, porque os pixels passam a pertencer ao <c>Shell_TrayWnd</c>.
     /// </para>
     /// <para>
-    /// Não há evento para isso, então é reafirmação periódica. É a fragilidade estrutural que
-    /// D-002 aceitou ao escolher a barra flutuante em vez dos ícones de bandeja.
+    /// Chamada por três caminhos, do mais rápido ao mais lento: o evento de troca de janela ativa
+    /// (<see cref="OnForegroundChanged"/>), a rajada que o segue, e o heartbeat de 1s como último
+    /// recurso. É a fragilidade estrutural que D-002 aceitou ao escolher a barra flutuante.
     /// </para>
     /// </summary>
     private void AssertTopMost()
@@ -316,6 +378,31 @@ internal partial class FloatingBarWindow : Window
 
         SetWindowPos(_handle, HWND_TOPMOST, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    /// <summary>
+    /// Outra janela virou a ativa — o instante em que o explorer ergue o <c>Shell_TrayWnd</c>.
+    /// <para>
+    /// Reafirmar uma vez não basta: o explorer ergue a taskbar <b>depois</b> que a ativação se
+    /// completa, então a reafirmação imediata chega cedo demais e perde a corrida. Daí a rajada
+    /// curta que cobre os ~380ms seguintes (D-014).
+    /// </para>
+    /// </summary>
+    private void OnForegroundChanged(object? sender, EventArgs e)
+    {
+        AssertTopMost();
+
+        _settleRemaining = SettleTicks;
+        if (!_settleTimer.IsEnabled) _settleTimer.Start();
+    }
+
+    private void OnSettleTick(object? sender, EventArgs e)
+    {
+        AssertTopMost();
+
+        // Autodesarme: em repouso nenhum timer de 16ms pode continuar rodando (critério de
+        // aceite 10 — consumo indistinguível de zero).
+        if (--_settleRemaining <= 0) _settleTimer.Stop();
     }
 
     private void HideBar()
@@ -332,8 +419,9 @@ internal partial class FloatingBarWindow : Window
 
     private void OnTick(object? sender, EventArgs e)
     {
-        // A cada segundo, e não a cada 2: perder a ordem Z deixa a barra invisível E surda a
-        // cliques, então é o pior modo de falha da superfície. Uma chamada de SetWindowPos.
+        // Rede de segurança do caminho rápido: cobre as erguidas da taskbar que acontecem sem
+        // troca de janela ativa, e o caso de o sistema ter recusado o hook. Uma chamada de
+        // SetWindowPos por segundo.
         AssertTopMost();
 
         // Verificação de sanidade a cada 2s. A maioria das mudanças chega por mensagem
@@ -413,14 +501,40 @@ internal partial class FloatingBarWindow : Window
     }
 
     /// <summary>
-    /// Clicar na situação temporal abre a agenda — nunca reconhece alerta. Reconhecer é exclusivo
-    /// da área de motivo, para que o gesto tenha um lugar só e previsível.
+    /// Clicar na situação temporal **entra na call**, quando a reunião nomeada ali tem link de
+    /// Meet; sem link, abre a agenda (D-016). Nunca reconhece alerta — reconhecer é exclusivo da
+    /// área de motivo, para que o gesto tenha um lugar só e previsível.
     /// </summary>
-    private void OnTimeClicked() => Raise(_state.IsOffline ? ReauthRequested : AgendaRequested);
+    private void OnTimeClicked()
+    {
+        if (_state.IsOffline)
+        {
+            Raise(ReauthRequested);
+            return;
+        }
+
+        if (_state.Time.CallUrl is { Length: > 0 } url)
+        {
+            MeetingActivated?.Invoke(this, url);
+            return;
+        }
+
+        Raise(AgendaRequested);
+    }
 
     private void ShowContextMenu()
     {
         var menu = new ContextMenu { PlacementTarget = this };
+
+        // O clique esquerdo no slot passou a entrar na call (D-016), então a agenda precisa de um
+        // caminho que não dependa dele — senão a superfície perde o acesso a S3 durante reunião.
+        if (_state.Time.CallUrl is { Length: > 0 } url)
+        {
+            var join = new MenuItem { Header = "Entrar na call", FontWeight = FontWeights.SemiBold };
+            join.Click += (_, _) => MeetingActivated?.Invoke(this, url);
+            menu.Items.Add(join);
+            menu.Items.Add(new Separator());
+        }
 
         menu.Items.Add(MenuItemFor("Sincronizar agora", SyncRequested));
         menu.Items.Add(MenuItemFor("Abrir agenda", AgendaRequested));
@@ -461,7 +575,16 @@ internal partial class FloatingBarWindow : Window
 
         _timer.Stop();
         _timer.Tick -= OnTick;
+        _settleTimer.Stop();
+        _settleTimer.Tick -= OnSettleTick;
         StopBlink();
+
+        if (_foreground is not null)
+        {
+            _foreground.Changed -= OnForegroundChanged;
+            _foreground.Dispose();
+            _foreground = null;
+        }
 
         SystemEvents.DisplaySettingsChanged -= OnSystemChanged;
         SystemEvents.SessionSwitch -= OnSessionSwitch;

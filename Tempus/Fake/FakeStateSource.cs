@@ -110,39 +110,52 @@ internal sealed class FakeStateSource
         var now = DateTimeOffset.Now;
         var b = now.AddMinutes(-(now.Minute % 15)).AddSeconds(-now.Second).AddMilliseconds(-now.Millisecond);
 
-        const string meet = "https://meet.google.com/abc-defg-hij";
+        var meet = Conference.FromUrl("https://meet.google.com/abc-defg-hij");
+
+        // O caso que motivou o D-017: convite com o link do Zoom no corpo, e não em
+        // conferenceData. Passa pela mesma varredura que a agenda real usa — inclusive o &amp;
+        // do HTML e o ?pwd= que não pode ser cortado.
+        var zoom = Conference.FindIn(
+            "<p>Entre pelo link:</p><a href=\"https://us02web.zoom.us/j/89012345678"
+            + "?pwd=Zm9vYmFy&amp;from=addon\">Ingressar na reunião</a>");
 
         return
         [
             new AgendaItem
             {
                 Id = "e1", Title = "Daily do time",
-                Start = b.AddMinutes(-90), End = b.AddMinutes(-75), MeetUrl = meet,
+                Start = b.AddMinutes(-90), End = b.AddMinutes(-75),
+                Conference = meet, Rsvp = Rsvp.Accepted,
             },
             // 45 min livre
             new AgendaItem
             {
                 Id = "e2", Title = "Refinamento com produto",
-                Start = b.AddMinutes(-30), End = b.AddMinutes(10), MeetUrl = meet,
+                Start = b.AddMinutes(-30), End = b.AddMinutes(10),
+                Conference = meet, Rsvp = Rsvp.Accepted,
             },
             // sem intervalo
             new AgendaItem
             {
                 Id = "e3", Title = "1:1 com o gestor",
-                Start = b.AddMinutes(10), End = b.AddMinutes(70), MeetUrl = meet,
+                Start = b.AddMinutes(10), End = b.AddMinutes(70),
+                Conference = zoom, Rsvp = Rsvp.NeedsAction,
             },
             // 30 min livre
             new AgendaItem
             {
                 Id = "e4", Title = "Review de sprint",
-                Start = b.AddMinutes(100), End = b.AddMinutes(175), MeetUrl = meet,
+                Start = b.AddMinutes(100), End = b.AddMinutes(175),
+                Conference = meet, Rsvp = Rsvp.Tentative,
             },
             // sobreposição de 15 min
             new AgendaItem
             {
                 Id = "e5", Title = "Alinhamento com arquitetura",
-                Start = b.AddMinutes(160), End = b.AddMinutes(190), MeetUrl = meet,
+                Start = b.AddMinutes(160), End = b.AddMinutes(190),
+                Conference = zoom, Rsvp = Rsvp.NeedsAction,
             },
+            // Presencial e sem convidados: sem fundo, sem marca, sem clique.
             new AgendaItem
             {
                 Id = "e6", Title = "Retrospectiva",

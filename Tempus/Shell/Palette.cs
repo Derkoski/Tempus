@@ -68,6 +68,26 @@ internal sealed record Palette(
         InMeetingForeground: Hex("#FF1F5B87"));
 
     /// <summary>
+    /// Cor de marca do serviço de call, para o ponto do painel S3 (D-017).
+    /// <para>
+    /// Fica fora do record de tema de propósito: identidade de marca não acompanha claro/escuro.
+    /// E não pertence a nenhum dos dois vocabulários de cor da barra — só o S3 usa isto, porque
+    /// lá não há disputa com a escala de severidade nem com o humor temporal.
+    /// </para>
+    /// </summary>
+    public Color ForProvider(ConferenceProvider provider) => provider switch
+    {
+        // Verde do Meet e azul do Zoom. Os tons escolhidos são os que a própria marca usa no
+        // ícone, e não o do logotipo em texto: legíveis sobre painel claro e escuro.
+        ConferenceProvider.Meet => Hex("#FF00AC47"),
+        ConferenceProvider.Zoom => Hex("#FF2D8CFF"),
+
+        // Teams e desconhecidos são detectados e clicáveis, mas ficam fora do vocabulário de
+        // cor — só o Meet e o Zoom foram pedidos, e cada cor nova custa legibilidade.
+        _ => Muted,
+    };
+
+    /// <summary>
     /// Segue o tema da <b>taskbar</b>, que é <c>SystemUsesLightTheme</c> — e não
     /// <c>AppsUseLightTheme</c>, que governa as janelas de app. Escolher o errado deixa a barra
     /// clara sobre taskbar escura.

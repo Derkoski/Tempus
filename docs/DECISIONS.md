@@ -354,7 +354,8 @@ falta: o meio ocupado passa a significar, por si só, que algo precisa de atenç
   interessa é o que vem depois.
 - Estados vazios são explícitos: `livre` quando não há mais nada hoje, `—` quando `Offline`.
   Nunca o último valor conhecido (`SEVERITY.md` §0).
-- Clicar no slot abre a agenda e **nunca** reconhece alerta. Reconhecer continua exclusivo da
+- Clicar no slot abre a agenda e **nunca** reconhece alerta *(refinado em D-016: com link de Meet,
+  o clique entra na call; sem link, segue abrindo a agenda)*. Reconhecer continua exclusivo da
   área de motivo, para que o gesto central do produto (D-006) tenha um lugar único e previsível.
 - O timer de 1s perdeu sua razão original (atualizar o relógio), mas continua necessário para
   reafirmar a ordem Z — ver "Achado da Fase 2" em D-002.
@@ -475,3 +476,329 @@ janela de aviso.
 - Feriados de D-008 saíram do papel: nacionais, do Paraná e de Pato Branco, com Páscoa por
   Meeus/Jones/Butcher. Sem eles, a barra faria contagem regressiva de expediente em feriado.
 - `WorkDay` agora é lido do `appsettings.json`; os horários deixaram de ser suposição no código.
+
+---
+
+## D-014 — Defesa da ordem Z é orientada a evento, não a polling
+
+**Status:** Aceita · 2026-08-12 · **refina o "Achado da Fase 2" do D-002**
+
+**Contexto.** Relato do usuário: a barra "some e volta" conforme ele clica em aplicativos e navega
+pelo Windows — comportamento que antes não aparecia. Medido com sonda externa (`EnumWindows` em
+ordem Z contra `Shell_TrayWnd`, mais `SHQueryUserNotificationState`), amostragem de 120ms, 60s de
+navegação real:
+
+| Sinal | Resultado | O que descarta |
+|-------|-----------|----------------|
+| `IsWindowVisible` | `True` em 100% das amostras | `HideBar()` nunca roda |
+| `WS_EX_TOPMOST` | `True` sempre | o estilo nunca se perde |
+| `SHQueryUserNotificationState` | `5` (AcceptsNotifications) sempre | `ShouldYieldScreen()` nunca disparou |
+| Retângulo | imutável durante todo o período | `BarPlacement.Compute` nunca devolveu `null` |
+| Ordem Z | **oscila: taskbar salta para a frente da barra** | ⬅ a causa |
+
+**A barra nunca desaparece; o `Shell_TrayWnd` passa na frente dela.** 27 episódios em 60s, todos
+correlacionados com troca de janela ativa. Tempo até voltar: 125ms a 1s, mediana ~500ms — a
+assinatura do heartbeat de 1s pegando o problema numa fase aleatória.
+
+Ou seja: o diagnóstico do D-002 estava certo e a mitigação funciona. O defeito é a **latência**
+dela. E o intervalo não é cosmético — enquanto dura, os pixels pertencem ao explorer e a barra
+fica **surda a cliques**, que é o gesto central do produto (D-006).
+
+O código de posicionamento não mudava desde a Fase 2, e o heartbeat de 1s já estava lá. O que
+mudou foi a frequência com que o explorer se reergue (máquina em 25H2, build 26200.8973).
+Observação, não causa provada — e irrelevante para a correção, porque a fragilidade é estrutural.
+
+**Decisão.** `SetWinEventHook(EVENT_SYSTEM_FOREGROUND, …, WINEVENT_OUTOFCONTEXT)` de escopo global.
+Trocar janela ativa é justamente o instante em que o explorer ergue a taskbar, então o evento
+existe — o D-002 dizia "não há evento para isso" e isso estava errado.
+
+Três caminhos, do mais rápido ao mais lento, porque nenhum sozinho basta:
+
+1. **Evento** — reafirma `HWND_TOPMOST` no instante da troca de foco.
+2. **Rajada de acomodação** — 24 reafirmações a 16ms (~380ms). O explorer ergue a taskbar *depois*
+   que a ativação se completa, então a reafirmação imediata chega cedo demais e perde a corrida.
+   Medido: às `21:59:34.801` a barra caiu para trás com o foco já estabilizado em outra janela.
+3. **Heartbeat de 1s** — rede de segurança para erguidas sem troca de foco, e para o caso de o
+   sistema recusar o hook.
+
+**O intervalo da rajada é o teto da latência**, e isso só ficou visível ao medir a 5ms — a sonda
+original, a 120ms, fazia aliasing e mostrava 9 episódios onde havia 64. Com rajada de 50ms as
+durações saíam em múltiplos exatos de 15,6ms (15/31/47/63/79), que é a granularidade padrão do
+timer do Windows: uma erguida logo após um tick espera o próximo. Baixar o intervalo para 16ms faz
+o piso do timer virar o teto da falha.
+
+| Reafirmação | Episódios em 60s | Pior caso | Média |
+|-------------|------------------|-----------|-------|
+| Só heartbeat de 1s (antes) | — | ~1000ms | ~500ms |
+| Evento + rajada de 50ms | 64 | 79ms | 43ms |
+| **Evento + rajada de 16ms** | 25 | **33ms** | **22ms** |
+
+A contagem de episódios não é comparável entre execuções — depende de quanto se navegou. As
+durações são.
+
+O timer principal subiu de `DispatcherPriority.Background` para `Normal`: em Background o tick é
+adiável indefinidamente quando a thread de UI está ocupada, e é exatamente aí que a ordem Z
+precisa dele.
+
+**Alternativas descartadas:**
+
+| Opção | Motivo da recusa |
+|-------|------------------|
+| Encurtar o heartbeat para ~100ms | 10 `SetWindowPos`/s para sempre. Viola a regra 9 e o critério de aceite 10, e ainda deixaria 100ms de buraco. Trata o sintoma. |
+| `Shell_TrayWnd` como **owner** da barra (`GWLP_HWNDPARENT`) | Resolveria de vez: janela owned fica acima do owner por garantia do gerenciador de janelas, sem polling nenhum. Mas **janelas owned são destruídas junto com o owner** — restart do explorer mataria a barra. Não é `SetParent`, e ainda assim compartilha o defeito que o D-002 recusou. |
+| `SetWindowBand` (ordinal não documentado do user32) | Exige `uiAccess=true`, que exige binário assinado instalado em `Program Files`. Desproporcional para ferramenta pessoal, e sobre API não documentada. |
+
+**Consequências.**
+
+- O `ForegroundWatcher` guarda o delegate em **campo**, não em local nem lambda inline. É a ponte
+  que o sistema chama de fora do runtime; sem referência forte viva o GC o coleta e o callback
+  aterrissa em memória liberada. Falha rara, distante da causa e ilegível no dump.
+- O hook é instalado na thread de UI de propósito: `WINEVENT_OUTOFCONTEXT` entrega o callback pela
+  fila de mensagens da thread que instalou, então o evento já chega na thread certa — sem
+  marshaling e sem lock no caminho quente.
+- A rajada se autodesarma. Em repouso nenhum timer de 16ms sobrevive, para não gastar o critério
+  de aceite 10 com um problema que só existe enquanto se navega. **Verificado:** medindo em fatias
+  de 2s e contando só as que não tiveram troca de foco — o repouso verdadeiro, sem exigir máquina
+  parada — deu **0,053% de um núcleo em 116,9s**, abaixo dos 0,13% medidos na Fase 2. A medição
+  ingênua, feita logo após navegar, tinha dado 1,094% e era artefato: a janela pegava a rajada
+  ainda armada.
+- **O que isto não resolve:** a barra continua disputando a mesma banda topmost que a taskbar, e
+  toda vitória é por reação. A janela de falha caiu de ~500ms para 22ms na média e 33ms no pior
+  caso — um a dois frames —, mas **não é zero**. Descer abaixo disso exigiria `timeBeginPeriod`,
+  que muda a resolução de timer da máquina inteira e é desproporcional para uma ferramenta
+  pessoal. Se algum dia um ou dois frames deixarem de bastar, a resposta é o `TraySurface` do
+  D-002, não uma quarta camada de reafirmação.
+- A sonda de ordem Z vale mais que a comparação de retângulos, como o D-002 já suspeitava. Ela é
+  melhor que o `WindowFromPoint` previsto lá: compara a ordem inteira em vez de perguntar por um
+  pixel só, então não tem falso negativo quando a sobreposição é parcial.
+
+---
+
+## D-015 — O slot de tempo lidera com rótulo de estado em todos os humores
+
+**Status:** Aceita · 2026-08-14 · **refina D-011 e D-012**
+
+**Contexto.** Relato do usuário durante uma reunião: "sumiu o livre/ocupado do lado esquerdo".
+Nada tinha quebrado — ele estava em reunião, o humor era `InMeeting`, e o texto era
+`Fórum de Lideranças · faltam 37 min`. Correto conforme o D-012. E "Ocupado" nunca existiu como
+rótulo em lugar nenhum do código.
+
+O que o relato expôs foi uma **assimetria de vocabulário** que o D-012 tinha introduzido sem
+perceber: o slot liderava com palavra de estado em um humor e com título de reunião nos outros.
+
+| Humor | Antes |
+|-------|-------|
+| `Free` | **Livre** · Daily em 2h15 |
+| `InMeeting` | Refino · faltam 25 min |
+| `Overrun` | Weekly · passou 22 min |
+
+A nota de design do §1.5 até justificava: "perto da hora o título passa à frente, porque aí o que
+importa é *o que* vai começar". O raciocínio media a informação isolada, e o erro foi esse. A
+pergunta que o slot responde (D-011) é "como está meu tempo agora", e ela se lê **de relance** —
+o olho bate num ponto fixo. Com a posição do estado variando conforme o humor, é preciso *ler a
+frase inteira e interpretá-la* antes de saber se está livre ou ocupado. Um slot que exige leitura
+não é um sinal ambiente; é texto.
+
+**Decisão.** Todo humor lidera com rótulo de estado, e o título da reunião vem depois como
+detalhe. Tabela completa em `SEVERITY.md` §1.5.
+
+| Humor | Rótulo | Exemplo |
+|-------|--------|---------|
+| `Free` | `Livre` | `Livre · Daily em 2h15` |
+| `Approaching` | `Em breve` | `Em breve · Daily em 12 min` |
+| `Imminent` | `Começando` | `Começando · Daily em 4 min` |
+| `InMeeting` | `Ocupado` | `Ocupado · Refino, faltam 25 min → Review` |
+| `EndingSoon` | `Encerrando` | `Encerrando · Refino, faltam 4 min` |
+| `Overrun` | `Estourou` | `Estourou · Weekly, passou 22 min` |
+| `OffHours` | `Dia Encerrado` · `Almoço` · `Folga` | já era só rótulo, inalterado |
+
+**Consequências.**
+
+- O rótulo **duplica a informação da cor**, de propósito. Cor sozinha exige memorizar o mapa
+  (azul = em reunião?); com a palavra, o mapa é dispensável e a barra segue legível para quem
+  não distingue as cores bem.
+- O texto ficou mais longo, e isso reabriu um defeito de layout que tinha passado batido: o
+  `StackPanel` horizontal introduzido junto com o `Lookahead` mede os filhos com largura
+  **infinita**, o que desliga o `TextTrimming` e troca as reticências por um corte a seco na
+  borda da coluna. Trocado por um `Grid` de duas colunas, onde a situação temporal trunca com
+  reticências no espaço que sobra.
+- `Approaching` e `Imminent` ganharam rótulo próprio (`Em breve`, `Começando`) em vez de herdar
+  `Livre`. Tecnicamente você *está* livre nos dois, mas dizer "Livre" a 4 minutos de uma reunião
+  seria a mesma mentira confortável que o D-012 corrigiu no verde das 21h.
+- Nada muda na cor, na forma nem nos limiares. É mudança de texto e de layout apenas — as
+  invariantes I1–I8 seguem valendo sem revisão.
+
+---
+
+## D-016 — Clicar no slot de tempo entra na call
+
+**Status:** Aceita · 2026-08-14 · **refina D-011**
+
+**Contexto.** Pedido do usuário: "no aviso de call, gostaria de clicar em cima e já direcionar pro
+meet". O D-011 tinha definido que clicar no slot abre a agenda (S3), e o painel de agenda já
+sabia abrir o Meet de um item — mas isso custava dois cliques e um painel intermediário para a
+ação mais óbvia que a barra pode oferecer enquanto uma reunião acontece.
+
+Toda a infraestrutura já existia e estava ociosa: `AgendaItem.MeetUrl`, a extração do
+`HangoutLink` com fallback para `ConferenceData.EntryPoints` em `GoogleSync.ExtractMeetUrl`, e o
+evento `MeetingActivated` ligado ao `Open(url)` no `App`. O que faltava era o slot de tempo
+carregar a URL da reunião que ele já nomeia.
+
+**Decisão.** `TimeStatus` ganha `MeetUrl`, preenchido com o link da reunião a que o estado se
+refere. Clicar no slot **entra na call**; sem link — reunião presencial, por telefone, ou nenhuma
+reunião em vista — segue abrindo a agenda, como antes.
+
+Qual reunião, por humor:
+
+| Humor | Link de qual reunião |
+|-------|---------------------|
+| `InMeeting`, `EndingSoon` | a que está em curso |
+| `Approaching`, `Imminent`, `Free` | a próxima |
+| `Overrun` | a que invadiu, se houver; senão a que estourou |
+
+O caso `Overrun` é o único que exigiu escolha. Às 12:22 da week review que originou o projeto
+(D-013), o que interessa é entrar na que **já começou**, não voltar para a que devia ter acabado.
+
+**Consequências.**
+
+- **O gesto de reconhecer não muda.** O clique no chip de motivo continua sendo exclusivamente
+  "eu vi" (D-006, invariante I3). Só o slot de tempo mudou de destino, e ele nunca reconheceu
+  alerta nenhum — a separação que o D-011 estabeleceu segue intacta.
+- A agenda perderia seu único atalho de clique esquerdo durante uma reunião, então o menu de
+  contexto ganhou **"Entrar na call"** em destaque no topo, e "Abrir agenda" continua lá. Nenhuma
+  superfície fica inalcançável.
+- O tooltip passa a anunciar o destino do clique — "Clique para entrar na call" ou "Clique para
+  abrir a agenda" —, porque a mesma área agora faz duas coisas conforme o dado, e adivinhar qual
+  seria pior que um clique a mais.
+- `Offline` continua tendo prioridade sobre tudo: sem sincronização o clique pede re-consent
+  (D-003), porque um link guardado de antes não é dado atual (regra 10).
+
+---
+
+## D-017 — Call é um conceito com provedor, achada em cascata
+
+**Status:** Aceita · 2026-08-14 · **refina D-016**
+
+**Contexto.** Reunião de Zoom com o link **dentro do convite** não ficava clicável. A causa estava
+no nome do campo: `AgendaItem.MeetUrl` carregava a suposição de que toda call é Meet, e
+`ExtractMeetUrl` lia só `hangoutLink` e `conferenceData.entryPoints`.
+
+Isso cobre o Meet e cobre o Zoom criado pelo **add-on** do Zoom, que preenche `conferenceData`.
+Não cobre o caso comum de verdade: convite que chegou por e-mail ou veio do Outlook, com o link
+colado no corpo. Para o app, esse evento simplesmente não tinha call.
+
+**Decisão.** `Conference { Url, Provider }` substitui a string. Detecção em cascata:
+
+| Ordem | Fonte | Aceita |
+|-------|-------|--------|
+| 1 | `conferenceData.entryPoints[video]` | qualquer URL |
+| 2 | `hangoutLink` | qualquer URL |
+| 3 | `location` | **só provedor conhecido** |
+| 4 | `description` | **só provedor conhecido** |
+
+**Por que texto livre é mais restrito que campo estruturado.** As duas primeiras fontes são
+preenchidas pelo Google: o que está ali *é* a call, então qualquer URL serve. As duas últimas são
+texto digitado por gente, e um convite carrega link de rastreador de e-mail, de documento anexo e
+de descadastro. Abrir o primeiro que aparecer seria um clique no escuro — e o clique é o gesto
+central do produto (D-006). De texto livre só sai o que dá para reconhecer pelo **host**.
+
+Classificação por host, nunca por substring: `marketing.exemplo.com/zoom/promo` não é uma call.
+
+**Consequências.**
+
+- O `?pwd=` do Zoom **não pode ser cortado** — sem ele a call pede senha na entrada. A regex é
+  permissiva à direita e para só no que não pode fazer parte de uma URL. Verificado com 11 casos,
+  incluindo `&amp;` em HTML, subdomínio corporativo, e ponto final de frase grudado no link.
+- Descrição do Google Calendar vem em HTML, então entidades são decodificadas antes de
+  classificar. Sem isso o `&amp;` quebraria o query string.
+- **Teams entra na detecção sem entrar no vocabulário de cor.** Foram pedidos Meet e Zoom; deixar
+  Teams fora da detecção reproduziria a queixa original, e dar cor a ele gastaria legibilidade
+  numa distinção que ninguém pediu.
+- `TimeStatus.MeetUrl` virou `CallUrl` e carrega **só a URL**: a barra não sinaliza serviço.
+
+### Cor de provedor: no painel S3, e só lá
+
+O usuário pediu ícone dos aplicativos na barra, e depois escolheu confinar a distinção ao painel:
+azul Zoom, verde Meet, no S3.
+
+É a escolha certa por dois motivos que valem registro. Primeiro, a invariante I1 governa **a
+barra** ("no máximo duas áreas coloridas"), e os painéis estão fora dela — no S3 a cor de marca
+não disputa com a escala de severidade nem com o humor temporal. Segundo, na largura da barra o
+ícone caberia com ~13px, e nesse tamanho um logo é um borrão colorido: o que distinguiria seria a
+cor, exatamente o recurso que a regra 1 manda economizar.
+
+**Onde a cor entra, depois de uma revisão.** A primeira versão usou um ponto colorido de 8px. O
+usuário pediu para trocar por **fundo do título** — e liberou o ponto para outra coisa, que virou
+o D-018. Fundo é a escolha melhor: um ponto de 8px força o olho a procurar um alvo pequeno, e o
+título é o que ele já está lendo.
+
+O fundo é **tingido, não chapado** (alpha `0x4D`, metade disso em evento passado). Quase todo
+evento tem call; com a cor saturada o painel viraria uma parede de azul e verde onde nada se
+destaca, e a cor deixaria de informar.
+
+A faixa vertical da coluna 0 **continua sendo estado** — ela já usa azul (`InfoBackground`) para
+"próxima", e pintá-la de azul-Zoom seria dois significados no mesmo elemento.
+
+As cores de marca ficam **fora** do record de tema: identidade não acompanha claro/escuro.
+
+---
+
+## D-018 — A bolinha do S3 marca o convite pendente, não o serviço
+
+**Status:** Aceita · 2026-08-14 · **usa o espaço liberado pelo D-017**
+
+**Contexto.** Ao mover a cor do serviço para o fundo do título, o ponto da coluna 2 ficou livre. O
+usuário destinou-o ao que considera mais útil: *"marcar os eventos que aceitei participar ou não
+ainda… acho mais importante saber qual eu aceitei do que para qual app vai abrir."*
+
+Faz sentido, e o motivo é que as duas informações têm naturezas diferentes. O serviço é
+**contexto** — você descobre ao clicar, e errar custa um clique. A resposta pendente é uma
+**tarefa** — ninguém a descobre por acaso, e ela some da sua cabeça até o convite virar reunião
+começando sem você.
+
+**Decisão.** `Rsvp { None, Accepted, Tentative, NeedsAction }`, lido de
+`attendees[self].responseStatus`. `Declined` não existe no enum: evento recusado é descartado
+antes de virar `AgendaItem` (§2.1). Evento sem convidados é `None` e não ganha marca — é
+compromisso próprio, não há o que responder.
+
+| Estado | Marca | Cor |
+|--------|-------|-----|
+| Aceitei | ✓ | cinza |
+| Talvez | ? | cinza |
+| Não respondi | ● cheio | **âmbar** |
+| Sem convidados | — | — |
+
+### A primeira versão falhou, e o erro vale mais que a correção
+
+A tentativa inicial distinguia por **preenchimento**: círculo cheio = aceitei, anel vazado = não
+respondi. Monocromático, para economizar cor conforme a regra 1.
+
+Não funcionou. Palavras do usuário: *"tenho que me aproximar muito da tela pra saber se tão
+preenchidos ou não."*
+
+O erro não foi a escolha da cor — foi otimizar para a regra em vez de para o olho. A regra 1 diz
+que cor é escassa, e daí eu concluí "então não use cor", ignorando que a barra fica na taskbar e é
+lida de relance, a meio metro. **Cheio e vazado no mesmo diâmetro são o par de formas menos
+distinguível que existe**, porque o contorno é idêntico e só o miolo muda.
+
+Duas correções, e as duas importam:
+
+1. **Formas genuinamente diferentes** — ✓, ?, ● — em vez de variações de um círculo. A leitura
+   deixa de depender de acuidade.
+2. **Só o pendente colore.** As três marcas não têm o mesmo peso: aceito é o estado normal e não
+   precisa competir com nada; "não respondi" é o único que exige ação. Ausência de destaque é
+   informação — se nada está âmbar, não há convite parado.
+
+O âmbar não é arbitrário: é a cor de *atenção* do próprio modelo de severidade. Usá-la para "você
+me deve uma resposta" faz o painel falar o mesmo idioma da barra, em vez de inventar um terceiro.
+
+**Consequências.**
+
+- O ✓ reusa `E73E`, o mesmo glifo do contador de tarefas. Check já significa "resolvido" no resto
+  da barra; repetir o símbolo é coerência.
+- Convém observar se o âmbar do ponto briga com o âmbar do selo "agora" na mesma linha. São
+  elementos de forma e posição distintas — ponto à esquerda, pílula de texto à direita — mas é o
+  tipo de coisa que só o uso decide.
+- **Regra aprendida, que vale além deste caso:** distinção por preenchimento não sobrevive à
+  distância de leitura da barra. Quando forma for o único recurso, use formas de silhueta
+  diferente — nunca a mesma silhueta cheia e vazada.

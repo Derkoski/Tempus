@@ -30,7 +30,11 @@ internal sealed record SyncSnapshot
 
     public SyncHealth Health { get; init; } = SyncHealth.NeedsAuth;
 
+    /// <summary>Compromissos de hoje. Alimenta o humor temporal.</summary>
     public IReadOnlyList<AgendaItem> Agenda { get; init; } = [];
+
+    /// <summary>Compromissos de amanhã em diante. Alimenta o <see cref="Domain.Lookahead"/>.</summary>
+    public IReadOnlyList<AgendaItem> Upcoming { get; init; } = [];
 
     public IReadOnlyList<TaskItem> Tasks { get; init; } = [];
 
