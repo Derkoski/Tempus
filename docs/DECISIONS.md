@@ -1159,3 +1159,27 @@ não se errar* — a confirmação protege do clique deliberado, não do clique 
 **Consequências.** `GoogleSync.DeleteTaskAsync` documenta no próprio resumo que quem chama já
 confirmou. O modo demo ganhou `DeleteTask` para a verificação não depender da conta real — o que
 teria evitado o incidente, e é o caminho a usar daqui em diante para exercitar escrita.
+
+### Emenda ao D-019 — adiar é diferente de dispensar
+
+Pedido em uso: *"vai ter horas que eu vou ter que adiar o descanso"*. Os dois gestos que existiam
+não cobriam isso — "tirei essa" mente, e "hoje não quero" joga fora a folga inteira por causa de
+uma hora ruim.
+
+**"Adiar pausa em 30 min"** grava um piso para o período; o planejador acha a próxima janela livre
+a partir dali. Repetível: cada clique empurra mais 30. Fica no menu ao lado de "hoje não quero",
+mas separado dele de propósito — um dia corrido não deve custar a folga inteira quando bastava
+empurrá-la.
+
+Depois de adiada, o alvo deixa de ser o meio do período e passa a ser **o quanto antes a partir do
+piso**: quem adiou não quer o horário ideal, quer a folga assim que der.
+
+**Dois erros que a verificação pegou:**
+
+O piso era `agora + 30`. Adiar às 15:58 uma pausa marcada para 17:50 a puxava para **16:30** —
+antecipar, não adiar. O piso passou a contar a partir do que vier mais tarde entre a hora atual e a
+própria pausa, o que torna o gesto monotônico: 17:50 → 18:20 → 18:50 → 19:20.
+
+E o menu oferecia "Adiar" mesmo com as duas pausas do dia já vencidas, quando o clique não fazia
+nada. Agora ele só aparece havendo pausa por vir — prometer uma ação que não faz nada é pior que
+não oferecê-la.

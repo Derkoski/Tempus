@@ -116,8 +116,9 @@ a bloqueia.
       3. *Por dia:* "Hoje não quero pausa" no menu da barra, persistido por data em `%APPDATA%`
 - [x] Sem cor nova: itálico no verde de "Livre", sem fundo de serviço (regra 1). Ver D-019
 - [x] Caso sem solução: período sem 15 min livres não inventa pausa nem alarma
-- [ ] **Texto ambiente na barra não verificado visualmente** — só aparece durante os 15 min e com
-      o humor em `Free`; a verificação caiu no almoço
+- [x] Slot próprio da pausa, verificado ao vivo: horário quando distante, contagem durante a
+      janela, "tirada" depois do clique (D-023)
+- [x] **Adiar**: "Agora não" empurra 30 min e é repetível, distinto de "hoje não quero"
 
 **Decisão de escopo:** vive só no Tempus, sem virar evento no Google Calendar. Evita subir de
 `CalendarReadonly` para escopo de escrita numa conta corporativa, e mantém a pausa móvel — um

@@ -84,7 +84,21 @@ public partial class App : Application
         // Gesto do dia, não configuração: ligar/desligar a funcionalidade é do appsettings, e só
         // dispensar a folga de hoje passa pelo menu.
         surface.BreakDismissToggled += (_, _) => UpdateBreakState(
-            state => state with { Dismissed = !state.Dismissed, Taken = [] });
+            state => state with { Dismissed = !state.Dismissed, Taken = [], Postponed = [] });
+
+        // "Agora não." Empurra 30 min; o planejador acha a próxima janela livre a partir dali.
+        surface.BreakPostponed += (_, _) => UpdateBreakState(state =>
+        {
+            var now = DateTimeOffset.Now;
+            if (BuildState(_snapshot).NextBreak(now) is not { } pause) return state;
+
+            // O piso conta a partir do que vier mais tarde: a hora atual ou a própria pausa. Com
+            // "agora + 30" adiar às 15:58 uma pausa marcada para 17:50 a puxaria para 16:30 —
+            // antecipar, não adiar. Assim cada clique sempre empurra para frente.
+            var from = pause.Start > now ? pause.Start : now;
+
+            return state.WithPostponed(pause.Period, from.AddMinutes(30));
+        });
 
         // "Tirei essa." O app não infere descanso, como não infere presença em call (D-006).
         // Alterna: um clique sem querer se desfaz com outro clique. Um gesto de um clique só, que
@@ -278,7 +292,7 @@ public partial class App : Application
     {
         if (BreaksEnabledButDismissed(now)) return [];
 
-        return BreakPlanner.Plan(agenda, now, _workDay, _breaks);
+        return BreakPlanner.Plan(agenda, now, _workDay, _breaks, BreakState(now).Floors());
     }
 
     private bool BreaksEnabledButDismissed(DateTimeOffset now) =>

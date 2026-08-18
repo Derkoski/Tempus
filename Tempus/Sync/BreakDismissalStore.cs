@@ -23,11 +23,33 @@ internal sealed record BreakDayState
     /// <summary>Períodos que o usuário marcou como já tirados, clicando.</summary>
     public List<BreakPeriod> Taken { get; init; } = [];
 
+    /// <summary>
+    /// "Agora não." Empurra o piso do período para frente; o planejador acha a próxima janela livre
+    /// a partir dali. Repetível — adiar de novo empurra de novo.
+    /// </summary>
+    public List<BreakPostponement> Postponed { get; init; } = [];
+
+    /// <summary>O piso de cada período, para o planejador. Vazio quando nada foi adiado.</summary>
+    public Dictionary<BreakPeriod, DateTimeOffset> Floors() =>
+        Postponed.GroupBy(p => p.Period)
+                 .ToDictionary(g => g.Key, g => g.Max(p => p.Until));
+
     [JsonIgnore]
     public static BreakDayState Empty { get; } = new();
 
+    public BreakDayState WithPostponed(BreakPeriod period, DateTimeOffset until) => this with
+    {
+        Postponed = [.. Postponed.Where(p => p.Period != period), new() { Period = period, Until = until }],
+    };
+
     public bool AppliesTo(DateOnly day) =>
         Date is not null && DateOnly.TryParse(Date, out var stored) && stored == day;
+}
+
+internal sealed record BreakPostponement
+{
+    public BreakPeriod Period { get; init; }
+    public DateTimeOffset Until { get; init; }
 }
 
 /// <summary>

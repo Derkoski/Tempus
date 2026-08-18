@@ -49,6 +49,9 @@ internal interface IShellSurface : IDisposable
     /// <summary>Clique no slot da pausa: "tirei essa" (D-006, D-023).</summary>
     event EventHandler? BreakTaken;
 
+    /// <summary>"Agora não": empurra a pausa para frente (D-019).</summary>
+    event EventHandler? BreakPostponed;
+
     /// <summary>Usuário clicou na barra offline e quer reautenticar (<c>SEVERITY.md</c> §6).</summary>
     event EventHandler? ReauthRequested;
 

@@ -62,7 +62,8 @@ internal static class BreakPlanner
         IReadOnlyList<AgendaItem> agenda,
         DateTimeOffset now,
         WorkDayOptions work,
-        BreakOptions options)
+        BreakOptions options,
+        IReadOnlyDictionary<BreakPeriod, DateTimeOffset>? notBefore = null)
     {
         if (!options.Enabled) return [];
         if (!WorkDayResolver.IsWorkingDay(DateOnly.FromDateTime(now.Date), work)) return [];
@@ -75,18 +76,22 @@ internal static class BreakPlanner
             BreakPeriod.Morning,
             At(now, work.StartHour, work.StartMinute),
             At(now, work.MiddayHour, work.MiddayMinute),
-            busy, duration, options.StepMinutes);
+            busy, duration, options.StepMinutes, Floor(notBefore, BreakPeriod.Morning));
         if (morning is not null) slots.Add(morning);
 
         var afternoon = Find(
             BreakPeriod.Afternoon,
             At(now, work.LunchEndHour, work.LunchEndMinute),
             At(now, work.EndHour, work.EndMinute),
-            busy, duration, options.StepMinutes);
+            busy, duration, options.StepMinutes, Floor(notBefore, BreakPeriod.Afternoon));
         if (afternoon is not null) slots.Add(afternoon);
 
         return slots;
     }
+
+    private static DateTimeOffset? Floor(
+        IReadOnlyDictionary<BreakPeriod, DateTimeOffset>? notBefore, BreakPeriod period) =>
+        notBefore is not null && notBefore.TryGetValue(period, out var floor) ? floor : null;
 
     /// <summary>
     /// A janela livre mais próxima do meio do período. <b>Não olha o relógio.</b>
@@ -108,13 +113,22 @@ internal static class BreakPlanner
         DateTimeOffset periodEnd,
         IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End)> busy,
         TimeSpan duration,
-        int stepMinutes)
+        int stepMinutes,
+        DateTimeOffset? notBefore)
     {
         var latestStart = periodEnd - duration;
         if (latestStart < periodStart) return null; // período menor que a própria pausa
 
-        // O início ideal centraliza a pausa no meio do período, não a começa nele.
-        var ideal = periodStart + ((periodEnd - periodStart) - duration) / 2;
+        // Adiada: o piso vira o novo começo do período, e o ideal passa a ser o quanto antes a
+        // partir dele. Depois de adiar, o "meio do período" já não é o que o usuário quer — ele
+        // quer a folga assim que der.
+        var floor = notBefore is { } f && f > periodStart ? f : periodStart;
+        var postponed = floor > periodStart;
+
+        var ideal = postponed
+            ? floor
+            : periodStart + ((periodEnd - periodStart) - duration) / 2;
+
         var step = TimeSpan.FromMinutes(Math.Max(1, stepMinutes));
 
         BreakSlot? best = null;
@@ -122,6 +136,8 @@ internal static class BreakPlanner
 
         for (var start = periodStart; start <= latestStart; start += step)
         {
+            if (start < floor) continue;
+
             var end = start + duration;
             if (Overlaps(busy, start, end)) continue;
 

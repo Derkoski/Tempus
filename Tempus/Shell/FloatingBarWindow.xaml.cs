@@ -103,6 +103,9 @@ internal partial class FloatingBarWindow : Window
 
     /// <summary>Clique no slot da pausa: "tirei essa". O app não tem como saber sozinho (D-006).</summary>
     public event EventHandler? BreakTaken;
+
+    /// <summary>"Agora não": empurra a pausa 30 min para frente. Repetível.</summary>
+    public event EventHandler? BreakPostponed;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
@@ -668,6 +671,15 @@ internal partial class FloatingBarWindow : Window
         if (_state.Breaks.Count > 0 || _state.BreaksDismissed)
         {
             menu.Items.Add(new Separator());
+
+            // "Agora não" é diferente de "hoje não": adiar empurra 30 min e é repetível; dispensar
+            // encerra o assunto até amanhã. Separar os dois evita que um dia corrido desligue a
+            // folga por inteiro quando bastaria empurrá-la.
+            // Só quando há pausa por vir. Depois que as duas passaram não há o que empurrar, e
+            // oferecer a opção seria prometer uma ação que não faz nada.
+            if (!_state.BreaksDismissed && _state.NextBreak(DateTimeOffset.Now) is not null)
+                menu.Items.Add(MenuItemFor("Adiar pausa em 30 min", BreakPostponed));
+
             menu.Items.Add(MenuItemFor(
                 _state.BreaksDismissed ? "Restaurar pausas de hoje" : "Hoje não quero pausa",
                 BreakDismissToggled));
