@@ -199,8 +199,11 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [x] **Sinais como funções puras** — `TimeStatusResolver`, `BreakPlanner`, `WorkDayResolver` e
       `Lookahead` são funções de (dados, hora, opções) sem I/O. Falta só a arbitragem, que ainda
       não existe
-- [ ] Arbitragem com desempate por categoria (`SEVERITY.md` §4)
-- [ ] Histerese de 20s na descida, subida imediata (I4, I5)
+- [x] **Sinais do §2** — onze, em tres familias, como funcoes puras (D-026)
+- [x] **Arbitragem com desempate por categoria** (§4): maior severidade vence, empate vai para a
+      categoria mais alta porque reuniao perdida nao volta e tarefa vencida continua la amanha
+- [x] **Histerese de 20s na descida, subida imediata** (I4, I5) — `SeverityGate`, a unica
+      classe do dominio que guarda estado, e a justificativa esta no D-026
 - [x] **Reconhecimento por clique**: suprime a ocorrência, volta ao estado calmo imediatamente
       (D-006, I3). Fecha o Q-01 — ver `SEVERITY.md` §10. Verificado ao vivo num estouro real
 - [x] **Escalada do nível 3** (D-025): vermelho sólido → pisca âmbar↔vermelho após 5 min, período
@@ -208,16 +211,16 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
       no fim marcado da reunião, então a escalada é uma subtração e sobrevive a restart de graça.
       Verificado pelo caminho real amostrando a cor do pixel: onze valores entre `C02626` e
       `B4520C`. O caminho sólido (animações desligadas) também é comportamento testado
-- [ ] Persistência da supressão de `DayEnded` até a virada do dia — o mecanismo já existe
-      (`AcknowledgementStore`, escopado por data); falta o sinal `DayEnded` usá-lo
+- [x] **Persistencia da supressao de `DayEnded` ate a virada do dia** — a ocorrencia dele e
+      `(nome, data)` e o `AcknowledgementStore` ja e escopado por data, entao sai de graca
 - [x] **Projeto de teste** — `Tempus.Tests` (xUnit), `InternalsVisibleTo` em vez de extrair
       `Tempus.Domain`. 50 testes, 62 ms. `dotnet test Tempus.Tests/Tempus.Tests.csproj`
 - [x] **Invariantes testáveis hoje**: I2 (severidade colorida tem motivo), I3 (todo alarme é
       reconhecível e reconhecer resolve na hora), I6 (contador sobrevive à severidade), I7
       (`Offline` não mostra número nem avalia sinal)
 - [x] **I8** — coberta junto com a escalada (D-025)
-- [ ] **I1, I4, I5** — dependem de arbitragem e histerese, que ainda não existem. Estão no código
-      como testes `Skip` **com o motivo**: um teste ausente some da vista, um teste pulado cobra
+- [x] **I1, I4, I5** — cobertas junto com a arbitragem e a histerese (D-026). **As oito
+      invariantes tem teste; nao resta nenhum `Skip`**
 - [ ] Toasts com AUMID registrado, com deduplicação e supressão em apresentação
 - [x] Feriados computados localmente, com Páscoa por Meeus/Jones/Butcher (D-008) — `BrazilianHolidays`,
       cobrindo nacionais, Paraná e Pato Branco, mais emendas por lista manual

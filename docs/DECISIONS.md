@@ -1270,3 +1270,73 @@ configuração real da máquina.
 Fica registrado que o caminho sólido **também** é comportamento válido e testado: quem desliga
 animação costuma ter motivo — enjoo, epilepsia fotossensível, preferência — e o vermelho sólido já
 comunica o essencial. A escalada perde a forma, não o recado.
+
+---
+
+## D-026 — Sinais, arbitragem e histerese: o chip finalmente acende
+
+**Status:** Aceita · 2026-08-18 · implementa `SEVERITY.md` §2 e §4, fecha I1, I4 e I5
+
+**Contexto.** O chip de motivo existia desde a Fase 2 e **nunca teve conteúdo no caminho real** —
+`BuildState` devolvia `Severity.Calm` com motivo vazio. Toda a cor que o usuário via vinha do humor
+temporal (§1.5). A escala 0–3, que é o assunto do documento mais importante do projeto, era letra
+morta no código.
+
+Arbitragem não podia ser feita antes porque não havia o que arbitrar.
+
+**Decisão.** Três camadas separadas, cada uma testável sozinha:
+
+| Camada | Responsabilidade | Estado |
+|--------|------------------|--------|
+| `Signals` | avaliar os onze sinais do §2 | nenhum — função pura |
+| `Arbiter` | escolher um vencedor (§4) | nenhum — função pura |
+| `SeverityGate` | suavizar a descida (I4, I5) | mínimo, e justificado |
+
+Separá-las não foi enfeite: cada uma falha de um jeito diferente, e juntas seriam intestáveis.
+
+### A única classe do domínio que guarda estado
+
+`SeverityGate` guarda o nível exibido e desde quando. Isso contraria a regra 8 de propósito, e a
+justificativa é que **histerese é sobre "quanto tempo faz"**, e isso não sai de (dados, agora) — a
+mesma entrada tem que produzir saídas diferentes conforme o que veio antes. É a definição de
+estado.
+
+O estado é mínimo (dois campos) e a classe é determinística: mesma sequência de entradas, mesma
+saída. Nada de relógio interno, nada de I/O.
+
+**Subir é imediato, descer espera 20s.** Atrasar um alarme para não tremer trocaria o problema
+certo pelo errado: tremer incomoda, chegar tarde custa. E trocar de motivo dentro do mesmo nível
+**não reinicia** o relógio — senão a barra ficaria presa num nível enquanto sinais se revezassem
+nele.
+
+Reconhecimento escapa da histerese, como a própria I4 diz. Quem clicou "eu vi" e continuou vendo
+vermelho por vinte segundos concluiria que o gesto não funciona.
+
+### `Severity` mudou de casa
+
+Estava em `Tempus.Shell`. É o vocabulário do **modelo**, não da tela: os sinais produzem
+severidade, a arbitragem escolhe uma, e só então a barra pinta. Enquanto morou na shell, nada disso
+podia existir sem o domínio depender da UI — o inverso da regra 8. Foi o compilador que apontou,
+recusando `Severity` dentro de `Tempus.Domain`.
+
+### Detalhes que o §2 pede e são fáceis de perder
+
+**`SelfClearing`.** `MeetingEnded`, meio-dia limpo e "dia fechado" passam sozinhos. Eles não
+oferecem o gesto de reconhecer: propor uma ação para algo que já vai sumir gasta atenção sem dar
+poder nenhum.
+
+**Reconhecer cala os dois vocabulários.** O humor temporal e o sinal podem estar acesos ao mesmo
+tempo (§0.5) — são áreas diferentes com gramáticas diferentes. Um clique suprime as duas
+ocorrências, senão o gesto resolveria metade do que o usuário vê.
+
+**O chip escala pelo mesmo truque do D-025.** `Signal.Since` é derivado: `MeetingRanIntoNext` nasce
+no fim marcado da reunião e `DayEnded` às 17:00. Nenhum relógio por sinal, e a escalada sobrevive a
+restart.
+
+**Consequências.** Verificado com a agenda e as tarefas reais às 18:35: o `DayEnded` acendeu o chip
+em vermelho com *"Jornada encerrada: 2 tarefas abertas"*, e o pixel do fundo do chip oscilou entre
+`C02626` e `B4520C` — piscando, porque já passava muito dos 5 min.
+
+**Mudança de comportamento que o usuário vai notar:** a partir das 17:00, todo dia em que sobrar
+tarefa aberta, a barra fica vermelha e passa a piscar cinco minutos depois, até um clique. É
+exatamente o §2.2, mas é a primeira vez que acontece de verdade.

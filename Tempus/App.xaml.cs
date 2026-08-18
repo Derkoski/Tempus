@@ -27,6 +27,7 @@ public partial class App : Application
     private WorkDayOptions _workDay = WorkDayOptions.Default;
     private BreakOptions _breaks = BreakOptions.Default;
     private BreakDismissalStore? _dismissals;
+    private readonly SeverityGate _gate = new();
     private AcknowledgementStore? _acks;
     private HashSet<string> _acknowledged = [];
     private DateOnly _acksDay;
@@ -160,10 +161,23 @@ public partial class App : Application
         // "Eu vi." Suprime a ocorrência e volta ao normal na hora (regra 2, invariante I3).
         surface.Acknowledged += (_, _) =>
         {
-            if (BuildState(_snapshot).Time.Occurrence is not { } occurrence) return;
+            var state = BuildState(_snapshot);
 
-            _acknowledged.Add(occurrence);
+            // Reconhece as duas coisas que podem estar alarmando: o humor temporal no bloco de
+            // estado e o sinal no chip. São vocabulários diferentes (§0.5) e podem estar acesos ao
+            // mesmo tempo — "eu vi" cala os dois, senão o clique resolveria metade.
+            var seen = new[] { state.Time.Occurrence, state.SignalOccurrence }
+                .Where(o => o is not null)
+                .ToList();
+
+            if (seen.Count == 0) return;
+
+            foreach (var occurrence in seen) _acknowledged.Add(occurrence!);
+
             _acks!.Save(_acksDay, _acknowledged);
+
+            // I4 não se aplica ao reconhecimento: a descida é imediata.
+            _gate.Reset(DateTimeOffset.Now);
             Rerender();
         };
 
@@ -247,14 +261,32 @@ public partial class App : Application
         var time = TimeStatusResolver.Resolve(
             snapshot.Agenda, now, _thresholds, _workDay, _acknowledged);
 
+        // §2 → §4 → I4/I5: avaliar os sinais, escolher um, e suavizar a descida. Três etapas
+        // separadas de propósito — cada uma testável sozinha.
+        var signals = Domain.Signals.Evaluate(
+            snapshot.Agenda, snapshot.Tasks, now, _workDay, SignalThresholds.Default, _acknowledged);
+
+        var winner = _gate.Apply(Arbiter.Winner(signals), now);
+
         return new ShellState
         {
-            Severity = Severity.Calm,
-            Reason = "",
+            Severity = winner?.Severity ?? Severity.Calm,
+            Reason = winner?.Reason ?? "",
+            SignalOccurrence = winner is { SelfClearing: false } ? winner.Occurrence : null,
+
+            // O chip escala pelo mesmo critério do bloco de estado (D-025): o instante em que o
+            // sinal nasceu é derivável, então basta uma subtração.
+            IsEscalated =
+                winner?.IsEscalatedAt(now, TimeSpan.FromMinutes(
+                    Math.Max(5, _thresholds.EscalationMinutes))) == true,
             OpenTasks = snapshot.Tasks.Count(t => !t.IsCompleted),
             UnreadMail = snapshot.UnreadMail,
             Time = time,
-            CanAcknowledge = time.Occurrence is not null,
+
+            // Reconhecível quando há alarme em qualquer um dos dois vocabulários (§0.5). Sinais
+            // que se limpam sozinhos ficam de fora: oferecer gesto para algo que já vai passar
+            // gasta a atenção do usuário sem lhe dar poder nenhum.
+            CanAcknowledge = time.Occurrence is not null || winner is { SelfClearing: false },
             Boundary = WorkDayResolver.Resolve(now, _workDay),
             Lookahead = Domain.Lookahead.Describe(snapshot.Upcoming, now),
             Breaks = breaks,

@@ -3,18 +3,6 @@ using Tempus.Domain;
 namespace Tempus.Shell;
 
 /// <summary>
-/// Ver <c>docs/SEVERITY.md</c> §1. Existem exatamente quatro níveis —
-/// não adicionar um quinto sem revisar aquele documento.
-/// </summary>
-internal enum Severity
-{
-    Calm = 0,
-    Info = 1,
-    Attention = 2,
-    Critical = 3,
-}
-
-/// <summary>
 /// Tudo o que a superfície precisa para se desenhar, e nada além. É o contrato entre o
 /// domínio e a UI: quando a Fase 3 chegar, a máquina de estados produz isto e a barra
 /// continua igual.
@@ -77,6 +65,12 @@ internal sealed record ShellState
     /// pausa de hoje" no menu.
     /// </summary>
     public bool BreaksDismissed { get; init; }
+
+    /// <summary>
+    /// Identidade da ocorrência do sinal que venceu a arbitragem (§4), para o clique poder
+    /// reconhecê-lo. <c>null</c> quando o chip está vazio.
+    /// </summary>
+    public string? SignalOccurrence { get; init; }
 
     /// <summary>
     /// A funcionalidade de pausas está ligada. Distinto de ter pausa hoje: governa se os gestos

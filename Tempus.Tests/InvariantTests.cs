@@ -196,14 +196,127 @@ public class InvariantTests
 
     // ---------------------------------------------------------------- ainda sem máquina de estados
 
-    [Fact(Skip = "I1 depende da arbitragem (SEVERITY §4), que a Fase 3 ainda não construiu.")]
-    public void I1_nunca_dois_alarmes_competindo() { }
+    /// <summary>
+    /// I1: nunca dois alarmes competindo — o chip exibe <b>uma</b> severidade por vez, por mais
+    /// sinais que estejam ativos ao mesmo tempo.
+    /// </summary>
+    [Fact]
+    public void I1_nunca_dois_alarmes_competindo()
+    {
+        var agenda = new[]
+        {
+            new AgendaItem { Id = "daily", Title = "Daily", Start = At(16, 30), End = At(17) },
+            new AgendaItem { Id = "review", Title = "Review", Start = At(16, 55), End = At(18) },
+        };
 
-    [Fact(Skip = "I4 depende da histerese de 20s na descida, ainda não implementada.")]
-    public void I4_histerese_de_20s_antes_de_rebaixar() { }
+        var tarefas = new[]
+        {
+            new TaskItem { Id = "t1", Title = "t1", Due = new DateOnly(2026, 8, 17) },
+            new TaskItem { Id = "t2", Title = "t2" },
+        };
 
-    [Fact(Skip = "I5 depende da histerese; subida imediata só faz sentido com ela existindo.")]
-    public void I5_subida_de_nivel_e_imediata() { }
+        // Cenário deliberadamente carregado: invasão de call, fim de jornada e tarefa vencida.
+        var ativos = Signals.Evaluate(
+            agenda, tarefas, At(17, 5), Work, SignalThresholds.Default, new HashSet<string>());
+
+        Assert.True(ativos.Count > 1, "o cenário precisa de vários sinais para o teste valer");
+
+        // A arbitragem entrega exatamente um, e o estado carrega um motivo só.
+        var vencedor = Arbiter.Winner(ativos);
+        Assert.NotNull(vencedor);
+
+        var state = new ShellState { Severity = vencedor!.Severity, Reason = vencedor.Reason };
+        Assert.False(string.IsNullOrWhiteSpace(state.Reason));
+    }
+
+    /// <summary>
+    /// I4: mínimo de 20s num nível antes de rebaixar, para a barra não tremer em torno de uma
+    /// fronteira.
+    /// </summary>
+    [Fact]
+    public void I4_histerese_de_20s_antes_de_rebaixar()
+    {
+        var gate = new SeverityGate(TimeSpan.FromSeconds(20));
+        var t0 = At(14);
+
+        gate.Apply(Alarme(Severity.Critical, "Estourou"), t0);
+        Assert.Equal(Severity.Critical, gate.Shown);
+
+        // Antes de 20s o rebaixamento é recusado: continua mostrando o que estava.
+        gate.Apply(null, t0.AddSeconds(5));
+        Assert.Equal(Severity.Critical, gate.Shown);
+
+        gate.Apply(null, t0.AddSeconds(19));
+        Assert.Equal(Severity.Critical, gate.Shown);
+
+        // Cumprido o mínimo, desce.
+        gate.Apply(null, t0.AddSeconds(20));
+        Assert.Equal(Severity.Calm, gate.Shown);
+    }
+
+    /// <summary>I4, a exceção escrita na própria invariante: reconhecimento é sempre imediato.</summary>
+    [Fact]
+    public void I4_reconhecimento_escapa_da_histerese()
+    {
+        var gate = new SeverityGate(TimeSpan.FromSeconds(20));
+        var t0 = At(14);
+
+        gate.Apply(Alarme(Severity.Critical, "Estourou"), t0);
+        gate.Reset(t0.AddSeconds(2));
+
+        Assert.Equal(Severity.Calm, gate.Shown);
+        Assert.Null(gate.Winner);
+    }
+
+    /// <summary>
+    /// I5: subir é imediato. Atrasar um alarme para não tremer trocaria o problema certo pelo
+    /// errado — tremer incomoda, chegar tarde custa.
+    /// </summary>
+    [Fact]
+    public void I5_subida_de_nivel_e_imediata()
+    {
+        var gate = new SeverityGate(TimeSpan.FromSeconds(20));
+        var t0 = At(14);
+
+        gate.Apply(Alarme(Severity.Info, "Daily em 6 min"), t0);
+        Assert.Equal(Severity.Info, gate.Shown);
+
+        // Um segundo depois, sem nenhuma espera.
+        gate.Apply(Alarme(Severity.Critical, "Estourou"), t0.AddSeconds(1));
+        Assert.Equal(Severity.Critical, gate.Shown);
+
+        gate.Apply(Alarme(Severity.Attention, "Metade do dia"), t0.AddSeconds(2));
+        Assert.Equal(Severity.Critical, gate.Shown); // descida ainda segurada pela I4
+    }
+
+    /// <summary>
+    /// No mesmo nível o motivo pode trocar sem reiniciar o relógio da histerese — senão a barra
+    /// ficaria presa num nível enquanto sinais se revezassem nele.
+    /// </summary>
+    [Fact]
+    public void I4_trocar_de_motivo_no_mesmo_nivel_nao_reinicia_o_relogio()
+    {
+        var gate = new SeverityGate(TimeSpan.FromSeconds(20));
+        var t0 = At(14);
+
+        gate.Apply(Alarme(Severity.Attention, "Primeiro"), t0);
+        gate.Apply(Alarme(Severity.Attention, "Segundo"), t0.AddSeconds(15));
+
+        Assert.Equal("Segundo", gate.Winner!.Reason);
+
+        gate.Apply(null, t0.AddSeconds(21));
+        Assert.Equal(Severity.Calm, gate.Shown);
+    }
+
+    private static Signal Alarme(Severity nivel, string motivo) => new()
+    {
+        Name = motivo,
+        Severity = nivel,
+        Reason = motivo,
+        Category = SignalCategory.Call,
+        Occurrence = motivo,
+        Since = At(14),
+    };
 
     /// <summary>
     /// I8: a escalada nunca ocorre antes de 5 min no nível 3, e nunca com período menor que 1s.
