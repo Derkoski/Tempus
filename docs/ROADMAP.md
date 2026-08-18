@@ -188,7 +188,10 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 **Entrega:** a barra reage aos dados reais da Fase 1 com as cores e avisos corretos.
 
 - [x] Questões abertas fechadas — Q-01 aberto e fechado em 2026-08-18
-- [ ] Estado `Offline` que precede e anula a escala (`SEVERITY.md` §0), com contadores em `—`
+- [x] **Estado `Offline` que precede e anula a escala** (§0), com contadores em `—`. A anulação é
+      estrutural (`EffectiveSeverity`), a barra inteira leva ao re-consent, os painéis e os gestos
+      de pausa somem do menu, e a idade do sync é calculada na hora de exibir. Verificado no demo:
+      bloco `—`, nenhum resquício de agenda, menu com quatro itens
 - [x] **Identidade de ocorrência e supressão** (D-010) — `(sinal, eventId, início, fim)`. O sinal
       entrou além do previsto no §7: sem ele, reconhecer `Encerrando` calaria o `Estourou`
       seguinte, que é um fato novo e pior. Persistida por dia em `acknowledged.json`

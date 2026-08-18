@@ -221,12 +221,16 @@ public partial class App : Application
     {
         var now = DateTimeOffset.Now;
 
+        // Offline precede e ANULA a escala (§0): retorno cedo, antes de qualquer sinal. Nenhum
+        // humor temporal, nenhuma pausa, nenhuma severidade — os dados não são confiáveis, e
+        // avaliá-los produziria uma resposta com cara de certeza.
         if (!snapshot.IsUsable(now))
         {
             return new ShellState
             {
                 IsOffline = true,
-                Reason = snapshot.Message ?? "Sem sincronização",
+                Reason = OfflineReason(snapshot, now),
+                LastSyncAt = snapshot.LastSuccessAt,
             };
         }
 
@@ -328,6 +332,29 @@ public partial class App : Application
 
     private bool BreaksEnabledButDismissed(DateTimeOffset now) =>
         _breaks.Enabled && BreakState(now).Dismissed;
+
+    /// <summary>
+    /// O texto do estado <c>Offline</c> (§0). Distingue os dois motivos, porque a ação é diferente:
+    /// login expirado se resolve com um clique, sync parado costuma ser rede e resolve sozinho.
+    /// <para>
+    /// A idade do último sync é <b>calculada agora</b>, não guardada na mensagem: uma string fixa
+    /// gravada no momento da falha diria "há 1 min" duas horas depois — dado velho com cara de
+    /// atual, que é o que a regra 10 proíbe.
+    /// </para>
+    /// </summary>
+    private static string OfflineReason(SyncSnapshot snapshot, DateTimeOffset now)
+    {
+        if (snapshot.Health is SyncHealth.NeedsAuth or SyncHealth.NotConfigured)
+            return snapshot.Message ?? "Login do Google expirou — clique para entrar";
+
+        if (snapshot.LastSuccessAt is not { } last) return "Sem sincronizar — clique para entrar";
+
+        var minutes = (int)Math.Floor((now - last).TotalMinutes);
+
+        return minutes < 60
+            ? $"Sem sincronizar há {Math.Max(1, minutes)} min"
+            : $"Sem sincronizar desde {last.ToLocalTime():HH:mm}";
+    }
 
     private static DateTimeOffset AtToday(DateTimeOffset now, int hour, int minute) =>
         new(now.Year, now.Month, now.Day, hour, minute, 0, now.Offset);

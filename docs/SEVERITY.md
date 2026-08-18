@@ -32,6 +32,26 @@ Isso importa muito porque operamos em OAuth *Testing mode* permanentemente, onde
 revoga o refresh token a cada 7 dias por design (ver `DECISIONS.md` D-003). O estado `Offline`
 vai acontecer toda semana — é parte do funcionamento normal, não uma exceção.
 
+### Como isto foi implementado (2026-08-18)
+
+Três pontos onde a regra acima obriga mais do que parece à primeira leitura:
+
+**"A barra inteira é clicável" inclui os contadores.** Antes, clicar em `☑ —` abria o painel de
+tarefas com o retrato do último sync bem-sucedido. O contador dizia `—` para não mentir e o painel
+atrás dele desmentia — regra 10. Agora qualquer área da barra leva ao re-consent quando offline.
+
+**Os painéis somem do menu de contexto.** Mesmo motivo: eles só teriam dado velho para mostrar.
+Sobram `Sincronizar agora`, `Reconectar ao Google`, `Configurações…` e `Sair`. Os gestos de pausa
+também somem — pausa é sinal, e sem agenda confiável não há o que sugerir nem o que adiar.
+
+**A idade do sync é calculada na hora de exibir.** "Sem sincronizar há 12 min" não pode ser uma
+string gravada no momento da falha, senão ela diria "há 1 min" duas horas depois. É a mesma regra
+10 aplicada ao próprio aviso de que os dados estão velhos.
+
+A anulação da escala é estrutural, não por disciplina: `ShellState.EffectiveSeverity` devolve
+`Calm` sempre que `IsOffline`, e a barra lê essa propriedade em vez do campo cru. Uma severidade
+que sobre de antes não tem como pintar nada.
+
 | Sinal degradado | Condição | Nv |
 |-----------------|----------|----|
 | `SyncDegraded` | falhas intermitentes, mas última sync < 10 min | 1 |

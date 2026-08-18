@@ -69,9 +69,9 @@ internal partial class FloatingBarWindow : Window
         // compromisso. Clicar no estado diz "eu vi"; clicar no compromisso age sobre ele.
         TimeArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnStatusClicked(); };
         LookaheadText.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
-        BreakArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(BreakTaken); };
-        TasksArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(TasksRequested); };
-        MailArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(MailRequested); };
+        BreakArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OrReauth(BreakTaken); };
+        TasksArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OrReauth(TasksRequested); };
+        MailArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OrReauth(MailRequested); };
         MouseRightButtonUp += (_, e) => { e.Handled = true; ShowContextMenu(); };
 
         // Prioridade Normal, e não Background: em Background o tick é adiável indefinidamente
@@ -161,8 +161,10 @@ internal partial class FloatingBarWindow : Window
     {
         _state = state;
 
+        // EffectiveSeverity, e não Severity: Offline precede e ANULA a escala (§0). Ler o campo
+        // cru deixaria uma severidade velha pintar o chip enquanto os dados já não são confiáveis.
         var (chipBackground, chipForeground) = _palette.For(state);
-        var showChip = state.IsOffline || state.Severity > Severity.Calm;
+        var showChip = state.IsOffline || state.EffectiveSeverity > Severity.Calm;
 
         StopBlink();
         _chipBrush.Color = showChip ? chipBackground : Colors.Transparent;
@@ -176,7 +178,8 @@ internal partial class FloatingBarWindow : Window
 
         // §1.1: nível 3 não reconhecido por 5 min passa a piscar âmbar↔vermelho.
         // Se o usuário desligou animações no Windows, fica vermelho sólido (invariante I8).
-        if (state is { IsEscalated: true, Severity: Severity.Critical, IsOffline: false }
+        if (state is { IsEscalated: true, IsOffline: false }
+            && state.EffectiveSeverity == Severity.Critical
             && SystemParameters.ClientAreaAnimation)
         {
             StartBlink(_palette.CriticalBackground, _palette.AttentionBackground);
@@ -701,8 +704,15 @@ internal partial class FloatingBarWindow : Window
         }
 
         menu.Items.Add(MenuItemFor("Sincronizar agora", SyncRequested));
-        menu.Items.Add(MenuItemFor("Abrir agenda", AgendaRequested));
-        menu.Items.Add(MenuItemFor("Abrir tarefas", TasksRequested));
+
+        // Offline, os painéis somem do menu (§0). Eles só teriam o retrato do último sync
+        // bem-sucedido para mostrar, e apresentá-lo sem ressalva é o que a regra 10 proíbe. O
+        // contador já virou "—" para não mentir; abrir o painel desmentiria o contador.
+        if (!_state.IsOffline)
+        {
+            menu.Items.Add(MenuItemFor("Abrir agenda", AgendaRequested));
+            menu.Items.Add(MenuItemFor("Abrir tarefas", TasksRequested));
+        }
 
         if (_state.CanAcknowledge)
         {
@@ -713,7 +723,9 @@ internal partial class FloatingBarWindow : Window
         // Só o gesto do dia aparece aqui. Ligar e desligar a funcionalidade é decisão de
         // instalação e mora no appsettings — colocá-la no menu convidaria a desligar de vez num
         // dia ruim, que é justamente o dia em que a pausa importa mais.
-        if (_state.BreaksEnabled)
+        // Offline não avalia sinal nenhum (§0), e pausa é sinal: sem saber a agenda, o Tempus não
+        // tem o que sugerir nem o que adiar.
+        if (_state.BreaksEnabled && !_state.IsOffline)
         {
             menu.Items.Add(new Separator());
 
@@ -757,6 +769,21 @@ internal partial class FloatingBarWindow : Window
     }
 
     private void Raise(EventHandler? handler) => handler?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Offline, <b>a barra inteira</b> leva ao re-consent (<c>SEVERITY.md</c> §0 e §6) — não só o
+    /// slot de tempo.
+    /// <para>
+    /// Sem isto, clicar no contador de tarefas abria o painel com o retrato velho do último sync
+    /// bem-sucedido: exatamente "mostrar dado velho como se fosse atual", que a regra 10 proíbe. O
+    /// contador já diz <c>—</c> justamente para não mentir; o painel atrás dele não pode desmentir.
+    /// </para>
+    /// </summary>
+    private void OrReauth(EventHandler? handler)
+    {
+        if (_state.IsOffline) Raise(ReauthRequested);
+        else Raise(handler);
+    }
 
     // ---------------------------------------------------------------- teardown
 

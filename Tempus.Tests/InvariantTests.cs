@@ -143,10 +143,55 @@ public class InvariantTests
         Assert.Null(offline.OpenTasks);
         Assert.Null(offline.UnreadMail);
 
-        // TimeStatus.Unknown é o que a barra usa quando não sabe de nada.
-        Assert.Equal(TimeMood.Unknown, TimeStatus.Unknown.Mood);
-        Assert.Null(TimeStatus.Unknown.Occurrence);
-        Assert.False(TimeStatus.Unknown.IsFilled);
+        // Sem sinal avaliado: o humor é Unknown, que é o default de ShellState.
+        Assert.Equal(TimeMood.Unknown, offline.Time.Mood);
+        Assert.Null(offline.Time.Occurrence);
+        Assert.False(offline.Time.IsFilled);
+        Assert.False(offline.Time.IsEscalated);
+
+        // Nenhuma pausa, nenhuma fronteira, nada a reconhecer.
+        Assert.Empty(offline.Breaks);
+        Assert.Null(offline.Boundary);
+        Assert.False(offline.CanAcknowledge);
+    }
+
+    /// <summary>
+    /// I7, a metade que faltava: <c>Offline</c> <b>precede e anula</b> a escala. Uma severidade que
+    /// tenha sobrado de antes não pode pintar a barra depois que os dados deixaram de ser
+    /// confiáveis — "nada pisca, nada fica vermelho" (§0).
+    /// </summary>
+    [Fact]
+    public void I7_offline_anula_a_escala_de_severidade()
+    {
+        foreach (var nivel in new[] { Severity.Info, Severity.Attention, Severity.Critical })
+        {
+            var offline = new ShellState
+            {
+                IsOffline = true,
+                Severity = nivel,
+                Reason = "Sem sincronizar há 12 min",
+                IsEscalated = true,
+            };
+
+            Assert.Equal(Severity.Calm, offline.EffectiveSeverity);
+        }
+    }
+
+    /// <summary>
+    /// A idade do último sync é calculada na hora de exibir, nunca congelada numa string. Uma
+    /// mensagem gravada no momento da falha diria "há 1 min" duas horas depois (regra 10).
+    /// </summary>
+    [Fact]
+    public void I7_a_idade_do_ultimo_sync_nao_congela()
+    {
+        var falhou = new DateTimeOffset(2026, 8, 19, 14, 0, 0, TimeSpan.FromHours(-3));
+
+        Assert.NotEqual(
+            Idade(falhou, falhou.AddMinutes(12)),
+            Idade(falhou, falhou.AddMinutes(40)));
+
+        static string Idade(DateTimeOffset ultimo, DateTimeOffset agora) =>
+            $"há {(int)Math.Floor((agora - ultimo).TotalMinutes)} min";
     }
 
     // ---------------------------------------------------------------- ainda sem máquina de estados
