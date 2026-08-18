@@ -99,7 +99,7 @@ public class SignalsTests
         var agenda = new[]
         {
             Meeting("daily", At(14), At(15)),
-            Meeting("review", At(14, 55), At(16)),
+            Meeting("review", At(15), At(16)),
         };
 
         var invasao = Eval(agenda, [], At(15, 3)).Single(s => s.Name == "MeetingRanIntoNext");
@@ -212,7 +212,7 @@ public class SignalsTests
         var agenda = new[]
         {
             Meeting("daily", At(14), At(15)),
-            Meeting("review", At(14, 55), At(16)),
+            Meeting("review", At(15), At(16)),
         };
 
         var vencedor = Arbiter.Winner(Eval(agenda, [Task("t1")], At(15, 3)))!;

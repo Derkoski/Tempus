@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Tempus.Domain;
 
 namespace Tempus.Sync;
@@ -23,6 +24,13 @@ internal static class ThresholdsLoader
     public static BreakOptions LoadBreaks(string path) =>
         Section(path, "Breaks", BreakOptions.Default);
 
+    /// <summary>
+    /// O que conta como tarefa aberta no fim de jornada (D-007). O padrao AllOpen foi escolhido
+    /// sabendo que podia se arrepender; trocar por DueTodayOrOverdue e uma linha, nao um redesenho.
+    /// </summary>
+    public static DayEndedOptions LoadDayEnded(string path) =>
+        Section(path, "DayEnded", DayEndedOptions.Default);
+
     private static T Section<T>(string path, string name, T fallback)
     {
         try
@@ -35,6 +43,10 @@ internal static class ThresholdsLoader
             return section.Deserialize<T>(new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
+
+                // Enums por nome: "AllOpen" no arquivo e mais legivel que 0, e sobrevive a
+                // reordenacao do enum sem mudar de significado.
+                Converters = { new JsonStringEnumConverter() },
             }) ?? fallback;
         }
         catch (Exception)

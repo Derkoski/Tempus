@@ -117,6 +117,9 @@ internal partial class FloatingBarWindow : Window
 
     /// <summary>"Estou tirando agora": fixa a pausa deste período na hora atual.</summary>
     public event EventHandler? BreakStartedNow;
+
+    /// <summary>Escolha do evento ativo entre reunioes sobrepostas (SEVERITY 8). Carrega o id.</summary>
+    public event EventHandler<string>? ActiveEventChosen;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
@@ -635,6 +638,15 @@ internal partial class FloatingBarWindow : Window
             return;
         }
 
+        // Sobreposição sem escolha (§8): o chip está fazendo uma pergunta, e o clique responde.
+        // Reconhecer aqui silenciaria a pergunta sem resolvê-la — os sinais continuariam sem saber
+        // qual reunião é a sua.
+        if (_state.ActiveEventChoices.Count > 1)
+        {
+            ShowActiveEventSelector();
+            return;
+        }
+
         // O clique é o gesto central do produto: reconhecer tem prioridade sobre navegar,
         // porque é o que faz o alerta parar (D-006, invariante I3).
         if (_state.CanAcknowledge) Raise(Acknowledged);
@@ -687,6 +699,44 @@ internal partial class FloatingBarWindow : Window
         }
 
         Raise(AgendaRequested);
+    }
+
+    /// <summary>
+    /// O seletor de evento ativo (§8). Menu curto com as reuniões concorrentes; a escolhida passa
+    /// a ser a única que alimenta os sinais do §2.1.
+    /// <para>
+    /// Um menu, e não uma janela: a pergunta é de dois segundos e abrir diálogo para ela custaria
+    /// mais atenção do que a dúvida vale. O item em negrito é o que o padrão determinístico já
+    /// assumiu, para o clique confirmar o provável em vez de escolher no escuro.
+    /// </para>
+    /// </summary>
+    private void ShowActiveEventSelector()
+    {
+        var menu = new ContextMenu { PlacementTarget = this };
+
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Em qual você está?",
+            IsEnabled = false,
+        });
+        menu.Items.Add(new Separator());
+
+        var padrao = _state.ActiveEventChoices[0].Id;
+
+        foreach (var choice in _state.ActiveEventChoices)
+        {
+            var item = new MenuItem
+            {
+                Header = $"{choice.Start.ToLocalTime():HH:mm}–{choice.End.ToLocalTime():HH:mm}  {choice.Title}",
+                FontWeight = choice.Id == padrao ? FontWeights.SemiBold : FontWeights.Normal,
+            };
+
+            var id = choice.Id;
+            item.Click += (_, _) => ActiveEventChosen?.Invoke(this, id);
+            menu.Items.Add(item);
+        }
+
+        menu.IsOpen = true;
     }
 
     private void ShowContextMenu()

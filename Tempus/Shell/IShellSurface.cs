@@ -55,6 +55,9 @@ internal interface IShellSurface : IDisposable
     /// <summary>"Estou tirando agora": fixa a pausa do período na hora atual.</summary>
     event EventHandler? BreakStartedNow;
 
+    /// <summary>Escolha do evento ativo entre reunioes sobrepostas (SEVERITY 8, D-009).</summary>
+    event EventHandler<string>? ActiveEventChosen;
+
     /// <summary>Usuário clicou na barra offline e quer reautenticar (<c>SEVERITY.md</c> §6).</summary>
     event EventHandler? ReauthRequested;
 
@@ -79,7 +82,7 @@ internal interface IShellSurface : IDisposable
     /// <summary>Tarefa criada no painel S2. Carrega o título.</summary>
     event EventHandler<string>? TaskCreated;
 
-    /// <summary>Exclus�o confirmada de tarefa. Carrega o id. N�o tem volta (D-024).</summary>
+    /// <summary>Exclus�o confirmada de tarefa. Carrega o id. N�o tem volta (D-024).</summary>
     event EventHandler<string>? TaskDeleted;
 
     /// <summary>Evento com Meet acionado no painel S3. Carrega a URL.</summary>

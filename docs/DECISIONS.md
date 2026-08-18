@@ -1340,3 +1340,46 @@ em vermelho com *"Jornada encerrada: 2 tarefas abertas"*, e o pixel do fundo do 
 **Mudança de comportamento que o usuário vai notar:** a partir das 17:00, todo dia em que sobrar
 tarefa aberta, a barra fica vermelha e passa a piscar cinco minutos depois, até um clique. É
 exatamente o §2.2, mas é a primeira vez que acontece de verdade.
+
+---
+
+## D-027 — Evento ativo e contagem do fim de jornada: a Fase 3 fecha
+
+**Status:** Aceita · 2026-08-18 · implementa `SEVERITY.md` §8 e o resto do D-007
+
+### O evento ativo (§8)
+
+Duas reuniões aceitas no mesmo horário. O Tempus não sabe em qual você está — não há detecção de
+presença (D-006) — e adivinhar produz o pior ruído possível: um `MeetingRanIntoNext` **falso** no
+fim da primeira, que é justamente o alarme mais caro do produto.
+
+`ActiveEvent` resolve em duas camadas. **Pergunta**, com um menu curto no chip; e **enquanto não há
+resposta**, assume um padrão determinístico — `accepted` > `tentative` > `needsAction`, desempatando
+pelo início e depois pelo fim. A barra nunca fica sem estado esperando um clique que pode não vir.
+
+O que faz a regra valer é uma linha só: reuniões sobrepostas à ativa **saem do ciclo** do §2.1 até
+terminarem. Não é filtro de exibição — elas deixam de existir para os sinais.
+
+**A escolha vive em memória, de propósito.** Ela vale pela janela de sobreposição, que dura
+minutos; perdê-la num restart degrada para o padrão determinístico, que já é uma resposta razoável.
+Persistir custaria um terceiro arquivo de estado por um ganho que dura o intervalo entre duas
+reuniões.
+
+**Dois testes antigos quebraram, e isso foi a prova.** Eles usavam uma "próxima" reunião começando
+14:55 contra uma que terminava 15:00 — cinco minutos de sobreposição. Sob o §8 isso é reunião
+paralela e o vermelho é corretamente suprimido. Os testes codificavam exatamente o falso positivo
+que o §8 foi escrito para eliminar; corrigi-los para reuniões de fato sequenciais foi a confirmação
+de que a regra pega o caso certo sem desligar o alarme legítimo.
+
+### `DayEnded.CountMode` (D-007)
+
+`AllOpen` (padrão) conta toda tarefa não concluída; `DueTodayOrOverdue` conta só o que vencia hoje
+ou antes. O D-007 previu o arrependimento e reservou a chave: se o vermelho das 17:00 incomodar
+depois de uma semana de convívio, é uma linha de `appsettings.json`.
+
+O checkpoint do meio-dia usa o mesmo critério — contar diferente nas duas pontas do dia seria uma
+inconsistência que ninguém lembraria de explicar depois.
+
+**Consequências.** A Fase 3 fica com um item: os toasts (§5), que exigem AUMID registrado e mudança
+de *target framework* para acessar as APIs de notificação do Windows. É trabalho de natureza
+diferente do que veio até aqui, e merece decisão própria.

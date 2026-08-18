@@ -23,6 +23,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         _window.BreakTaken += (_, e) => BreakTaken?.Invoke(this, e);
         _window.BreakPostponed += (_, e) => BreakPostponed?.Invoke(this, e);
         _window.BreakStartedNow += (_, e) => BreakStartedNow?.Invoke(this, e);
+        _window.ActiveEventChosen += (_, id) => ActiveEventChosen?.Invoke(this, id);
         _window.ReauthRequested += (_, e) => ReauthRequested?.Invoke(this, e);
         _window.TasksRequested += (_, e) => TasksRequested?.Invoke(this, e);
         _window.AgendaRequested += (_, e) => AgendaRequested?.Invoke(this, e);
@@ -38,6 +39,7 @@ internal sealed class FloatingBarSurface : IShellSurface
     public event EventHandler? BreakTaken;
     public event EventHandler? BreakPostponed;
     public event EventHandler? BreakStartedNow;
+    public event EventHandler<string>? ActiveEventChosen;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;

@@ -195,7 +195,9 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [x] **Identidade de ocorrência e supressão** (D-010) — `(sinal, eventId, início, fim)`. O sinal
       entrou além do previsto no §7: sem ele, reconhecer `Encerrando` calaria o `Estourou`
       seguinte, que é um fato novo e pior. Persistida por dia em `acknowledged.json`
-- [ ] `MeetingAmbiguous` + seletor de evento ativo, com padrão determinístico (D-009)
+- [x] **`MeetingAmbiguous` + seletor de evento ativo** (D-009, D-027). Sobrepostas saem do
+      ciclo do §2.1 ate terminarem, o que elimina o `MeetingRanIntoNext` falso. Padrao
+      deterministico enquanto nao ha escolha; a escolha vive em memoria e expira sozinha
 - [x] **Sinais como funções puras** — `TimeStatusResolver`, `BreakPlanner`, `WorkDayResolver` e
       `Lookahead` são funções de (dados, hora, opções) sem I/O. Falta só a arbitragem, que ainda
       não existe
@@ -226,7 +228,8 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
       cobrindo nacionais, Paraná e Pato Branco, mais emendas por lista manual
 - [x] Fronteiras do dia configuráveis (D-007) — `WorkDayOptions` (08:00/12:00/13:00/17:00) e
       `BoundaryStatus` com gradiente verde→âmbar→vermelho na janela final
-- [ ] `DayEnded.CountMode` (D-007) — **não implementado**; é o que resta do item acima
+- [x] **`DayEnded.CountMode`** (D-007) — `AllOpen` (padrao) ou `DueTodayOrOverdue`, em
+      `appsettings.json`. O meio-dia usa o mesmo criterio
 
 **Marco:** ao fim desta fase o produto já entrega o valor central. Fases 4 e 5 são
 complementos.

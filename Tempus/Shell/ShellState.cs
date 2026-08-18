@@ -73,6 +73,13 @@ internal sealed record ShellState
     public string? SignalOccurrence { get; init; }
 
     /// <summary>
+    /// As reuniões concorrentes quando há sobreposição sem escolha feita (§8). Vazio no caso
+    /// normal. Com duas ou mais, o clique no chip abre o seletor em vez de reconhecer — é uma
+    /// pergunta, e responder vale mais que silenciar.
+    /// </summary>
+    public IReadOnlyList<AgendaItem> ActiveEventChoices { get; init; } = [];
+
+    /// <summary>
     /// A funcionalidade de pausas está ligada. Distinto de ter pausa hoje: governa se os gestos
     /// aparecem no menu, porque "tirar agora" faz sentido mesmo sem nenhuma pausa planejada de pé.
     /// </summary>

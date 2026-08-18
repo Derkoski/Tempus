@@ -28,6 +28,18 @@ public partial class App : Application
     private BreakOptions _breaks = BreakOptions.Default;
     private BreakDismissalStore? _dismissals;
     private readonly SeverityGate _gate = new();
+    private DayEndedOptions _dayEnded = DayEndedOptions.Default;
+
+    /// <summary>
+    /// Qual reuniao o usuario declarou estar atendendo entre sobrepostas (SEVERITY 8).
+    /// <para>
+    /// Em memoria de proposito: a escolha vale so pela janela de sobreposicao, que dura minutos, e
+    /// perde-la num restart degrada para o padrao deterministico — que ja e uma resposta razoavel —
+    /// em vez de degradar para nada. Persistir custaria um terceiro arquivo de estado por um ganho
+    /// que dura o intervalo entre duas reunioes.
+    /// </para>
+    /// </summary>
+    private string? _activeEventId;
     private AcknowledgementStore? _acks;
     private HashSet<string> _acknowledged = [];
     private DateOnly _acksDay;
@@ -53,6 +65,7 @@ public partial class App : Application
 
         var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         _thresholds = ThresholdsLoader.Load(settingsPath);
+        _dayEnded = ThresholdsLoader.LoadDayEnded(settingsPath);
         _dismissals = new BreakDismissalStore(GoogleOptions.DataDirectory);
         _acks = new AcknowledgementStore(GoogleOptions.DataDirectory);
         _acksDay = DateOnly.FromDateTime(DateTime.Today);
@@ -181,6 +194,14 @@ public partial class App : Application
             Rerender();
         };
 
+        // SEVERITY 8: o usuario declara qual reuniao e a dele, e a partir dai so ela alimenta os
+        // sinais do 2.1. E a mesma logica do D-006 — o app pergunta em vez de inferir.
+        surface.ActiveEventChosen += (_, id) =>
+        {
+            _activeEventId = id;
+            Rerender();
+        };
+
         surface.ReauthRequested += (_, _) => OnReauthRequested();
         surface.SyncRequested += (_, _) => _ = sync.RefreshAsync();
         // Abrir um painel força uma rodada: é o momento em que o usuário está de fato olhando os
@@ -263,8 +284,17 @@ public partial class App : Application
 
         // §2 → §4 → I4/I5: avaliar os sinais, escolher um, e suavizar a descida. Três etapas
         // separadas de propósito — cada uma testável sozinha.
+        var candidates = ActiveEvent.Candidates(snapshot.Agenda, now);
+
+        // A escolha expira sozinha quando o evento escolhido deixa de ser candidato (SEVERITY 8:
+        // "quando o evento ativo termina, reavaliar"). Sem isto, uma escolha velha calaria a
+        // proxima ambiguidade do dia.
+        if (_activeEventId is not null && candidates.All(c => c.Id != _activeEventId))
+            _activeEventId = null;
+
         var signals = Domain.Signals.Evaluate(
-            snapshot.Agenda, snapshot.Tasks, now, _workDay, SignalThresholds.Default, _acknowledged);
+            snapshot.Agenda, snapshot.Tasks, now, _workDay, SignalThresholds.Default, _acknowledged,
+            _dayEnded, _activeEventId);
 
         var winner = _gate.Apply(Arbiter.Winner(signals), now);
 
@@ -273,6 +303,7 @@ public partial class App : Application
             Severity = winner?.Severity ?? Severity.Calm,
             Reason = winner?.Reason ?? "",
             SignalOccurrence = winner is { SelfClearing: false } ? winner.Occurrence : null,
+            ActiveEventChoices = _activeEventId is null && candidates.Count > 1 ? candidates : [],
 
             // O chip escala pelo mesmo critério do bloco de estado (D-025): o instante em que o
             // sinal nasceu é derivável, então basta uma subtração.

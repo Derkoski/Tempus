@@ -1,5 +1,29 @@
 namespace Tempus.Domain;
 
+/// <summary>
+/// O que conta como "tarefa aberta" no sinal de fim de jornada (D-007).
+/// <para>
+/// Existe como opção porque o D-007 previu o arrependimento: se o vermelho das 17:00 incomodar
+/// depois de uma semana de convívio, mudar de <c>AllOpen</c> para <c>DueTodayOrOverdue</c> é uma
+/// linha de configuração, e não uma discussão sobre o modelo.
+/// </para>
+/// </summary>
+internal enum DayEndedCountMode
+{
+    /// <summary>Todas as não concluídas, com ou sem vencimento. Padrão do D-007.</summary>
+    AllOpen,
+
+    /// <summary>Só as que venciam hoje ou antes — backlog distante não segura o fim do dia.</summary>
+    DueTodayOrOverdue,
+}
+
+internal sealed record DayEndedOptions
+{
+    public DayEndedCountMode CountMode { get; init; } = DayEndedCountMode.AllOpen;
+
+    public static readonly DayEndedOptions Default = new();
+}
+
 /// <summary>Limiares do ciclo de vida de call (<c>SEVERITY.md</c> §2.1), em minutos.</summary>
 internal sealed record SignalThresholds
 {
@@ -37,12 +61,14 @@ internal static class Signals
         DateTimeOffset now,
         WorkDayOptions work,
         SignalThresholds limits,
-        IReadOnlySet<string> acknowledged)
+        IReadOnlySet<string> acknowledged,
+        DayEndedOptions? dayEnded = null,
+        string? activeEventId = null)
     {
         var found = new List<Signal>();
 
-        found.AddRange(CallLifecycle(agenda, now, limits));
-        found.AddRange(DayBoundaries(tasks, now, work, limits));
+        found.AddRange(CallLifecycle(agenda, now, limits, activeEventId));
+        found.AddRange(DayBoundaries(tasks, now, work, limits, dayEnded ?? DayEndedOptions.Default));
         found.AddRange(Tasks(tasks, now));
 
         // Reconhecido some da lista antes de qualquer disputa: sinal suprimido não arbitra (§4).
@@ -56,10 +82,36 @@ internal static class Signals
     /// (D-006): o Tempus conhece o calendário e o usuário comunica o resto clicando.
     /// </summary>
     private static IEnumerable<Signal> CallLifecycle(
-        IReadOnlyList<AgendaItem> agenda, DateTimeOffset now, SignalThresholds limits)
+        IReadOnlyList<AgendaItem> agenda,
+        DateTimeOffset now,
+        SignalThresholds limits,
+        string? activeEventId)
     {
         // Dia inteiro é marcador, não call (§2.1). Recusados e "livre" já não chegam aqui.
         var events = agenda.Where(e => !e.IsAllDay).OrderBy(e => e.Start).ToList();
+
+        // §8: com duas reuniões sobrepostas o app não tem como saber em qual você está, e chutar
+        // produz o pior ruído possível — um MeetingRanIntoNext falso no fim da primeira.
+        var candidates = ActiveEvent.Candidates(events, now);
+        var active = ActiveEvent.Choose(candidates, activeEventId);
+
+        if (candidates.Count > 1 && activeEventId is null)
+        {
+            yield return new Signal
+            {
+                Name = SignalNames.MeetingAmbiguous,
+                Severity = Severity.Info,
+                Reason = $"{candidates.Count} reuniões agora — qual?",
+                Category = SignalCategory.Call,
+                Occurrence = Signal.OccurrenceFor(SignalNames.MeetingAmbiguous, active!),
+                Since = candidates.Max(c => c.Start),
+            };
+        }
+
+        // Sobrepostas que não são a ativa saem do ciclo até terminarem. É esta linha que faz a
+        // cláusula do §8 valer: uma reunião aceita em paralelo nunca conta como "próxima invadida".
+        if (active is not null)
+            events = [.. events.Where(e => e.Id == active.Id || !ActiveEvent.Overlaps(e, active))];
 
         var upcoming = TimeSpan.FromMinutes(limits.UpcomingMinutes);
         var imminent = TimeSpan.FromMinutes(limits.ImminentMinutes);
@@ -158,14 +210,17 @@ internal static class Signals
         IReadOnlyList<TaskItem> tasks,
         DateTimeOffset now,
         WorkDayOptions work,
-        SignalThresholds limits)
+        SignalThresholds limits,
+        DayEndedOptions dayEnded)
     {
         var today = DateOnly.FromDateTime(now.Date);
 
         // Fora de dia útil os dois sinais ficam desligados (§2.2).
         if (!WorkDayResolver.IsWorkingDay(today, work)) yield break;
 
-        var open = tasks.Count(t => !t.IsCompleted);
+        // O que conta como aberta é configurável (D-007). O checkpoint do meio-dia segue o mesmo
+        // critério do fim de jornada: contar diferente nas duas pontas do dia confundiria.
+        var open = tasks.Count(t => !t.IsCompleted && Counts(t, today, dayEnded.CountMode));
         var midday = At(now, work.MiddayHour, work.MiddayMinute);
         var end = At(now, work.EndHour, work.EndMinute);
 
@@ -248,6 +303,10 @@ internal static class Signals
 
     // ---------------------------------------------------------------- auxiliares
 
+    private static bool Counts(TaskItem task, DateOnly today, DayEndedCountMode mode) =>
+        mode == DayEndedCountMode.AllOpen
+        || task.Bucket(today) is TaskBucket.Overdue or TaskBucket.Today;
+
     private static string Plural(int n, string um, string varios) =>
         n == 1 ? $"1 {um}" : $"{n} {varios}";
 
@@ -266,6 +325,7 @@ internal static class SignalNames
     public const string MeetingBackToBack = "MeetingBackToBack";
     public const string MeetingEnded = "MeetingEnded";
     public const string MeetingRanIntoNext = "MeetingRanIntoNext";
+    public const string MeetingAmbiguous = "MeetingAmbiguous";
     public const string MiddayCheckpoint = "MiddayCheckpoint";
     public const string DayEnded = "DayEnded";
     public const string TaskOverdue = "TaskOverdue";
