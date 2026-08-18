@@ -200,8 +200,10 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [ ] Histerese de 20s na descida, subida imediata (I4, I5)
 - [x] **Reconhecimento por clique**: suprime a ocorrência, volta ao estado calmo imediatamente
       (D-006, I3). Fecha o Q-01 — ver `SEVERITY.md` §10. Verificado ao vivo num estouro real
-- [ ] **Escalada do nível 3**: vermelho sólido → pisca âmbar↔vermelho após 5 min, período ~1,2s,
-      sólido se as animações do sistema estiverem desligadas
+- [x] **Escalada do nível 3** (D-025): vermelho sólido → pisca âmbar↔vermelho após 5 min, período
+      1,2s, sólido se as animações do sistema estiverem desligadas. **Sem timer** — o alarme começa
+      no fim marcado da reunião, então a escalada é uma subtração e sobrevive a restart de graça.
+      ⚠️ *Nesta máquina as animações do Windows estão desligadas, então na prática ele fica sólido*
 - [ ] Persistência da supressão de `DayEnded` até a virada do dia — o mecanismo já existe
       (`AcknowledgementStore`, escopado por data); falta o sinal `DayEnded` usá-lo
 - [x] **Projeto de teste** — `Tempus.Tests` (xUnit), `InternalsVisibleTo` em vez de extrair
@@ -209,9 +211,9 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [x] **Invariantes testáveis hoje**: I2 (severidade colorida tem motivo), I3 (todo alarme é
       reconhecível e reconhecer resolve na hora), I6 (contador sobrevive à severidade), I7
       (`Offline` não mostra número nem avalia sinal)
-- [ ] **I1, I4, I5, I8** — dependem de arbitragem, histerese e escalada, que ainda não existem.
-      Estão no código como testes `Skip` **com o motivo**: um teste ausente some da vista, um
-      teste pulado cobra
+- [x] **I8** — coberta junto com a escalada (D-025)
+- [ ] **I1, I4, I5** — dependem de arbitragem e histerese, que ainda não existem. Estão no código
+      como testes `Skip` **com o motivo**: um teste ausente some da vista, um teste pulado cobra
 - [ ] Toasts com AUMID registrado, com deduplicação e supressão em apresentação
 - [x] Feriados computados localmente, com Páscoa por Meeus/Jones/Butcher (D-008) — `BrazilianHolidays`,
       cobrindo nacionais, Paraná e Pato Branco, mais emendas por lista manual

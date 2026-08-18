@@ -1212,3 +1212,53 @@ Os quatro gestos, agora completos:
 O planejador recalcula da agenda a cada sync e descarta janelas ocupadas, então uma reunião longa
 sobre o horário ideal empurra a pausa para a primeira janela livre depois dela — verificado em uso
 no mesmo dia, com um treinamento de 14:00–15:00 movendo a pausa da tarde para 15:00–15:15.
+
+---
+
+## D-025 — A escalada do nível 3 não guarda estado
+
+**Status:** Aceita · 2026-08-18 · fecha a regra 2 do `CLAUDE.md`
+
+**Contexto.** A regra 2 do projeto promete: *"Nível 3 escala, não decai — vermelho sólido, piscando
+âmbar↔vermelho após 5 min, até o usuário clicar."* A metade do reconhecimento saiu no §10; faltava
+a escalada. `ShellState.IsEscalated` existia e ninguém o ligava.
+
+**Decisão.** `TimeStatus.IsEscalated`, calculado no resolvedor.
+
+**Sem timer e sem memória.** O alarme de estouro começa no **fim marcado da reunião**, que está na
+agenda. Então "há quanto tempo isto escala" é `agora − fim`, uma subtração — não um contador que
+alguém precisa iniciar, parar e reiniciar quando o app reinicia. O resolvedor continua função pura
+de (agenda, agora, opções) e a escalada sobrevive a restart de graça.
+
+**Só o `Overrun` escala, e não por caso especial.** Entre os humores preenchidos, `Imminent` acaba
+quando a reunião começa e `EndingSoon` quando ela termina — nenhum dos dois dura cinco minutos. A
+janela de estouro é de dez. O limiar seleciona o caso certo sozinho; uma condição escrita à mão
+para "se for Overrun" seria redundante e envelheceria mal.
+
+**A configuração pode afrouxar, nunca antecipar.** `EscalationMinutes` passa por
+`Math.Max(5, ...)`. A I8 fixa o piso: quem quiser esperar mais que cinco minutos pode, quem quiser
+piscar antes não — a invariante não é negociável por arquivo de configuração.
+
+### Onde ele pisca, e por que isso emendou o §0.5
+
+O §0.5 dizia que piscar era do chip de motivo, e que o vermelho do slot de tempo *se resolve
+sozinho*. Isso era verdade quando o slot só abrigava `Imminent`. `Overrun` quebrou a premissa.
+
+Pôr o estouro **também** no chip para poder piscar lá violaria a I1 — o mesmo fato ocupando as
+duas áreas coloridas. Então o piscar foi para onde o alarme já está: o bloco de status (D-023). O
+critério deixa de ser o slot e passa a ser o fato — **escala o alarme que não se resolve sozinho.**
+
+### Verificação, e um achado sobre esta máquina
+
+A lógica do momento tem teste (I8: sólido até 4 min, escalado a partir de 5, configuração não
+antecipa, período ≥ 1s, reconhecer encerra a escalada).
+
+A **animação** foi verificada à parte, amostrando a cor do mesmo pixel doze vezes ao longo de 2,5s:
+doze valores distintos oscilando entre `C02626` e `B4530A`, com os intermediários da interpolação.
+Teste unitário não pega fiação de `SolidColorBrush`; esta prova pega.
+
+**Achado:** nesta máquina `SystemParameters.ClientAreaAnimation` é **False** — as animações do
+Windows estão desligadas. Pela I8 isso é vermelho sólido, e é o que acontece. Ou seja, a escalada
+existe e está correta, mas **é invisível para este usuário** até que ele ligue animações em
+*Configurações → Acessibilidade → Efeitos visuais*. A prova acima só foi possível furando a guarda
+num build temporário.

@@ -50,7 +50,16 @@ mais fácil de cometer aqui.
 
 A distinção de **forma** é o que impede os dois vermelhos de se confundirem: o vermelho de
 contagem regressiva preenche o slot de tempo e **se resolve sozinho** quando a reunião começa; o
-vermelho de alarme preenche o chip, **pisca após 5 min** e só sai com clique.
+vermelho de alarme preenche o chip e só sai com clique.
+
+> **Emenda de 2026-08-18.** A frase acima foi escrita quando o slot de tempo só abrigava
+> `Imminent`, que de fato se resolve sozinho. **`Overrun` quebrou essa premissa:** ele não se
+> resolve — persiste 10 min, exige reconhecimento (§10) e agora **também pisca** após 5 min.
+>
+> Piscar deixou de ser exclusividade do chip. O critério passa a ser o **fato**, não o slot: o que
+> escala é alarme que não se resolve sozinho, esteja ele onde estiver. Entre os humores
+> preenchidos só `Overrun` alcança os 5 minutos — `Imminent` acaba quando a reunião começa e
+> `EndingSoon` quando ela termina — então a regra seleciona o caso certo sem caso especial.
 
 ## 1.5 Humor temporal — o sinal ambiente
 

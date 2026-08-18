@@ -115,6 +115,22 @@ internal sealed record TimeStatus
     /// ("pare"), mas não é uma urgência que exija ação imediata.
     /// </summary>
     public bool IsBold => IsFilled || Mood is TimeMood.OffHours;
+
+    /// <summary>
+    /// O alarme já dura mais que o limiar de escalada e deve <b>piscar</b> âmbar↔vermelho
+    /// (<c>SEVERITY.md</c> §1.1, regra 2: nível 3 escala, não decai).
+    /// <para>
+    /// Na prática só o <see cref="TimeMood.Overrun"/> alcança isto, e não por caso especial: entre
+    /// os humores preenchidos, <c>Imminent</c> acaba quando a reunião começa e <c>EndingSoon</c>
+    /// quando ela termina — nenhum dos dois sobrevive cinco minutos. O limiar seleciona sozinho.
+    /// </para>
+    /// <para>
+    /// <b>Não guarda estado.</b> O alarme de estouro começa no fim marcado da reunião, então
+    /// "há quanto tempo escala" sai de (agenda, agora) — sem timer e sem lembrar quando começou,
+    /// o que mantém o resolvedor uma função pura (regra 8).
+    /// </para>
+    /// </summary>
+    public bool IsEscalated { get; init; }
 }
 
 internal sealed record TimeThresholds
@@ -133,6 +149,12 @@ internal sealed record TimeThresholds
     /// de presença (D-006), o app não sabe se você saiu — então avisa durante uma janela e para.
     /// </summary>
     public int OverrunMinutes { get; init; } = 10;
+
+    /// <summary>
+    /// Quanto tempo um alarme aguenta sem reconhecimento antes de passar a piscar (§1.1, I8).
+    /// Nunca menor que isto — a invariante fixa o piso, a configuração só pode afrouxar.
+    /// </summary>
+    public int EscalationMinutes { get; init; } = 5;
 
     public static readonly TimeThresholds Default = new();
 }
@@ -176,7 +198,7 @@ internal static class TimeStatusResolver
         if (justEnded is not null && seen.Contains(OccurrenceOf(TimeMood.Overrun, justEnded)))
             justEnded = null;
 
-        if (justEnded is not null) return Overrun(justEnded, next, now);
+        if (justEnded is not null) return Overrun(justEnded, next, now, thresholds);
 
         // Compromisso marcado ganha do relógio: uma reunião às 19h existe, e o expediente ter
         // acabado não a torna menos real. Fora-de-expediente só fala quando não há nada agendado.
@@ -230,10 +252,14 @@ internal static class TimeStatusResolver
         };
     }
 
-    private static TimeStatus Overrun(AgendaItem ended, AgendaItem? next, DateTimeOffset now)
+    private static TimeStatus Overrun(
+        AgendaItem ended, AgendaItem? next, DateTimeOffset now, TimeThresholds thresholds)
     {
         var over = now - ended.End;
         var invading = next is not null && next.Start <= now;
+
+        // I8 fixa o piso em 5 min; a configuração só pode afrouxar, nunca antecipar o piscar.
+        var escalation = TimeSpan.FromMinutes(Math.Max(5, thresholds.EscalationMinutes));
 
         var summary = $"passou {Humanize(over)} · {ended.Title}";
         if (invading) summary += $" · {next!.Title} já começou";
@@ -244,6 +270,7 @@ internal static class TimeStatusResolver
             Label = "Estourou",
             Summary = summary,
             NamesAnEvent = true,
+            IsEscalated = over >= escalation,
             Occurrence = OccurrenceOf(TimeMood.Overrun, ended),
             // A que invadiu, quando existe: às 12:22 o que importa é entrar na que já começou,
             // não voltar para a que devia ter acabado.

@@ -1,9 +1,8 @@
 {
+  "//": "Permissões amplas ficam no settings.json GLOBAL do usuário, não aqui. Este arquivo é versionado, e o Claude Code não aceita bypassPermissions vindo de repositório — senão clonar um projeto desligaria os prompts de quem clonou.",
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
-      "PowerShell",
-      "Bash"
+      "Bash(git add *)"
     ]
   }
 }

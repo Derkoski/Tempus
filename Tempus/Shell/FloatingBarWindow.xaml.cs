@@ -27,7 +27,14 @@ internal partial class FloatingBarWindow : Window
     private const int SettleTicks = 24; // 24 × ~16ms ≈ 380ms de cobertura
 
     private readonly BarOptions _options;
+    /// <summary>Período do piscar. I8 exige ≥ 1s; ida e volta dão 1,2s.</summary>
+    private const int BlinkHalfPeriodMs = 600;
+
+    public static TimeSpan BlinkPeriod => TimeSpan.FromMilliseconds(BlinkHalfPeriodMs * 2);
+
     private readonly SolidColorBrush _chipBrush = new(Colors.Transparent);
+    private readonly SolidColorBrush _statusBrush = new(Colors.Transparent);
+    private bool _isStatusBlinking;
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _settleTimer;
 
@@ -50,6 +57,7 @@ internal partial class FloatingBarWindow : Window
         InitializeComponent();
 
         ReasonChip.Background = _chipBrush;
+        TimeArea.Background = _statusBrush;
 
         // Tamanho inicial em DIP só para o WPF medir o conteúdo; a posição e o tamanho reais
         // são impostos por SetWindowPos em pixels físicos.
@@ -220,8 +228,18 @@ internal partial class FloatingBarWindow : Window
         // escalada continua sendo visível pela forma e não só pela cor (D-012).
         var escalates = time.IsFilled;
 
-        TimeArea.Background = new SolidColorBrush(escalates ? background : _palette.ChipBackground);
+        StopStatusBlink();
+        _statusBrush.Color = escalates ? background : _palette.ChipBackground;
         TimeText.Foreground = new SolidColorBrush(foreground);
+
+        // §1.1 e regra 2: passados 5 min sem reconhecimento, o alarme deixa de ser sólido e passa
+        // a piscar âmbar↔vermelho. Ele escala em vez de decair, e só o clique o encerra.
+        //
+        // Com animações desligadas no Windows fica sólido (invariante I8): quem desligou animação
+        // costuma ter motivo — enjoo, epilepsia fotossensível, preferência — e o vermelho sólido
+        // já comunica o essencial.
+        if (time.IsEscalated && !state.IsOffline && SystemParameters.ClientAreaAnimation)
+            StartStatusBlink(_palette.CriticalBackground, _palette.AttentionBackground);
 
         var action = state.CanAcknowledge
             ? "Clique para reconhecer — eu vi"
@@ -383,13 +401,37 @@ internal partial class FloatingBarWindow : Window
         Render(_state);
     }
 
+    private void StartStatusBlink(Color from, Color to)
+    {
+        _statusBrush.BeginAnimation(SolidColorBrush.ColorProperty, Blink(from, to));
+        _isStatusBlinking = true;
+    }
+
+    private void StopStatusBlink()
+    {
+        if (!_isStatusBlinking) return;
+
+        _statusBrush.BeginAnimation(SolidColorBrush.ColorProperty, null);
+        _isStatusBlinking = false;
+    }
+
+    private static ColorAnimation Blink(Color from, Color to) => new()
+    {
+        From = from,
+        To = to,
+        Duration = TimeSpan.FromMilliseconds(BlinkHalfPeriodMs),
+        AutoReverse = true,
+        RepeatBehavior = RepeatBehavior.Forever,
+        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+    };
+
     private void StartBlink(Color from, Color to)
     {
         var animation = new ColorAnimation
         {
             From = from,
             To = to,
-            Duration = TimeSpan.FromMilliseconds(600), // ida+volta = 1,2s de período
+            Duration = TimeSpan.FromMilliseconds(BlinkHalfPeriodMs), // ida+volta = 1,2s de período
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever,
             EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
@@ -728,6 +770,7 @@ internal partial class FloatingBarWindow : Window
         _settleTimer.Stop();
         _settleTimer.Tick -= OnSettleTick;
         StopBlink();
+        StopStatusBlink();
 
         if (_foreground is not null)
         {

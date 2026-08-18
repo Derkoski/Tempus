@@ -160,6 +160,61 @@ public class InvariantTests
     [Fact(Skip = "I5 depende da histerese; subida imediata só faz sentido com ela existindo.")]
     public void I5_subida_de_nivel_e_imediata() { }
 
-    [Fact(Skip = "I8 depende da escalada do nível 3 (piscar após 5 min), ainda não implementada.")]
-    public void I8_escalada_nunca_antes_de_5_min_nem_com_periodo_menor_que_1s() { }
+    /// <summary>
+    /// I8: a escalada nunca ocorre antes de 5 min no nível 3, e nunca com período menor que 1s.
+    /// </summary>
+    [Fact]
+    public void I8_escalada_nunca_antes_de_5_min_nem_com_periodo_menor_que_1s()
+    {
+        var weekly = new AgendaItem
+        {
+            Id = "weekly",
+            Title = "Weekly",
+            Start = At(14),
+            End = At(15),
+        };
+
+        TimeStatus Em(int minutosDepoisDoFim) => TimeStatusResolver.Resolve(
+            [weekly], At(15).AddMinutes(minutosDepoisDoFim), TimeThresholds.Default, Work);
+
+        // Vermelho sólido na primeira janela: alarma, mas não pisca.
+        Assert.True(Em(1).IsFilled);
+        Assert.False(Em(1).IsEscalated);
+        Assert.False(Em(4).IsEscalated);
+
+        // A partir de 5 min, escala.
+        Assert.True(Em(5).IsEscalated);
+        Assert.True(Em(8).IsEscalated);
+
+        // Afrouxar por configuração é permitido; antecipar não.
+        var apressado = TimeThresholds.Default with { EscalationMinutes = 1 };
+        var cedo = TimeStatusResolver.Resolve([weekly], At(15, 2), apressado, Work);
+        Assert.False(cedo.IsEscalated);
+
+        // Período do piscar ≥ 1s.
+        Assert.True(FloatingBarWindow.BlinkPeriod >= TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>Reconhecer encerra a escalada junto com o alarme — não existe piscar órfão.</summary>
+    [Fact]
+    public void I8_reconhecer_encerra_a_escalada()
+    {
+        var weekly = new AgendaItem
+        {
+            Id = "weekly",
+            Title = "Weekly",
+            Start = At(14),
+            End = At(15),
+        };
+
+        var escalado = TimeStatusResolver.Resolve(
+            [weekly], At(15, 7), TimeThresholds.Default, Work);
+        Assert.True(escalado.IsEscalated);
+
+        var depois = TimeStatusResolver.Resolve(
+            [weekly], At(15, 7), TimeThresholds.Default, Work,
+            new HashSet<string> { escalado.Occurrence! });
+
+        Assert.False(depois.IsEscalated);
+    }
 }
