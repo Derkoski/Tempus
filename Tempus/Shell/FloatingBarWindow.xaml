@@ -54,39 +54,59 @@
          preenchido só no que pede antecipação. -->
     <!-- Grid, e não StackPanel: um StackPanel horizontal mede os filhos com largura infinita, o
          que desliga o TextTrimming e troca as reticências por um corte a seco na borda da coluna.
-         Aqui o lookahead pega o que precisa (Auto, com teto) e a situação temporal trunca no que
-         sobra — a ordem certa quando os dois competem, que é só em Free e OffHours. -->
+         O status e a pausa pegam o que precisam (Auto); o detalhe fica com o que sobra e trunca. -->
     <Grid Grid.Column="1">
       <Grid.ColumnDefinitions>
+        <!-- Status: largura própria, nunca cede. É a resposta que o produto existe para dar. -->
+        <ColumnDefinition Width="Auto" />
+        <!-- Detalhe do cronograma: é quem trunca quando aperta. -->
         <ColumnDefinition Width="*" MinWidth="0" />
+        <!-- Pausa: colapsa por completo quando a funcionalidade está desligada. -->
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
 
+      <!-- O status ganha bloco próprio (D-023). Fundo neutro nos humores calmos e aceso na cor do
+           humor nos que escalam — a distinção calmo/urgente continua sendo forma, não só cor. -->
       <Border x:Name="TimeArea"
               Grid.Column="0"
               CornerRadius="4"
-              Padding="6,2"
-              HorizontalAlignment="Left"
+              Padding="8,2"
               VerticalAlignment="Center"
-              Background="Transparent"
               Cursor="Hand">
         <TextBlock x:Name="TimeText"
                    VerticalAlignment="Center"
-                   TextTrimming="CharacterEllipsis"
                    Text="—" />
       </Border>
 
-      <!-- O que vem depois de hoje. Ocupa o vazio que sobrava quando o dia acabava, e some
-           assim que houver alarme: informação de conforto não disputa espaço com alerta. -->
+      <!-- Detalhe do cronograma: o compromisso de hoje ou, quando não há, o de amanhã. -->
       <TextBlock x:Name="LookaheadText"
                  Grid.Column="1"
                  VerticalAlignment="Center"
-                 Margin="10,0,0,0"
-                 MaxWidth="230"
+                 Margin="8,0,0,0"
                  TextTrimming="CharacterEllipsis"
                  Visibility="Collapsed"
                  Cursor="Hand"
                  Text="" />
+
+      <!-- Pausa de descanso. Clicar diz "tirei essa" — o app não tem como saber sozinho (D-006). -->
+      <Border x:Name="BreakArea"
+              Grid.Column="2"
+              CornerRadius="4"
+              Padding="7,2"
+              Margin="8,0,0,0"
+              VerticalAlignment="Center"
+              Visibility="Collapsed"
+              Cursor="Hand">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock x:Name="BreakIcon"
+                     FontFamily="{StaticResource IconFont}"
+                     FontSize="11"
+                     VerticalAlignment="Center"
+                     Margin="0,0,4,0"
+                     Text="&#xEC32;" />
+          <TextBlock x:Name="BreakText" VerticalAlignment="Center" Text="" />
+        </StackPanel>
+      </Border>
     </Grid>
 
     <!-- Motivo do alarme: o único elemento preenchido por padrão, e vazio na maior parte do dia -->

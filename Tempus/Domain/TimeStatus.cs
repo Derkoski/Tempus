@@ -46,14 +46,30 @@ internal enum TimeMood
 
 internal sealed record TimeStatus
 {
-    public static readonly TimeStatus Unknown = new() { Mood = TimeMood.Unknown, Text = "—" };
+    public static readonly TimeStatus Unknown = new() { Mood = TimeMood.Unknown, Label = "—" };
 
     public TimeMood Mood { get; init; } = TimeMood.Unknown;
 
-    /// <summary>O que aparece no slot esquerdo da barra.</summary>
-    public required string Text { get; init; }
+    /// <summary>
+    /// O rótulo do estado, sozinho: <c>Livre</c>, <c>Ocupado</c>, <c>Em breve</c>, <c>Encerrando</c>.
+    /// <para>
+    /// Ocupa um slot próprio com fundo próprio (D-023). É a resposta à pergunta que o produto
+    /// existe para responder, e por isso não divide espaço com o nome de reunião nenhuma.
+    /// </para>
+    /// </summary>
+    public required string Label { get; init; }
 
+    /// <summary>
+    /// O detalhe do cronograma que acompanha o rótulo — <c>às 14:00 · Treinamento do GWS</c>.
+    /// <c>null</c> quando não há nada a dizer, e aí o slot cede lugar ao lookahead.
+    /// </summary>
+    public string? Summary { get; init; }
+
+    /// <summary>Texto da dica. Traz o que não coube, nunca o que já está visível.</summary>
     public string? Detail { get; init; }
+
+    /// <summary>Rótulo e detalhe juntos, para quem precisa da frase inteira.</summary>
+    public string Text => Summary is null ? Label : $"{Label} · {Summary}";
 
     /// <summary>
     /// O <see cref="Text"/> já nomeia um compromisso.
@@ -145,7 +161,7 @@ internal static class TimeStatusResolver
             return new TimeStatus
             {
                 Mood = TimeMood.OffHours,
-                Text = label,
+                Label = label,
                 Detail = "Fora do horário de trabalho",
             };
         }
@@ -163,20 +179,19 @@ internal static class TimeStatusResolver
         // tarde livre não devolve os 22 minutos a quem estava na reunião.
         var endingSoon = remaining <= TimeSpan.FromMinutes(thresholds.EndingSoonMinutes);
 
-        // Mesma ordem do estado livre: rótulo, quando, título. Numa reunião o que importa é quando
-        // ela acaba, então a contagem vem antes do nome dela.
-        var text = $"{(endingSoon ? "Encerrando" : "Ocupado")} · faltam {Humanize(remaining)} · "
-            + current.Title;
+        // Numa reunião o que importa é quando ela acaba, então a contagem vem antes do nome dela.
+        var summary = $"faltam {Humanize(remaining)} · {current.Title}";
 
         // O próximo vem com hora de relógio, e não com contagem: a frase já tem um "faltam X" para
         // a reunião atual, e dois números relativos na mesma linha obrigam a descobrir qual conta
         // para qual reunião.
-        if (next is not null) text += $" → {next.Start.ToLocalTime():HH:mm} {next.Title}";
+        if (next is not null) summary += $" → {next.Start.ToLocalTime():HH:mm} {next.Title}";
 
         return new TimeStatus
         {
             Mood = endingSoon ? TimeMood.EndingSoon : TimeMood.InMeeting,
-            Text = text,
+            Label = endingSoon ? "Encerrando" : "Ocupado",
+            Summary = summary,
             NamesAnEvent = true,
             CallUrl = current.Conference?.Url,
             Detail = next is null
@@ -190,13 +205,14 @@ internal static class TimeStatusResolver
         var over = now - ended.End;
         var invading = next is not null && next.Start <= now;
 
-        var text = $"Estourou · passou {Humanize(over)} · {ended.Title}";
-        if (invading) text += $" · {next!.Title} já começou";
+        var summary = $"passou {Humanize(over)} · {ended.Title}";
+        if (invading) summary += $" · {next!.Title} já começou";
 
         return new TimeStatus
         {
             Mood = TimeMood.Overrun,
-            Text = text,
+            Label = "Estourou",
+            Summary = summary,
             NamesAnEvent = true,
             // A que invadiu, quando existe: às 12:22 o que importa é entrar na que já começou,
             // não voltar para a que devia ter acabado.
@@ -212,7 +228,7 @@ internal static class TimeStatusResolver
             return new TimeStatus
             {
                 Mood = TimeMood.Free,
-                Text = "Livre",
+                Label = "Livre",
                 Detail = "Nenhum compromisso restante hoje",
             };
         }
@@ -243,16 +259,15 @@ internal static class TimeStatusResolver
         var clock = next.Start.ToLocalTime().ToString("HH:mm");
         var when = until < TimeSpan.FromHours(1) ? $"em {Humanize(until)}" : $"às {clock}";
 
-        // Ordem deliberada: rótulo, quando, título. O horário tem tamanho fixo e é o que o usuário
-        // pediu para nunca perder; o título é longo e variável. Com o título no meio, era ele que
+        // Ordem deliberada: quando antes do título. O horário tem tamanho fixo e é o que o usuário
+        // pediu para nunca perder; o título é longo e variável. Com o título na frente, era ele que
         // empurrava o horário para fora quando a barra ficava apertada — agora o corte come o fim
         // do título, que é a parte que menos custa.
-        var text = $"{label} · {when} · {next.Title}";
-
         return new TimeStatus
         {
             Mood = mood,
-            Text = text,
+            Label = label,
+            Summary = $"{when} · {next.Title}",
             NamesAnEvent = true,
 
             // Só a partir de "Começando" o clique entra na call. Antes disso ele abre a agenda:

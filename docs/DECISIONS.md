@@ -1044,3 +1044,81 @@ Aplicado aos três humores que nomeiam evento — `rótulo · quando · título`
 **Perto usa contagem, longe usa relógio**, com a fronteira em uma hora. "em 12 min" se age sem
 pensar; "em 3h30" obriga a somar para descobrir que é às 14:00 e onde isso cai no dia. A dica de
 ferramenta traz sempre a outra metade, para não desperdiçar o único lugar com espaço sobrando.
+
+---
+
+## D-023 — Um slot por pergunta: status, cronograma e pausa
+
+**Status:** Aceita · 2026-08-18 · **corrige o D-019 e reestrutura o D-022**
+
+**Contexto.** Relato de uso, três problemas na mesma tela.
+
+**1. A pausa perseguia o usuário o dia inteiro.** *"Sempre tô com pausa pra fazer."* O
+`BreakPlanner` descartava candidatas já terminadas, então quando a pausa ideal passava sem ser
+tirada, ele escolhia a próxima janela livre — e depois a próxima. A folga reagendava para frente a
+cada rodada de sync e nunca terminava de acontecer.
+
+O D-019 afirma ter resolvido exatamente isso, e resolveu metade: a pausa *em curso* parou de fugir,
+a *perdida* continuou correndo. A mesma doença, um estágio depois.
+
+**2. Uma frase fazendo três trabalhos.** `Livre · às 14:00 · Treinamento do GWS…` misturava o
+estado, o horário e o título num texto só, e o estado — a resposta que o produto existe para dar —
+competia por largura com o nome de uma reunião.
+
+**3. A pausa não tinha casa.** Ela tomava emprestado o slot do lookahead, então aparecer significava
+sumir com outra coisa.
+
+**Decisão.**
+
+**A pausa é do período, não do instante.** `Find` não olha mais o relógio: escolhe a janela livre
+mais próxima do meio do período e fica lá o dia todo, mudando só se marcarem reunião em cima.
+Perdeu, perdeu — não vira cobrança.
+
+**Três slots, três perguntas:**
+
+| Slot | Responde | Largura |
+|------|----------|---------|
+| Status | "como estou agora?" | própria, nunca cede |
+| Cronograma | "o que vem, e quando?" | o que sobra — é quem trunca |
+| Pausa | "tenho folga marcada?" | própria, **colapsa** se desligada |
+
+O status ganhou `TimeStatus.Label` separado de `TimeStatus.Summary`. Quem não usa pausas não paga
+largura por elas: o slot some por completo.
+
+### O fundo do status, e por que não é sempre colorido
+
+O usuário pediu fundo próprio para destacar o estado. O caminho óbvio — acender o bloco na cor do
+humor sempre — foi recusado: verde, azul, âmbar e vermelho viram todos blocos coloridos, e a
+distinção entre "Em breve" e "Encerrando" passa a depender só de ler a palavra. O D-012 decidiu que
+**a escalada acontece na forma**, e isso vale mais que a uniformidade.
+
+A solução tem os dois: bloco com fundo **neutro** nos humores calmos, bloco **aceso** na cor do
+humor nos que escalam. O status é sempre um bloco destacado, e calmo-vs-urgente continua legível
+sem ler.
+
+`ChipBackground` é o próprio primeiro plano da barra a 15% de opacidade, e não uma cor nova — segue
+o tema claro/escuro de graça e não gasta vocabulário (regra 1).
+
+### Como o app sabe se a pausa foi tirada: não sabe
+
+Pergunta do usuário, e a resposta é o D-006 aplicado a outro caso: **sem detecção de presença, de
+microfone ou de janela.** O Tempus conhece o cronograma; quem comunica é o usuário, clicando.
+
+Duas consequências:
+
+- **Ele nunca afirma que a pausa não foi tirada.** Pausa perdida apaga do slot, não alarma. Afirmar
+  o contrário seria mentir com confiança sobre algo que ele não tem como saber (regra 10) — e
+  viraria a cobrança que originou este relato.
+- **Clicar no slot diz "tirei essa"**, o mesmo gesto de "eu vi" do resto do produto. O slot apaga
+  pelo resto do dia. É opcional: não clicar não gera cobrança nenhuma.
+
+O estado do dia virou `break-state.json` — data, dispensa e períodos tirados. A data continua sendo
+o registro, pelo motivo do D-019: booleano exigiria limpeza na virada do dia, e um dia sem limpeza
+seria um dia sem pausa.
+
+**Consequências.** Verificado com a agenda real: `[Livre]` em bloco cinza, `às 14:00 · Treinamento
+do GWS: Trilha para líde…` truncando no lugar certo, `☕ 15:00` no slot próprio, e o clique gravando
+`Taken: ["Afternoon"]` e apagando o slot para `☕ tirada`.
+
+**Não verificado:** o bloco aceso dos humores que escalam, que depende de estar perto de uma
+reunião de verdade.

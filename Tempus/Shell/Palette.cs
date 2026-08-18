@@ -26,6 +26,17 @@ internal sealed record Palette(
     Color FreeForeground,
     Color InMeetingForeground)
 {
+    /// <summary>
+    /// Fundo do bloco de status nos humores calmos (D-023). Um degrau acima do fundo da barra —
+    /// o suficiente para o status ler como bloco próprio, e discreto o bastante para não competir
+    /// com o bloco <b>aceso</b> dos humores que escalam.
+    /// </summary>
+    public Color ChipBackground => Color.FromArgb(
+        0x26,
+        BarForeground.R,
+        BarForeground.G,
+        BarForeground.B);
+
     private static Color Hex(string hex) => (Color)ColorConverter.ConvertFromString(hex)!;
 
     /// <summary>

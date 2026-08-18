@@ -78,9 +78,21 @@ internal sealed record ShellState
     /// </summary>
     public bool BreaksDismissed { get; init; }
 
-    /// <summary>A pausa acontecendo agora, se houver. É o que a barra mostra como texto ambiente.</summary>
-    public BreakSlot? BreakNow(DateTimeOffset now) =>
-        Breaks.FirstOrDefault(b => b.IsRunningAt(now));
+    /// <summary>Períodos que o usuário marcou como já tirados, clicando no slot.</summary>
+    public IReadOnlyList<BreakPeriod> BreaksTaken { get; init; } = [];
+
+    public bool IsBreakTaken(BreakPeriod period) => BreaksTaken.Contains(period);
+
+    /// <summary>
+    /// A pausa que o slot da barra deve mostrar: a que está em curso, ou a próxima ainda por vir.
+    /// <para>
+    /// Uma pausa já passada devolve <c>null</c> em vez da anterior — não há o que oferecer sobre
+    /// ela, e insistir viraria cobrança sobre algo que o app não tem como saber se aconteceu.
+    /// </para>
+    /// </summary>
+    public BreakSlot? NextBreak(DateTimeOffset now) =>
+        Breaks.FirstOrDefault(b => b.IsRunningAt(now))
+        ?? Breaks.Where(b => b.Start > now).OrderBy(b => b.Start).FirstOrDefault();
 
     /// <summary>
     /// True quando o nível 3 passou de 5 min sem reconhecimento e deve piscar

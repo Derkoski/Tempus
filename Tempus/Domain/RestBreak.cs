@@ -75,25 +75,31 @@ internal static class BreakPlanner
             BreakPeriod.Morning,
             At(now, work.StartHour, work.StartMinute),
             At(now, work.MiddayHour, work.MiddayMinute),
-            busy, now, duration, options.StepMinutes);
+            busy, duration, options.StepMinutes);
         if (morning is not null) slots.Add(morning);
 
         var afternoon = Find(
             BreakPeriod.Afternoon,
             At(now, work.LunchEndHour, work.LunchEndMinute),
             At(now, work.EndHour, work.EndMinute),
-            busy, now, duration, options.StepMinutes);
+            busy, duration, options.StepMinutes);
         if (afternoon is not null) slots.Add(afternoon);
 
         return slots;
     }
 
     /// <summary>
-    /// A janela livre mais próxima do meio do período, entre as que ainda não terminaram.
+    /// A janela livre mais próxima do meio do período. <b>Não olha o relógio.</b>
     /// <para>
-    /// O filtro é <c>fim &gt; agora</c>, e não <c>início &gt; agora</c>, de propósito: uma pausa em
-    /// curso continua sendo candidata e vence por estar exatamente no ideal. Sem isso o relógio
-    /// empurraria a pausa para a frente a cada rodada e ela nunca terminaria de acontecer.
+    /// A primeira versão descartava candidatas já terminadas, e o efeito só apareceu em uso: quando
+    /// a pausa ideal passava sem ser tirada, o planejador escolhia a próxima janela livre, e depois
+    /// a próxima. A folga perseguia o usuário o dia inteiro — <i>"sempre tô com pausa pra fazer"</i>
+    /// — e nunca terminava de acontecer.
+    /// </para>
+    /// <para>
+    /// Agora a pausa é do <b>período</b>, não do instante: fica no mesmo horário o dia todo, e só
+    /// muda se marcarem reunião em cima. Perdeu, perdeu — não vira cobrança. Quem decide se ela
+    /// ainda é relevante é a UI, comparando com a hora na hora de desenhar.
     /// </para>
     /// </summary>
     private static BreakSlot? Find(
@@ -101,7 +107,6 @@ internal static class BreakPlanner
         DateTimeOffset periodStart,
         DateTimeOffset periodEnd,
         IReadOnlyList<(DateTimeOffset Start, DateTimeOffset End)> busy,
-        DateTimeOffset now,
         TimeSpan duration,
         int stepMinutes)
     {
@@ -118,7 +123,6 @@ internal static class BreakPlanner
         for (var start = periodStart; start <= latestStart; start += step)
         {
             var end = start + duration;
-            if (end <= now) continue;
             if (Overlaps(busy, start, end)) continue;
 
             var distance = Abs(start - ideal);

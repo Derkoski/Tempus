@@ -59,6 +59,7 @@ internal partial class FloatingBarWindow : Window
         ReasonChip.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnReasonClicked(); };
         TimeArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
         LookaheadText.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
+        BreakArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(BreakTaken); };
         TasksArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(TasksRequested); };
         MailArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(MailRequested); };
         MouseRightButtonUp += (_, e) => { e.Handled = true; ShowContextMenu(); };
@@ -97,6 +98,9 @@ internal partial class FloatingBarWindow : Window
 
     public event EventHandler? Acknowledged;
     public event EventHandler? BreakDismissToggled;
+
+    /// <summary>Clique no slot da pausa: "tirei essa". O app não tem como saber sozinho (D-006).</summary>
+    public event EventHandler? BreakTaken;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
@@ -178,6 +182,7 @@ internal partial class FloatingBarWindow : Window
 
         RenderTime(state);
         RenderLookahead(state);
+        RenderBreak(state);
         RenderBoundary(state);
 
         Background = new SolidColorBrush(
@@ -196,12 +201,19 @@ internal partial class FloatingBarWindow : Window
         var time = state.IsOffline ? TimeStatus.Unknown : state.Time;
         var (background, foreground) = _palette.For(time);
 
-        TimeText.Text = time.Text;
-        TimeText.Foreground = new SolidColorBrush(foreground);
+        // Só o rótulo. O detalhe do cronograma vive no slot vizinho (D-023): misturar os dois numa
+        // frase só fazia o estado — a resposta que o produto existe para dar — competir por largura
+        // com o nome de uma reunião.
+        TimeText.Text = time.Label;
         TimeText.FontWeight = time.IsBold ? FontWeights.SemiBold : FontWeights.Normal;
 
-        // Preenchimento só nos humores que pedem antecipação; os calmos ficam com texto tingido.
-        TimeArea.Background = new SolidColorBrush(background);
+        // Nos humores que escalam, o bloco acende na cor do humor e o texto inverte para contrastar.
+        // Nos calmos ele fica num cinza neutro, com o texto tingido: o bloco existe sempre, mas a
+        // escalada continua sendo visível pela forma e não só pela cor (D-012).
+        var escalates = time.IsFilled;
+
+        TimeArea.Background = new SolidColorBrush(escalates ? background : _palette.ChipBackground);
+        TimeText.Foreground = new SolidColorBrush(foreground);
 
         var action = time.CallUrl is { Length: > 0 }
             ? "Clique para entrar na call"
@@ -220,58 +232,87 @@ internal partial class FloatingBarWindow : Window
     /// o expediente o slot de tempo já responde o que vem a seguir, então repetir seria ruído.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// O slot do meio: o detalhe do compromisso de hoje ou, quando não há nenhum, o de amanhã.
+    /// Um só, e o mais próximo ganha — dois lado a lado faziam a barra parecer ter duas agendas.
+    /// </summary>
     private void RenderLookahead(ShellState state)
     {
-        // A pausa em curso toma este slot do lookahead em vez de ganhar espaço próprio. Durante os
-        // 15 minutos, "levante da cadeira" vale mais que "próximo compromisso" — e a barra não
-        // cresce por causa de um estado que dura quinze minutos por período.
-        if (!state.IsOffline
+        var detail = state.Time.Summary;
+
+        // Sem compromisso hoje o slot não fica vazio: mostra o que vem depois. Cede a qualquer
+        // alarme, porque informação de conforto não disputa espaço com alerta.
+        if (detail is null
+            && !state.IsOffline
             && state.Severity == Severity.Calm
-            && state.Time.Mood is TimeMood.Free
-            && state.BreakNow(DateTimeOffset.Now) is { } pause)
+            && state.Time.Mood is TimeMood.OffHours or TimeMood.Free)
         {
-            RenderBreak(pause);
-            return;
+            detail = state.Lookahead;
         }
 
-        // Cede também quando o slot de estado já nomeia um compromisso: ali o texto é "Livre ·
-        // Reunião X em 4h30", e acrescentar o de amanhã ao lado faz a barra parecer ter duas
-        // agendas concorrentes. Um compromisso por vez, e o mais próximo ganha.
-        var show = !state.IsOffline
-            && state.Severity == Severity.Calm
-            && !state.Time.NamesAnEvent
-            && state.Time.Mood is TimeMood.OffHours or TimeMood.Free
-            && !string.IsNullOrEmpty(state.Lookahead);
-
-        if (!show)
+        if (state.IsOffline || string.IsNullOrEmpty(detail))
         {
             LookaheadText.Visibility = Visibility.Collapsed;
             return;
         }
 
         LookaheadText.Visibility = Visibility.Visible;
-        LookaheadText.Text = state.Lookahead;
-        LookaheadText.Foreground = new SolidColorBrush(_palette.Muted);
-        LookaheadText.ToolTip = $"Próximo compromisso{Environment.NewLine}Clique para abrir a agenda";
+        LookaheadText.Text = detail;
+        LookaheadText.Foreground = new SolidColorBrush(
+            state.Time.NamesAnEvent ? _palette.BarForeground : _palette.Muted);
+        LookaheadText.ToolTip =
+            $"{state.Time.Detail ?? detail}{Environment.NewLine}Clique para abrir a agenda";
     }
 
     /// <summary>
-    /// A pausa acontecendo agora.
+    /// A pausa de descanso, no slot próprio (D-023).
     /// <para>
-    /// Reusa o verde de "Livre" em vez de estrear uma cor: descanso é a mesma família de estado
-    /// calmo, e cada cor nova custa legibilidade a todas as outras (regra 1). O que distingue a
-    /// pausa de "Livre" é a palavra, não o tom.
+    /// Some por completo com a funcionalidade desligada — quem não usa não paga largura por ela.
+    /// Nenhuma cor nova: reusa o verde de "Livre", porque descanso é a mesma família de estado
+    /// calmo e cada cor nova custa legibilidade a todas as outras (regra 1).
+    /// </para>
+    /// <para>
+    /// Clicar diz <i>"tirei essa"</i>. O app não infere descanso, como não infere presença em call
+    /// (D-006) — e por não saber, ele se cala em vez de cobrar: pausa perdida apaga, nunca alarma.
     /// </para>
     /// </summary>
-    private void RenderBreak(BreakSlot pause)
+    private void RenderBreak(ShellState state)
     {
-        var left = (int)Math.Ceiling((pause.End - DateTimeOffset.Now).TotalMinutes);
+        var now = DateTimeOffset.Now;
+        var pause = state.NextBreak(now);
 
-        LookaheadText.Visibility = Visibility.Visible;
-        LookaheadText.Text = $"Pausa · {Math.Max(1, left)} min";
-        LookaheadText.Foreground = new SolidColorBrush(_palette.FreeForeground);
-        LookaheadText.ToolTip =
-            $"{pause.Label} — até {pause.End:HH:mm}{Environment.NewLine}Levante e descanse";
+        if (state.IsOffline || pause is null)
+        {
+            BreakArea.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var running = pause.IsRunningAt(now);
+        var taken = state.IsBreakTaken(pause.Period);
+
+        var (text, tip) = (running, taken) switch
+        {
+            (_, true) => ("tirada", $"{pause.Label} — você marcou como tirada"),
+            (true, _) => ($"{Math.Max(1, (int)Math.Ceiling((pause.End - now).TotalMinutes))} min",
+                          $"{pause.Label} — até {pause.End.ToLocalTime():HH:mm}"
+                          + $"{Environment.NewLine}Levante e descanse · clique se já tirou"),
+            _ => (pause.Start.ToLocalTime().ToString("HH:mm"),
+                  $"{pause.Label} às {pause.Start.ToLocalTime():HH:mm}"
+                  + $"{Environment.NewLine}Clique se já tirou"),
+        };
+
+        BreakArea.Visibility = Visibility.Visible;
+        BreakArea.ToolTip = tip;
+        BreakText.Text = text;
+
+        // Acesa só durante os 15 minutos. Fora deles é informação passiva, no mesmo cinza do resto.
+        var color = taken ? _palette.Muted : running ? _palette.FreeForeground : _palette.Muted;
+
+        BreakText.Foreground = new SolidColorBrush(color);
+        BreakIcon.Foreground = new SolidColorBrush(color);
+        BreakArea.Background = new SolidColorBrush(
+            running && !taken ? _palette.ChipBackground : Colors.Transparent);
+        BreakArea.Opacity = taken ? 0.5 : 1.0;
     }
 
     /// <summary>

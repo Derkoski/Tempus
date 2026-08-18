@@ -77,15 +77,17 @@ public partial class App : Application
 
         // Gesto do dia, não configuração: ligar/desligar a funcionalidade é do appsettings, e só
         // dispensar a folga de hoje passa pelo menu.
-        surface.BreakDismissToggled += (_, _) =>
+        surface.BreakDismissToggled += (_, _) => UpdateBreakState(
+            state => state with { Dismissed = !state.Dismissed, Taken = [] });
+
+        // "Tirei essa." O app não infere descanso, como não infere presença em call (D-006).
+        surface.BreakTaken += (_, _) => UpdateBreakState(state =>
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
+            if (BuildState(_snapshot).NextBreak(DateTimeOffset.Now) is not { } pause) return state;
+            if (state.Taken.Contains(pause.Period)) return state;
 
-            if (_dismissals!.IsDismissed(today)) _dismissals.Restore();
-            else _dismissals.Dismiss(today);
-
-            Rerender();
-        };
+            return state with { Taken = [.. state.Taken, pause.Period] };
+        });
 
         surface.SettingsRequested += (_, _) => ShowSettings(isFirstRun: false);
 
@@ -191,6 +193,7 @@ public partial class App : Application
             Lookahead = Domain.Lookahead.Describe(snapshot.Upcoming, now),
             Breaks = breaks,
             BreaksDismissed = BreaksEnabledButDismissed(now),
+            BreaksTaken = BreakState(now).Taken,
             LastSyncAt = snapshot.LastSuccessAt,
         };
     }
@@ -243,7 +246,18 @@ public partial class App : Application
     }
 
     private bool BreaksEnabledButDismissed(DateTimeOffset now) =>
-        _breaks.Enabled && _dismissals?.IsDismissed(DateOnly.FromDateTime(now.Date)) == true;
+        _breaks.Enabled && BreakState(now).Dismissed;
+
+    private BreakDayState BreakState(DateTimeOffset now) =>
+        _dismissals?.Load(DateOnly.FromDateTime(now.Date)) ?? BreakDayState.Empty;
+
+    private void UpdateBreakState(Func<BreakDayState, BreakDayState> change)
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        _dismissals!.Save(today, change(_dismissals.Load(today)));
+        Rerender();
+    }
 
     private void Rerender()
     {
