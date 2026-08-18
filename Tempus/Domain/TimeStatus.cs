@@ -163,10 +163,15 @@ internal static class TimeStatusResolver
         // tarde livre não devolve os 22 minutos a quem estava na reunião.
         var endingSoon = remaining <= TimeSpan.FromMinutes(thresholds.EndingSoonMinutes);
 
-        // Estando numa reunião, o que importa é quando ela acaba — e, logo depois, o que vem.
-        var text = $"{(endingSoon ? "Encerrando" : "Ocupado")} · {current.Title}, "
-            + $"faltam {Humanize(remaining)}";
-        if (next is not null) text += $" → {next.Title}";
+        // Mesma ordem do estado livre: rótulo, quando, título. Numa reunião o que importa é quando
+        // ela acaba, então a contagem vem antes do nome dela.
+        var text = $"{(endingSoon ? "Encerrando" : "Ocupado")} · faltam {Humanize(remaining)} · "
+            + current.Title;
+
+        // O próximo vem com hora de relógio, e não com contagem: a frase já tem um "faltam X" para
+        // a reunião atual, e dois números relativos na mesma linha obrigam a descobrir qual conta
+        // para qual reunião.
+        if (next is not null) text += $" → {next.Start.ToLocalTime():HH:mm} {next.Title}";
 
         return new TimeStatus
         {
@@ -185,7 +190,7 @@ internal static class TimeStatusResolver
         var over = now - ended.End;
         var invading = next is not null && next.Start <= now;
 
-        var text = $"Estourou · {ended.Title}, passou {Humanize(over)}";
+        var text = $"Estourou · passou {Humanize(over)} · {ended.Title}";
         if (invading) text += $" · {next!.Title} já começou";
 
         return new TimeStatus
@@ -232,7 +237,17 @@ internal static class TimeStatusResolver
             _ => "Livre",
         };
 
-        var text = $"{label} · {next.Title} em {Humanize(until)}";
+        // Perto usa contagem, longe usa relógio. "em 12 min" se age sem pensar; "em 3h30" obriga a
+        // somar para descobrir que a reunião é às 14:00 e onde ela cai no dia. Passada uma hora, a
+        // hora de relógio responde melhor a pergunta que o usuário está de fato fazendo.
+        var clock = next.Start.ToLocalTime().ToString("HH:mm");
+        var when = until < TimeSpan.FromHours(1) ? $"em {Humanize(until)}" : $"às {clock}";
+
+        // Ordem deliberada: rótulo, quando, título. O horário tem tamanho fixo e é o que o usuário
+        // pediu para nunca perder; o título é longo e variável. Com o título no meio, era ele que
+        // empurrava o horário para fora quando a barra ficava apertada — agora o corte come o fim
+        // do título, que é a parte que menos custa.
+        var text = $"{label} · {when} · {next.Title}";
 
         return new TimeStatus
         {
@@ -245,7 +260,9 @@ internal static class TimeStatusResolver
             // um estrago silencioso — você entra numa sala vazia sem perceber que entrou.
             CallUrl = mood == TimeMood.Imminent ? next.Conference?.Url : null,
 
-            Detail = $"{next.Title} às {next.Start.ToLocalTime():HH:mm}",
+            // A dica traz a outra metade: se a barra mostra o relógio, aqui vai a contagem, e
+            // vice-versa. Repetir o mesmo número seria desperdiçar o único lugar com espaço.
+            Detail = $"{next.Title} às {clock} · em {Humanize(until)}",
         };
     }
 

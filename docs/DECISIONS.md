@@ -1014,3 +1014,33 @@ lookahead nem chega a esses humores, mas a propriedade descreve o texto, não a 
 **Deixado como está:** a pausa de descanso continua tomando o slot mesmo com o estado nomeando um
 compromisso. São 15 minutos duas vezes ao dia, e ela é acionável *agora* enquanto a reunião é daqui
 a horas — suprimi-la aí seria desligar a feature no momento em que ela serve.
+
+### Emenda ao D-022 — a ordem da frase é decidida pelo custo de truncar
+
+Pedido do usuário logo depois: *"pra mim é importante aparecer o horário ou em quantas horas vai
+ser o próximo evento"*. Duas coisas estavam erradas.
+
+**Em reunião, o próximo compromisso não tinha hora nenhuma** — o texto era
+`Ocupado · X, faltam 45 min → Y`, só o título. Agora leva a hora de relógio. Relógio, e não
+contagem, porque a frase já tem um "faltam X" da reunião atual: dois números relativos na mesma
+linha obrigam a descobrir qual conta para qual reunião.
+
+**E o horário morria no truncamento.** Com uma pausa em curso disputando largura, a barra mostrava
+`Livre · Treinamento do GWS: Trilha para lí…` — o título consumia o espaço e levava o horário
+junto.
+
+A causa é ordem de frase, não falta de espaço: informação **de tamanho fixo e alto valor** estava
+depois de informação **longa e de valor variável**. Invertido, o corte passa a comer o fim do
+título, que é a parte que menos custa:
+
+```
+antes:  Livre · Treinamento do GWS: Trilha para lí…
+agora:  Livre · às 14:00 · Treinamento do GWS: Tril…
+```
+
+Aplicado aos três humores que nomeiam evento — `rótulo · quando · título`. Em reunião virou
+`Ocupado · faltam 45 min · X → 17:40 Y`, e o estouro virou `Estourou · passou 12 min · X`.
+
+**Perto usa contagem, longe usa relógio**, com a fronteira em uma hora. "em 12 min" se age sem
+pensar; "em 3h30" obriga a somar para descobrir que é às 14:00 e onde isso cai no dia. A dica de
+ferramenta traz sempre a outra metade, para não desperdiçar o único lugar com espaço sobrando.
