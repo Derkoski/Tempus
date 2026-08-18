@@ -204,7 +204,14 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
       sólido se as animações do sistema estiverem desligadas
 - [ ] Persistência da supressão de `DayEnded` até a virada do dia — o mecanismo já existe
       (`AcknowledgementStore`, escopado por data); falta o sinal `DayEnded` usá-lo
-- [ ] **Testes das invariantes I1–I8** ⚠️ *ver nota abaixo*
+- [x] **Projeto de teste** — `Tempus.Tests` (xUnit), `InternalsVisibleTo` em vez de extrair
+      `Tempus.Domain`. 50 testes, 62 ms. `dotnet test Tempus.Tests/Tempus.Tests.csproj`
+- [x] **Invariantes testáveis hoje**: I2 (severidade colorida tem motivo), I3 (todo alarme é
+      reconhecível e reconhecer resolve na hora), I6 (contador sobrevive à severidade), I7
+      (`Offline` não mostra número nem avalia sinal)
+- [ ] **I1, I4, I5, I8** — dependem de arbitragem, histerese e escalada, que ainda não existem.
+      Estão no código como testes `Skip` **com o motivo**: um teste ausente some da vista, um
+      teste pulado cobra
 - [ ] Toasts com AUMID registrado, com deduplicação e supressão em apresentação
 - [x] Feriados computados localmente, com Páscoa por Meeus/Jones/Butcher (D-008) — `BrazilianHolidays`,
       cobrindo nacionais, Paraná e Pato Branco, mais emendas por lista manual
@@ -225,7 +232,19 @@ Todos são lógica pura, sem UI e sem rede — exatamente o que os testes das in
 segundos. `dotnet test` ainda é "a definir" no `CLAUDE.md`, e não há projeto de teste no repo.
 
 A prioridade dentro da Fase 3 subiu: os testes vêm **antes** da escalada do nível 3 e dos toasts,
-não depois. O primeiro passo é criar o projeto de teste — decisão de estrutura ainda não tomada.
+não depois.
+
+**Feito em 2026-08-18.** `Tempus.Tests` com xUnit, 50 testes em 62 ms. Estrutura decidida com o
+usuário: **manter o domínio dentro do projeto WPF** com `InternalsVisibleTo`, em vez de extrair
+uma biblioteca `Tempus.Domain`. Mais rápido e sem reestruturação; em troca, a pureza dos sinais
+(regra 8) continua sendo disciplina e não imposição do compilador.
+
+Metade da suíte são **regressões dos defeitos que chegaram ao usuário**: a pausa que perseguia, a
+call em cima da folga, o adiar que antecipava, o clique que entrava numa call de daqui a horas, os
+dois compromissos lado a lado, e o reconhecimento de "Encerrando" que não pode calar "Estourou".
+
+*Ressalva honesta: escritos depois da correção, esses testes não provam que teriam pego o defeito
+na época. Eles impedem a volta, que é o que importa daqui para frente.*
 
 ---
 

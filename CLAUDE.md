@@ -71,7 +71,7 @@ Não construa nada em cima dele.
 dotnet build Tempus/Tempus.csproj              # deve terminar com 0 avisos
 ./Tempus/bin/Debug/net8.0-windows/Tempus.exe   # dados reais do Google
 ./Tempus/bin/Debug/net8.0-windows/Tempus.exe --demo   # dados falsos, sem rede
-dotnet test                                    # a definir (testes das invariantes)
+dotnet test Tempus.Tests/Tempus.Tests.csproj   # domínio e invariantes; feche o app antes
 ```
 
 Publicar para outra máquina — exe único autocontido, ver [docs/DEPLOY.md](docs/DEPLOY.md):

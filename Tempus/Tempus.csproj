@@ -22,6 +22,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- O domínio é internal e continua dentro deste projeto (decisão de 2026-08-18: manter tudo
+         junto em vez de extrair Tempus.Domain). Os testes enxergam o interno por aqui. -->
+    <InternalsVisibleTo Include="Tempus.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4206" />
     <PackageReference Include="Google.Apis.Gmail.v1" Version="1.75.0.4225" />
     <PackageReference Include="Google.Apis.Tasks.v1" Version="1.74.0.3958" />
