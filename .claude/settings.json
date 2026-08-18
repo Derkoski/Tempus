@@ -1,7 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add *)"
+      "PowerShell(*)",
+
+      "Bash(git *)",
+      "Bash(dotnet *)",
+      "Bash(grep *)",
+      "Bash(ls *)",
+      "Bash(sed *)",
+      "Bash(perl *)",
+      "Bash(cat *)",
+      "Bash(wc *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(find *)",
+      "Bash(echo *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)"
     ]
   }
 }
