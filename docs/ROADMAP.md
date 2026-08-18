@@ -276,10 +276,30 @@ conversa trafegam; nenhum assunto, remetente ou corpo é lido.
 
 ## Depois (não comprometido)
 
-- **Widget de Android** — levantado pelo usuário em 2026-08-18, não avaliado. Nada do Tempus
-  atravessa: WPF, Win32 e o token DPAPI são todos específicos de Windows. O que sobreviveria é o
-  **modelo** — os sinais são funções puras de (dados, hora, opções) e as regras vivem em
-  `SEVERITY.md`, não no código de UI. Seria uma reimplementação compartilhando desenho, não código.
+- ~~**Widget de Android**~~ — **avaliado e recusado em 2026-08-18.** Não por custo: a toolchain
+  inteira daria ~3 GB contra 46 GB livres, e o spike caberia numa sessão.
+
+  Recusado porque **a premissa do produto não atravessa.** A barra funciona por ser *ambiente*:
+  ela nunca interrompe, porque o usuário já está olhando para a tela. É disso que decorre o modelo
+  inteiro do `SEVERITY.md` — cor como canal principal, toast como exceção (§5), cor como recurso
+  escasso (regra 1). Nas palavras do usuário: *"o celular está no bolso e o Tempus no Windows, eu
+  estou olhando ele direto."*
+
+  Num celular não há canal ambiente: tudo que precisa alcançar você vira interrupção. A escassez
+  muda de lugar — deixa de ser a cor e passa a ser a interrupção — e as invariantes I1–I8, que
+  falam de cor, escalada visual e histerese, ficam sem correspondente. **Não seria um port, seria
+  outro produto usando os mesmos dados.**
+
+  Dois limites técnicos, secundários mas reais: o re-consent de 7 dias (D-003) ficaria visível na
+  tela inicial toda semana em vez de ser rotina invisível; e `WorkManager` tem intervalo mínimo de
+  15 min, o que impede o "faltam 5 min" que é o valor central.
+
+  E a pergunta que um celular responderia — "vai começar uma reunião e não estou na frente do PC" —
+  o Google Calendar já responde nativamente.
+
+  **O que mudaria a decisão:** o usuário passar a trabalhar longe da tela com frequência, ou
+  aparecer uma necessidade de notificação que o Calendar não cubra. Aí o desenho começa da pergunta
+  certa, não de portar este.
 - Reposicionar/redimensionar a barra por arrastar, com posição persistida
 - Ações rápidas no toast ("entrar na call", "concluir tarefa")
 - Registro de foco: quanto tempo em reunião vs. livre por dia
