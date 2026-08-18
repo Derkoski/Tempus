@@ -81,12 +81,15 @@ public partial class App : Application
             state => state with { Dismissed = !state.Dismissed, Taken = [] });
 
         // "Tirei essa." O app não infere descanso, como não infere presença em call (D-006).
+        // Alterna: um clique sem querer se desfaz com outro clique. Um gesto de um clique só, que
+        // grava em disco e vale o dia inteiro, precisa de volta — senão o erro dura até amanhã.
         surface.BreakTaken += (_, _) => UpdateBreakState(state =>
         {
             if (BuildState(_snapshot).NextBreak(DateTimeOffset.Now) is not { } pause) return state;
-            if (state.Taken.Contains(pause.Period)) return state;
 
-            return state with { Taken = [.. state.Taken, pause.Period] };
+            return state.Taken.Contains(pause.Period)
+                ? state with { Taken = [.. state.Taken.Where(p => p != pause.Period)] }
+                : state with { Taken = [.. state.Taken, pause.Period] };
         });
 
         surface.SettingsRequested += (_, _) => ShowSettings(isFirstRun: false);

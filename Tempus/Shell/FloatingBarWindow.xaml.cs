@@ -292,7 +292,9 @@ internal partial class FloatingBarWindow : Window
 
         var (text, tip) = (running, taken) switch
         {
-            (_, true) => ("tirada", $"{pause.Label} — você marcou como tirada"),
+            (_, true) => ("tirada",
+                          $"{pause.Label} — você marcou como tirada"
+                          + $"{Environment.NewLine}Clique de novo se foi sem querer"),
             (true, _) => ($"{Math.Max(1, (int)Math.Ceiling((pause.End - now).TotalMinutes))} min",
                           $"{pause.Label} — até {pause.End.ToLocalTime():HH:mm}"
                           + $"{Environment.NewLine}Levante e descanse · clique se já tirou"),
