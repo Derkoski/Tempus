@@ -944,3 +944,73 @@ gravava no JSON. Inofensiva na leitura, mas passa a mentir assim que o e-mail mu
 **Consequências.** `appsettings.json` passa a ser documentação de padrões, não configuração viva —
 o comentário do `LoginHint` agora diz explicitamente para não preencher ali. Quem já tinha o e-mail
 no arquivo antigo não perde nada: a tela abre na primeira execução e grava no lugar novo.
+
+---
+
+## D-021 — Reafirmar a ordem Z só quando ela estiver errada
+
+**Status:** Aceita · 2026-08-18 · **corrige o D-014**
+
+**Contexto.** O menu de contexto e as dicas da barra afundavam atrás dela enquanto o usuário os
+lia. Não era o explorer: era o próprio Tempus.
+
+`AssertTopMost()` chamava `SetWindowPos(HWND_TOPMOST)` **incondicionalmente**, a cada troca de
+janela ativa e a cada segundo do heartbeat. `HWND_TOPMOST` não significa "continue onde está":
+coloca a janela no **topo da faixa topmost** — acima dos popups da própria barra, que são janelas
+separadas e estavam legitimamente à frente dela.
+
+Ou seja, o remédio do D-014 tinha um efeito colateral que só aparecia com um popup aberto, que é
+exatamente o momento em que ninguém está olhando para bugs de ordem Z.
+
+**Decisão.** Perguntar antes de agir: `NativeMethods.IsInFrontOf(barra, Shell_TrayWnd)` percorre a
+ordem Z de cima para baixo com `EnumWindows` e para assim que encontra as duas janelas. Só quando a
+barra estiver **atrás** da taskbar é que `SetWindowPos` é chamado.
+
+No caso comum — barra já no lugar certo — nenhuma chamada acontece, e os popups ficam onde estão.
+
+**Consequências.**
+
+- O D-014 previa uma "sonda de ordem Z" que **nunca foi escrita**: o código reafirmava sem medir, e
+  o roadmap registrava a sonda como pronta. Agora ela existe de fato.
+- Menos trabalho em repouso, não mais: troca uma chamada de `SetWindowPos` por segundo por uma
+  enumeração que aborta nas duas primeiras janelas de interesse.
+- Se a barra cair atrás **enquanto** um menu está aberto, a reafirmação volta a cobri-lo. É raro e
+  se resolve reabrindo o menu; corrigir esse caso exigiria suspender a proteção justamente quando
+  ela é necessária, o que troca um incômodo por uma falha grave.
+
+Verificado com o menu aberto por 6 segundos — seis rodadas do heartbeat — conferindo a ordem Z a
+cada 1,2s: o popup permaneceu à frente da barra em todas as amostras.
+
+---
+
+## D-022 — Um compromisso por vez, e o clique só entra na call quando for hora
+
+**Status:** Aceita · 2026-08-18
+
+**Contexto.** Dois defeitos de leitura relatados em uso, com a mesma origem em
+`TimeStatusResolver.Between`.
+
+A barra mostrava **dois compromissos lado a lado**: o slot de estado dizia "Livre · Treinamento do
+GWS em 3h30" e o slot de lookahead dizia o primeiro compromisso de *amanhã*. São fatos diferentes,
+mas lidos de relance viram "tenho duas reuniões" — a pergunta errada, respondida errado. Pior: os
+dois disputavam largura, e o título do compromisso de hoje saía truncado.
+
+E o clique no slot **entrava numa call que só começaria horas depois**, porque `CallUrl` recebia
+`next.Conference?.Url` em qualquer humor, inclusive `Free`.
+
+**Decisão.**
+
+`TimeStatus.NamesAnEvent` marca que o texto de estado já nomeia um compromisso. O lookahead cede
+quando ela é verdadeira — um compromisso por vez, e o mais próximo ganha. Como efeito colateral
+bem-vindo, o título deixou de truncar: sem o vizinho disputando largura, cabe inteiro.
+
+`CallUrl` só é preenchido a partir de `Imminent` (5 min). Antes disso o clique abre a agenda.
+Entrar cedo numa reunião é legítimo aos 5 minutos e é um estrago silencioso às 4 horas: você cai
+numa sala vazia sem perceber que entrou, e quem chegar depois vê que você estava lá.
+
+**Consequências.** `InMeeting` e `Overrun` também marcam `NamesAnEvent`, por consistência — hoje o
+lookahead nem chega a esses humores, mas a propriedade descreve o texto, não a regra de exibição.
+
+**Deixado como está:** a pausa de descanso continua tomando o slot mesmo com o estado nomeando um
+compromisso. São 15 minutos duas vezes ao dia, e ela é acionável *agora* enquanto a reunião é daqui
+a horas — suprimi-la aí seria desligar a feature no momento em que ela serve.

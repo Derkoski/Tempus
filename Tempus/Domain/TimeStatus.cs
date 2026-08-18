@@ -56,6 +56,16 @@ internal sealed record TimeStatus
     public string? Detail { get; init; }
 
     /// <summary>
+    /// O <see cref="Text"/> já nomeia um compromisso.
+    /// <para>
+    /// Existe para o lookahead saber calar a boca. Sem isto a barra mostrava dois compromissos lado
+    /// a lado — o de hoje no slot de estado e o de amanhã no slot de lookahead — e a leitura de
+    /// relance virava "tenho duas reuniões", que é a pergunta errada respondida errado.
+    /// </para>
+    /// </summary>
+    public bool NamesAnEvent { get; init; }
+
+    /// <summary>
     /// Link da call da reunião a que este estado se refere, quando ela tem uma. É o que faz o
     /// clique no slot entrar na call em vez de abrir a agenda (D-016).
     /// <para>
@@ -162,6 +172,7 @@ internal static class TimeStatusResolver
         {
             Mood = endingSoon ? TimeMood.EndingSoon : TimeMood.InMeeting,
             Text = text,
+            NamesAnEvent = true,
             CallUrl = current.Conference?.Url,
             Detail = next is null
                 ? $"Termina às {current.End.ToLocalTime():HH:mm}"
@@ -181,6 +192,7 @@ internal static class TimeStatusResolver
         {
             Mood = TimeMood.Overrun,
             Text = text,
+            NamesAnEvent = true,
             // A que invadiu, quando existe: às 12:22 o que importa é entrar na que já começou,
             // não voltar para a que devia ter acabado.
             CallUrl = (invading ? next!.Conference ?? ended.Conference : ended.Conference)?.Url,
@@ -226,7 +238,13 @@ internal static class TimeStatusResolver
         {
             Mood = mood,
             Text = text,
-            CallUrl = next.Conference?.Url,
+            NamesAnEvent = true,
+
+            // Só a partir de "Começando" o clique entra na call. Antes disso ele abre a agenda:
+            // clicar em "Livre" e cair dentro de uma reunião que só começa daqui a quatro horas é
+            // um estrago silencioso — você entra numa sala vazia sem perceber que entrou.
+            CallUrl = mood == TimeMood.Imminent ? next.Conference?.Url : null,
+
             Detail = $"{next.Title} às {next.Start.ToLocalTime():HH:mm}",
         };
     }

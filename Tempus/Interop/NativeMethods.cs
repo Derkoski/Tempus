@@ -196,6 +196,49 @@ internal static class NativeMethods
     private const int SwRestore = 9;
 
     /// <summary>
+    /// <c>a</c> está à frente de <c>b</c> na ordem Z? <c>EnumWindows</c> enumera de cima para
+    /// baixo, então quem aparece primeiro está na frente.
+    /// <para>
+    /// Serve para reafirmar o topo <b>só quando necessário</b>. Reafirmar a cada segundo sem
+    /// perguntar joga a barra para o topo da faixa topmost — acima dos próprios menus e dicas dela,
+    /// que somem atrás da barra a cada rodada.
+    /// </para>
+    /// <para>
+    /// Devolve <c>true</c> se <c>b</c> não for encontrado: sem taskbar não há atrás de quê ficar.
+    /// </para>
+    /// </summary>
+    public static bool IsInFrontOf(IntPtr a, IntPtr b)
+    {
+        if (a == IntPtr.Zero || b == IntPtr.Zero) return true;
+
+        var found = 0;
+        var aFirst = false;
+
+        EnumWindows((handle, _) =>
+        {
+            if (handle == a)
+            {
+                if (found == 0) aFirst = true;
+                found++;
+            }
+            else if (handle == b)
+            {
+                found++;
+            }
+
+            return found < 2; // os dois já apareceram: o resto da ordem não interessa
+        }, IntPtr.Zero);
+
+        // Só um encontrado: o outro está oculto ou morto, e não há disputa.
+        return found < 2 || aFirst;
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    /// <summary>
     /// Traz uma janela para a frente. Existe porque a barra é <c>WS_EX_NOACTIVATE</c> (D-002) e
     /// diálogos abertos a partir dela herdam o não-foco — nascem atrás de tudo, e o usuário conclui
     /// que o clique no menu não funcionou.

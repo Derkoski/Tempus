@@ -234,8 +234,12 @@ internal partial class FloatingBarWindow : Window
             return;
         }
 
+        // Cede também quando o slot de estado já nomeia um compromisso: ali o texto é "Livre ·
+        // Reunião X em 4h30", e acrescentar o de amanhã ao lado faz a barra parecer ter duas
+        // agendas concorrentes. Um compromisso por vez, e o mais próximo ganha.
         var show = !state.IsOffline
             && state.Severity == Severity.Calm
+            && !state.Time.NamesAnEvent
             && state.Time.Mood is TimeMood.OffHours or TimeMood.Free
             && !string.IsNullOrEmpty(state.Lookahead);
 
@@ -408,6 +412,12 @@ internal partial class FloatingBarWindow : Window
     private void AssertTopMost()
     {
         if (!_isBarVisible || _handle == IntPtr.Zero) return;
+
+        // Só reafirma se estiver mesmo atrás. Reafirmar sem perguntar joga a barra para o topo da
+        // faixa topmost a cada rodada — inclusive por cima do menu de contexto e das dicas dela
+        // própria, que desapareciam atrás da barra enquanto o usuário os lia.
+        if (NativeMethods.IsInFrontOf(_handle, NativeMethods.FindWindow("Shell_TrayWnd", null)))
+            return;
 
         SetWindowPos(_handle, HWND_TOPMOST, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
