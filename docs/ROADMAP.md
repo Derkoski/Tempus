@@ -86,9 +86,12 @@ do `SPEC.md`.
       reais. A tentativa anterior falhou porque a barra ainda estava atrás da taskbar e o clique ia
       para o explorer — era o bug da ordem Z (D-014), não os painéis.
 - [ ] Exercitar `TaskbarCreated` com restart real do explorer (o handler existe, nunca rodou)
-- [x] Verificar propriedade dos pixels, não só de retângulo — feito por sonda de ordem Z contra
-      `Shell_TrayWnd` (D-014), que é melhor que o `WindowFromPoint` previsto: compara a ordem
-      inteira em vez de um pixel só, sem falso negativo em sobreposição parcial
+- [x] Verificar propriedade dos pixels, não só de retângulo — sonda de ordem Z contra
+      `Shell_TrayWnd`, melhor que o `WindowFromPoint` previsto: compara a ordem inteira em vez de
+      um pixel só, sem falso negativo em sobreposição parcial.
+      **A sonda só passou a existir de fato em 2026-08-18 (D-021)** — até então o D-014 a descrevia
+      e o código reafirmava o topo *sem medir*, o que empurrava os próprios menus e dicas da barra
+      para trás dela a cada rodada
 
 **Risco que esta fase mata:** o posicionamento sobre a taskbar ser inviável na prática. Segue de
 pé, mas o achado da ordem Z mostrou que a fragilidade prevista em D-002 é real e se manifesta em
@@ -97,33 +100,68 @@ tocar em lógica de domínio.
 
 ---
 
-## Pausas de descanso ✅ *pedida e entregue em 2026-08-17*
+## Pausas de descanso ✅ *pedida em 2026-08-17, amadurecida em 2026-08-18*
 
-**Entrega:** 15 minutos de descanso na manhã e na tarde, encaixados na janela livre mais próxima
-do meio de cada período.
+**Entrega:** 15 minutos de descanso na manhã e na tarde, sugeridos na janela livre mais próxima do
+meio de cada período.
 
 Fora do numeramento das fases porque não estava no plano: veio do uso. Não depende da Fase 3 e não
 a bloqueia.
 
-- [x] `BreakPlanner` — função pura de (agenda, expediente, hora) → até duas janelas de 15 min.
-      Varre a grade de 5 min e escolhe a livre **mais próxima do meio** do período, não a primeira
-      que couber
-- [x] Recalculada a cada sync: se marcarem reunião em cima, a pausa **se move** sozinha
-- [x] Slot no painel S3 o dia todo; na barra, texto ambiente só durante a janela
+**O princípio, formulado pelo usuário:** *"a folga é uma sugestão, pode ou não acontecer naquele
+horário ou em um horário inesperado."* O Tempus **propõe**; quem decide é quem descansa. Tudo
+abaixo decorre disso.
+
+- [x] `BreakPlanner` — função pura de (agenda, expediente) → até duas janelas. Varre a grade de
+      5 min e escolhe a livre **mais próxima do meio** do período, não a primeira que couber
+- [x] Recalculada a cada sync a partir da agenda: uma call em cima da folga a empurra para a
+      primeira janela livre depois dela. Verificado em uso — treinamento de 14:00–15:00 moveu a
+      pausa da tarde para 15:00–15:15
+- [x] **Do período, não do instante** (D-023): fica no mesmo horário o dia todo e só muda se a
+      agenda mudar. A primeira versão reagendava para frente quando a pausa vencia, e perseguia o
+      usuário o dia inteiro — *"sempre tô com pausa pra fazer"*
+- [x] Slot próprio na barra, que **colapsa** com a funcionalidade desligada; e linha no painel S3
+- [x] **Quatro gestos**, porque a decisão é do usuário:
+      | Gesto | Diz | Onde |
+      |-------|-----|------|
+      | Tirar pausa agora | "estou descansando" | menu |
+      | Adiar 30 min | "agora não, mais tarde" | menu |
+      | Tirei essa | "já descansei" | clique no slot |
+      | Hoje não quero | "hoje não" | menu |
 - [x] **Três níveis de controle**, decididos com o usuário:
       1. *Instalação:* nasce **desabilitada** (`appsettings` → `Breaks.Enabled`). Só quem quer liga.
       2. *Ligada:* a folga existe **todo dia**, sem precisar pedir.
-      3. *Por dia:* "Hoje não quero pausa" no menu da barra, persistido por data em `%APPDATA%`
+      3. *Por dia:* dispensável, persistida por data em `%APPDATA%\Tempus\break-state.json`
 - [x] Sem cor nova: itálico no verde de "Livre", sem fundo de serviço (regra 1). Ver D-019
 - [x] Caso sem solução: período sem 15 min livres não inventa pausa nem alarma
-- [x] Slot próprio da pausa, verificado ao vivo: horário quando distante, contagem durante a
-      janela, "tirada" depois do clique (D-023)
-- [x] **Adiar**: "Agora não" empurra 30 min e é repetível, distinto de "hoje não quero"
+- [x] **O app nunca infere se a folga foi tirada** (D-006). Pausa perdida apaga, nunca cobra
 
 **Decisão de escopo:** vive só no Tempus, sem virar evento no Google Calendar. Evita subir de
 `CalendarReadonly` para escopo de escrita numa conta corporativa, e mantém a pausa móvel — um
 evento real ficaria parado no horário errado. Promover a evento real fica para *se* o problema
 virar "colegas marcam por cima"; o cálculo da janela é o mesmo nos dois casos.
+
+**Três defeitos que só o uso revelou**, todos corrigidos: a pausa que reagendava sozinha, o clique
+de "tirei essa" sem volta, e o adiar que *antecipava* (piso contado de `agora + 30` em vez de a
+partir da própria pausa). São todos lógica pura — o tipo que um teste de invariante pega em
+segundos.
+
+---
+
+## Barra em três slots ✅ *2026-08-18*
+
+**Entrega:** a barra deixa de ser uma frase e vira três perguntas com respostas próprias.
+
+- [x] **Status** (`[Livre]`, `[Ocupado]`, `[Encerrando]`…) em bloco com fundo próprio, largura
+      própria, nunca cede. Fundo neutro nos humores calmos, **aceso** nos que escalam — a escalada
+      continua sendo forma, não só cor (D-012, D-023)
+- [x] **Cronograma**: o compromisso de hoje ou, não havendo, o de amanhã. É quem trunca quando
+      aperta. Um por vez — dois lado a lado faziam a barra parecer ter duas agendas (D-022)
+- [x] **Pausa**: colapsa por completo com a funcionalidade desligada
+- [x] Ordem da frase decidida pelo **custo de truncar**: `rótulo · quando · título`. O horário tem
+      tamanho fixo e é o que o usuário pediu para nunca perder; o título é longo e descartável
+- [x] Perto usa contagem, longe usa relógio, fronteira em uma hora. A dica traz a outra metade
+- [x] Cada slot tem seu clique: o bloco diz "eu vi", o texto age sobre o compromisso
 
 ---
 
@@ -149,19 +187,24 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 
 **Entrega:** a barra reage aos dados reais da Fase 1 com as cores e avisos corretos.
 
-- [x] Questões abertas fechadas — nenhuma pendência bloqueando esta fase
+- [x] Questões abertas fechadas — Q-01 aberto e fechado em 2026-08-18
 - [ ] Estado `Offline` que precede e anula a escala (`SEVERITY.md` §0), com contadores em `—`
-- [ ] Identidade de ocorrência `(eventId, início, fim)` e supressão por ocorrência (D-010)
+- [x] **Identidade de ocorrência e supressão** (D-010) — `(sinal, eventId, início, fim)`. O sinal
+      entrou além do previsto no §7: sem ele, reconhecer `Encerrando` calaria o `Estourou`
+      seguinte, que é um fato novo e pior. Persistida por dia em `acknowledged.json`
 - [ ] `MeetingAmbiguous` + seletor de evento ativo, com padrão determinístico (D-009)
-- [ ] Sinais como funções puras, testáveis sem UI nem rede
+- [x] **Sinais como funções puras** — `TimeStatusResolver`, `BreakPlanner`, `WorkDayResolver` e
+      `Lookahead` são funções de (dados, hora, opções) sem I/O. Falta só a arbitragem, que ainda
+      não existe
 - [ ] Arbitragem com desempate por categoria (`SEVERITY.md` §4)
 - [ ] Histerese de 20s na descida, subida imediata (I4, I5)
 - [x] **Reconhecimento por clique**: suprime a ocorrência, volta ao estado calmo imediatamente
       (D-006, I3). Fecha o Q-01 — ver `SEVERITY.md` §10. Verificado ao vivo num estouro real
 - [ ] **Escalada do nível 3**: vermelho sólido → pisca âmbar↔vermelho após 5 min, período ~1,2s,
       sólido se as animações do sistema estiverem desligadas
-- [ ] Persistência da supressão de `DayEnded` até a virada do dia
-- [ ] Testes das invariantes I1–I8
+- [ ] Persistência da supressão de `DayEnded` até a virada do dia — o mecanismo já existe
+      (`AcknowledgementStore`, escopado por data); falta o sinal `DayEnded` usá-lo
+- [ ] **Testes das invariantes I1–I8** ⚠️ *ver nota abaixo*
 - [ ] Toasts com AUMID registrado, com deduplicação e supressão em apresentação
 - [x] Feriados computados localmente, com Páscoa por Meeus/Jones/Butcher (D-008) — `BrazilianHolidays`,
       cobrindo nacionais, Paraná e Pato Branco, mais emendas por lista manual
@@ -172,17 +215,39 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 **Marco:** ao fim desta fase o produto já entrega o valor central. Fases 4 e 5 são
 complementos.
 
+### ⚠️ Os testes deixaram de ser opcionais
+
+Em 2026-08-18, **quatro defeitos escaparam para o uso** em um único dia: a pausa que reagendava
+sozinha, o clique de "tirei essa" sem volta, o alvo estreito do ✕ de excluir, e o adiar que
+antecipava. Dois foram pegos verificando; **dois só apareceram porque o usuário usou.**
+
+Todos são lógica pura, sem UI e sem rede — exatamente o que os testes das invariantes cobririam em
+segundos. `dotnet test` ainda é "a definir" no `CLAUDE.md`, e não há projeto de teste no repo.
+
+A prioridade dentro da Fase 3 subiu: os testes vêm **antes** da escalada do nível 3 e dos toasts,
+não depois. O primeiro passo é criar o projeto de teste — decisão de estrutura ainda não tomada.
+
 ---
 
 ## Fase 4 — Tasks bidirecional
 
 **Entrega:** criar/concluir/editar tarefa no painel reflete no Google Tasks e vice-versa.
 
-- [ ] Escritas: criar, concluir, editar título e vencimento
+*Parcialmente antecipada: criar, concluir e excluir já existem porque a UI as pedia e sem elas
+mentiria.*
+
+- [x] Criar e concluir tarefa (antecipado na Fase 1)
+- [x] **Excluir tarefa** (D-024) — ✕ no hover, com confirmação de dois cliques na própria linha.
+      Excluir no Google Tasks não tem lixeira
+- [ ] Editar título e vencimento
 - [ ] Fila local de escritas offline, reproduzida ao voltar a conexão
 - [ ] Resolução de conflito: última escrita vence, Google ganha em empate
 - [ ] Atualização otimista da UI com reversão em caso de falha
 - [ ] Critério de aceite 6 do `SPEC.md` verificado nos dois sentidos
+
+**Regra aprendida em D-024:** verificação de escrita usa o **modo demo**, nunca a conta real. Um
+clique de teste 15 pixels fora do alvo concluiu uma tarefa de verdade do usuário. `FakeStateSource`
+ganhou `DeleteTask` no mesmo commit.
 
 ---
 
@@ -211,6 +276,10 @@ conversa trafegam; nenhum assunto, remetente ou corpo é lido.
 
 ## Depois (não comprometido)
 
+- **Widget de Android** — levantado pelo usuário em 2026-08-18, não avaliado. Nada do Tempus
+  atravessa: WPF, Win32 e o token DPAPI são todos específicos de Windows. O que sobreviveria é o
+  **modelo** — os sinais são funções puras de (dados, hora, opções) e as regras vivem em
+  `SEVERITY.md`, não no código de UI. Seria uma reimplementação compartilhando desenho, não código.
 - Reposicionar/redimensionar a barra por arrastar, com posição persistida
 - Ações rápidas no toast ("entrar na call", "concluir tarefa")
 - Registro de foco: quanto tempo em reunião vs. livre por dia
