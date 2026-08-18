@@ -358,7 +358,7 @@ Mecânica:
 
 ## 9. Questões abertas
 
-### Q-01 — A barra da Fase 1 alarma sem oferecer saída
+### Q-01 — A barra da Fase 1 alarma sem oferecer saída  ✅ FECHADA em 2026-08-18
 
 **Aberta em 2026-08-17, encontrada em uso.** O usuário procurou "um botão para marcar a reunião
 como concluída" e não achou — porque não existe no caminho de dados reais. `Acknowledged` só está
@@ -384,3 +384,47 @@ As questões das duas primeiras rodadas foram fechadas em D-006, D-007, D-008, D
 seções §2.1, §7 e §8.
 
 Ao abrir uma nova, registrar aqui em vez de assumir em silêncio no código.
+
+---
+
+## 10. Reconhecimento — resposta ao Q-01
+
+**Fechado em 2026-08-18**, antes da Fase 3, porque a lacuna apareceu no uso: uma call estourada
+deixava a barra vermelha por 10 minutos sem saída, exatamente durante a reunião seguinte.
+
+### O que o clique silencia
+
+A identidade do §7 — `(eventId, início, fim)` — ganha o **sinal**:
+
+```
+occurrenceId = (sinal, eventId, início, fim)
+```
+
+Sem o sinal, reconhecer `Encerrando` às 14:56 calaria o `Estourou` das 15:01. E estourar é um fato
+**novo e pior**, não a continuação do anterior: é o fato que o produto existe para acusar. Quem
+reconhece "está acabando" não está perdoando de antemão o estouro que ainda não aconteceu.
+
+A consequência do §7 continua valendo: prorrogar a reunião muda o `fim`, muda a identidade, e o
+sinal volta a disparar.
+
+### Reconhecer não apaga o fato, apaga o alarme
+
+O estado desce ao equivalente calmo, em vez de sumir:
+
+| Reconhecido | Vira | Por quê |
+|-------------|------|---------|
+| `Estourou` | o estado que existiria sem o estouro | livre, ou a próxima reunião |
+| `Encerrando` | `Ocupado` | você continua na reunião |
+| `Começando` | `Em breve` | a reunião continua chegando |
+
+A informação permanece legível; o que sai é o bloco aceso. É o que a invariante I3 pede — "volta
+ao normal imediatamente" — sem mentir dizendo que o compromisso deixou de existir.
+
+### Onde se clica
+
+O bloco de estado (D-023). Reconhecer **ganha de entrar na call**, porque em `Estourou` e
+`Encerrando` você já está ou esteve na reunião. Entrar continua a um clique no texto do
+compromisso, ao lado, e no menu de contexto (D-016).
+
+Persistido por dia em `acknowledged.json`. Reconhecer um alarme e vê-lo voltar após um restart
+ensinaria a ignorar o vermelho — o único ativo que este modelo não pode perder.

@@ -27,6 +27,9 @@ public partial class App : Application
     private WorkDayOptions _workDay = WorkDayOptions.Default;
     private BreakOptions _breaks = BreakOptions.Default;
     private BreakDismissalStore? _dismissals;
+    private AcknowledgementStore? _acks;
+    private HashSet<string> _acknowledged = [];
+    private DateOnly _acksDay;
     private UserSettingsStore? _userStore;
     private UserSettings _user = new();
     private string _settingsPath = string.Empty;
@@ -50,6 +53,9 @@ public partial class App : Application
         var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         _thresholds = ThresholdsLoader.Load(settingsPath);
         _dismissals = new BreakDismissalStore(GoogleOptions.DataDirectory);
+        _acks = new AcknowledgementStore(GoogleOptions.DataDirectory);
+        _acksDay = DateOnly.FromDateTime(DateTime.Today);
+        _acknowledged = _acks.Load(_acksDay);
         _userStore = new UserSettingsStore(GoogleOptions.DataDirectory);
         _settingsPath = settingsPath;
 
@@ -125,6 +131,16 @@ public partial class App : Application
                 snapshot.Tasks, snapshot.Agenda, PlanBreaks(snapshot.Agenda, DateTimeOffset.Now));
         });
 
+        // "Eu vi." Suprime a ocorrência e volta ao normal na hora (regra 2, invariante I3).
+        surface.Acknowledged += (_, _) =>
+        {
+            if (BuildState(_snapshot).Time.Occurrence is not { } occurrence) return;
+
+            _acknowledged.Add(occurrence);
+            _acks!.Save(_acksDay, _acknowledged);
+            Rerender();
+        };
+
         surface.ReauthRequested += (_, _) => OnReauthRequested();
         surface.SyncRequested += (_, _) => _ = sync.RefreshAsync();
         // Abrir um painel força uma rodada: é o momento em que o usuário está de fato olhando os
@@ -190,13 +206,25 @@ public partial class App : Application
 
         var breaks = PlanBreaks(snapshot.Agenda, now);
 
+        // Virou o dia: os reconhecimentos de ontem não valem para hoje (§7).
+        var today = DateOnly.FromDateTime(now.Date);
+        if (today != _acksDay)
+        {
+            _acksDay = today;
+            _acknowledged = _acks?.Load(today) ?? [];
+        }
+
+        var time = TimeStatusResolver.Resolve(
+            snapshot.Agenda, now, _thresholds, _workDay, _acknowledged);
+
         return new ShellState
         {
             Severity = Severity.Calm,
             Reason = "",
             OpenTasks = snapshot.Tasks.Count(t => !t.IsCompleted),
             UnreadMail = snapshot.UnreadMail,
-            Time = TimeStatusResolver.Resolve(snapshot.Agenda, now, _thresholds, _workDay),
+            Time = time,
+            CanAcknowledge = time.Occurrence is not null,
             Boundary = WorkDayResolver.Resolve(now, _workDay),
             Lookahead = Domain.Lookahead.Describe(snapshot.Upcoming, now),
             Breaks = breaks,

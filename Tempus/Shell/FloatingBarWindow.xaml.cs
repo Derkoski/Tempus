@@ -57,7 +57,9 @@ internal partial class FloatingBarWindow : Window
         Height = 40;
 
         ReasonChip.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnReasonClicked(); };
-        TimeArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
+        // Os dois slots têm sentidos diferentes (D-023): o bloco é o estado, o texto é o
+        // compromisso. Clicar no estado diz "eu vi"; clicar no compromisso age sobre ele.
+        TimeArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnStatusClicked(); };
         LookaheadText.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
         BreakArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(BreakTaken); };
         TasksArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; Raise(TasksRequested); };
@@ -215,9 +217,11 @@ internal partial class FloatingBarWindow : Window
         TimeArea.Background = new SolidColorBrush(escalates ? background : _palette.ChipBackground);
         TimeText.Foreground = new SolidColorBrush(foreground);
 
-        var action = time.CallUrl is { Length: > 0 }
-            ? "Clique para entrar na call"
-            : "Clique para abrir a agenda";
+        var action = state.CanAcknowledge
+            ? "Clique para reconhecer — eu vi"
+            : time.CallUrl is { Length: > 0 }
+                ? "Clique para entrar na call"
+                : "Clique para abrir a agenda";
 
         TimeArea.ToolTip = state.IsOffline
             ? "Sem sincronização — não sei o que vem a seguir"
@@ -591,6 +595,32 @@ internal partial class FloatingBarWindow : Window
     /// Meet; sem link, abre a agenda (D-016). Nunca reconhece alerta — reconhecer é exclusivo da
     /// área de motivo, para que o gesto tenha um lugar só e previsível.
     /// </summary>
+    /// <summary>
+    /// Clique no bloco de estado. Havendo alarme, ele é reconhecido — <b>é a promessa da regra 2</b>:
+    /// nenhum nível 3 é inescapável, e a saída custa um clique.
+    /// <para>
+    /// Reconhecer ganha de entrar na call, porque com <c>Estourou</c> ou <c>Encerrando</c> você já
+    /// está (ou esteve) na reunião, e entrar de novo não é o que se quer. Entrar continua a um
+    /// clique de distância no texto do compromisso, ao lado, e no menu de contexto (D-016).
+    /// </para>
+    /// </summary>
+    private void OnStatusClicked()
+    {
+        if (_state.IsOffline)
+        {
+            Raise(ReauthRequested);
+            return;
+        }
+
+        if (_state.CanAcknowledge)
+        {
+            Raise(Acknowledged);
+            return;
+        }
+
+        OnTimeClicked();
+    }
+
     private void OnTimeClicked()
     {
         if (_state.IsOffline)

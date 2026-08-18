@@ -155,7 +155,8 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [ ] Sinais como funções puras, testáveis sem UI nem rede
 - [ ] Arbitragem com desempate por categoria (`SEVERITY.md` §4)
 - [ ] Histerese de 20s na descida, subida imediata (I4, I5)
-- [ ] **Reconhecimento por clique**: suprime a ocorrência, volta a `Calm` imediatamente (D-006)
+- [x] **Reconhecimento por clique**: suprime a ocorrência, volta ao estado calmo imediatamente
+      (D-006, I3). Fecha o Q-01 — ver `SEVERITY.md` §10. Verificado ao vivo num estouro real
 - [ ] **Escalada do nível 3**: vermelho sólido → pisca âmbar↔vermelho após 5 min, período ~1,2s,
       sólido se as animações do sistema estiverem desligadas
 - [ ] Persistência da supressão de `DayEnded` até a virada do dia

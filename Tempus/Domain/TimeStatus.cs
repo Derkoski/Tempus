@@ -68,6 +68,18 @@ internal sealed record TimeStatus
     /// <summary>Texto da dica. Traz o que não coube, nunca o que já está visível.</summary>
     public string? Detail { get; init; }
 
+    /// <summary>
+    /// Identidade da ocorrência que o clique reconhece, ou <c>null</c> quando não há o que
+    /// reconhecer (<c>SEVERITY.md</c> §7).
+    /// <para>
+    /// Ao <c>(eventId, início, fim)</c> do §7 soma-se o <b>sinal</b>. Sem ele, reconhecer
+    /// "Encerrando" às 14:56 calaria o "Estourou" das 15:01 — e estourar é um fato novo e pior,
+    /// exatamente o que o produto existe para acusar. Prorrogar a reunião muda o fim, muda a
+    /// identidade, e o sinal volta a disparar, como o §7 já previa.
+    /// </para>
+    /// </summary>
+    public string? Occurrence { get; init; }
+
     /// <summary>Rótulo e detalhe juntos, para quem precisa da frase inteira.</summary>
     public string Text => Summary is null ? Label : $"{Label} · {Summary}";
 
@@ -131,18 +143,24 @@ internal static class TimeStatusResolver
     /// Função pura de (agenda, agora) → o que mostrar e com que humor. Testável sem UI e sem rede
     /// (regra 8 do CLAUDE.md).
     /// </summary>
+    /// <summary>Identidade da ocorrência: o <c>(eventId, início, fim)</c> do §7 mais o sinal.</summary>
+    public static string OccurrenceOf(TimeMood mood, AgendaItem item) =>
+        $"{mood}|{item.Id}|{item.Start:O}|{item.End:O}";
+
     public static TimeStatus Resolve(
         IReadOnlyList<AgendaItem> agenda,
         DateTimeOffset now,
         TimeThresholds thresholds,
-        WorkDayOptions workDay)
+        WorkDayOptions workDay,
+        IReadOnlySet<string>? acknowledged = null)
     {
+        var seen = acknowledged ?? new HashSet<string>();
         var relevant = agenda.Where(e => !e.IsAllDay).OrderBy(e => e.Start).ToList();
 
         var current = relevant.FirstOrDefault(e => e.IsRunningAt(now));
         var next = relevant.FirstOrDefault(e => e.Start > now);
 
-        if (current is not null) return InMeeting(current, next, now, thresholds);
+        if (current is not null) return InMeeting(current, next, now, thresholds, seen);
 
         // Reunião que acabou de passar do horário marcado. Vem antes de "próxima" porque estourar
         // é o problema mais caro que a barra conhece.
@@ -151,6 +169,12 @@ internal static class TimeStatusResolver
             .Where(e => e.End <= now && now - e.End <= overrunWindow)
             .OrderByDescending(e => e.End)
             .FirstOrDefault();
+
+        // Reconhecido some da escala e o resolvedor segue adiante — "volta ao normal
+        // imediatamente" (invariante I3). Não vira âmbar nem meio-termo: vira o estado calmo que
+        // existiria se o estouro não estivesse lá.
+        if (justEnded is not null && seen.Contains(OccurrenceOf(TimeMood.Overrun, justEnded)))
+            justEnded = null;
 
         if (justEnded is not null) return Overrun(justEnded, next, now);
 
@@ -166,18 +190,23 @@ internal static class TimeStatusResolver
             };
         }
 
-        return Between(next, now, thresholds);
+        return Between(next, now, thresholds, seen);
     }
 
     private static TimeStatus InMeeting(
-        AgendaItem current, AgendaItem? next, DateTimeOffset now, TimeThresholds thresholds)
+        AgendaItem current,
+        AgendaItem? next,
+        DateTimeOffset now,
+        TimeThresholds thresholds,
+        IReadOnlySet<string> seen)
     {
         var remaining = current.End - now;
 
         // Vira âmbar perto do fim SEMPRE, inclusive sem nada depois. O custo de estourar não é
         // seu — é do tempo das outras pessoas, que ficou comprometido pela duração marcada. Ter a
         // tarde livre não devolve os 22 minutos a quem estava na reunião.
-        var endingSoon = remaining <= TimeSpan.FromMinutes(thresholds.EndingSoonMinutes);
+        var endingSoon = remaining <= TimeSpan.FromMinutes(thresholds.EndingSoonMinutes)
+            && !seen.Contains(OccurrenceOf(TimeMood.EndingSoon, current));
 
         // Numa reunião o que importa é quando ela acaba, então a contagem vem antes do nome dela.
         var summary = $"faltam {Humanize(remaining)} · {current.Title}";
@@ -193,6 +222,7 @@ internal static class TimeStatusResolver
             Label = endingSoon ? "Encerrando" : "Ocupado",
             Summary = summary,
             NamesAnEvent = true,
+            Occurrence = endingSoon ? OccurrenceOf(TimeMood.EndingSoon, current) : null,
             CallUrl = current.Conference?.Url,
             Detail = next is null
                 ? $"Termina às {current.End.ToLocalTime():HH:mm}"
@@ -214,6 +244,7 @@ internal static class TimeStatusResolver
             Label = "Estourou",
             Summary = summary,
             NamesAnEvent = true,
+            Occurrence = OccurrenceOf(TimeMood.Overrun, ended),
             // A que invadiu, quando existe: às 12:22 o que importa é entrar na que já começou,
             // não voltar para a que devia ter acabado.
             CallUrl = (invading ? next!.Conference ?? ended.Conference : ended.Conference)?.Url,
@@ -221,7 +252,11 @@ internal static class TimeStatusResolver
         };
     }
 
-    private static TimeStatus Between(AgendaItem? next, DateTimeOffset now, TimeThresholds thresholds)
+    private static TimeStatus Between(
+        AgendaItem? next,
+        DateTimeOffset now,
+        TimeThresholds thresholds,
+        IReadOnlySet<string> seen)
     {
         if (next is null)
         {
@@ -242,6 +277,11 @@ internal static class TimeStatusResolver
             var m when m <= thresholds.ApproachingMinutes => TimeMood.Approaching,
             _ => TimeMood.Free,
         };
+
+        // Reconhecer "Começando" desce para "Em breve": o bloco apaga, mas a informação continua.
+        // Reconhecer não apaga o fato, apaga o alarme.
+        if (mood == TimeMood.Imminent && seen.Contains(OccurrenceOf(TimeMood.Imminent, next)))
+            mood = TimeMood.Approaching;
 
         // O rótulo de estado vem sempre primeiro, em todos os humores (D-015): é a resposta que se
         // lê de relance, e ela tem que estar sempre no mesmo lugar para o olho não precisar
@@ -269,6 +309,7 @@ internal static class TimeStatusResolver
             Label = label,
             Summary = $"{when} · {next.Title}",
             NamesAnEvent = true,
+            Occurrence = mood == TimeMood.Imminent ? OccurrenceOf(TimeMood.Imminent, next) : null,
 
             // Só a partir de "Começando" o clique entra na call. Antes disso ele abre a agenda:
             // clicar em "Livre" e cair dentro de uma reunião que só começa daqui a quatro horas é
