@@ -73,6 +73,9 @@ internal interface IShellSurface : IDisposable
     /// <summary>Tarefa criada no painel S2. Carrega o t√≠tulo.</summary>
     event EventHandler<string>? TaskCreated;
 
+    /// <summary>Exclus„o confirmada de tarefa. Carrega o id. N„o tem volta (D-024).</summary>
+    event EventHandler<string>? TaskDeleted;
+
     /// <summary>Evento com Meet acionado no painel S3. Carrega a URL.</summary>
     event EventHandler<string>? MeetingActivated;
 }

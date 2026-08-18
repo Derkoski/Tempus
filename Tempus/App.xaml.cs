@@ -145,6 +145,11 @@ public partial class App : Application
             var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id);
             if (task is not null) _ = sync.CompleteTaskAsync(task);
         };
+        surface.TaskDeleted += (_, id) =>
+        {
+            var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id);
+            if (task is not null) _ = sync.DeleteTaskAsync(task);
+        };
 
         surface.Render(BuildState(_snapshot));
         sync.Start();
@@ -295,6 +300,12 @@ public partial class App : Application
         surface.TaskCreated += (_, title) =>
         {
             surface.Render(demo.CreateTask(title));
+            surface.RefreshOpenPanel(
+                demo.Tasks, demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
+        };
+        surface.TaskDeleted += (_, id) =>
+        {
+            surface.Render(demo.DeleteTask(id));
             surface.RefreshOpenPanel(
                 demo.Tasks, demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
         };

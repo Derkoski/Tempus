@@ -1122,3 +1122,40 @@ do GWS: Trilha para líde…` truncando no lugar certo, `☕ 15:00` no slot pró
 
 **Não verificado:** o bloco aceso dos humores que escalam, que depende de estar perto de uma
 reunião de verdade.
+
+---
+
+## D-024 — Excluir tarefa: dois cliques, e alvo grande o bastante para não se errar
+
+**Status:** Aceita · 2026-08-18
+
+**Contexto.** Pedido de um ✕ para excluir tarefa no painel S2. Excluir no Google Tasks **não tem
+volta**: a API não expõe lixeira nem restauração.
+
+**Decisão.** O ✕ aparece só com o ponteiro na linha — treze tarefas com um ✕ permanente cada viram
+uma coluna de ruído ao lado do que importa, e a ação principal ali é concluir, não excluir.
+
+O primeiro clique **arma**: o ✕ vira "Excluir?" em vermelho. Só o segundo apaga. Tirar o ponteiro
+da linha desarma — quem se afastou não quis. Sem diálogo modal: a confirmação mora na própria
+linha, onde o olho já está.
+
+### O incidente que definiu o tamanho do alvo
+
+A primeira versão tinha o ✕ com ~25px de largura. Ao verificá-la, o clique de teste caiu **15
+pixels ao lado** e acertou a linha — que conclui a tarefa. Uma tarefa real do usuário saiu da lista
+de abertas.
+
+Recuperada por completo: concluir é reversível, ao contrário de excluir, e um `Patch` de volta para
+`needsAction` devolveu a tarefa intacta. Mas o erro expôs o problema de desenho.
+
+**Dois alvos vizinhos com efeitos diferentes, e o menor deles cercado pelo maior.** Errar por
+quinze pixels trocava "vou excluir isto?" por "concluído". Não adianta a confirmação de dois
+cliques se o caminho para chegar nela é mais estreito que a margem de erro da mão.
+
+O alvo passou para **44×26px**, com o glifo centralizado. A regra que fica: *quando alvos vizinhos
+têm efeitos diferentes e pelo menos um é irreversível, o menor precisa ser grande o bastante para
+não se errar* — a confirmação protege do clique deliberado, não do clique torto.
+
+**Consequências.** `GoogleSync.DeleteTaskAsync` documenta no próprio resumo que quem chama já
+confirmou. O modo demo ganhou `DeleteTask` para a verificação não depender da conta real — o que
+teria evitado o incidente, e é o caminho a usar daqui em diante para exercitar escrita.

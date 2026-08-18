@@ -101,6 +101,29 @@ internal sealed class GoogleSync : IDisposable
         }
     }
 
+    /// <summary>
+    /// Apaga a tarefa. <b>Não tem volta:</b> a API do Google Tasks não expõe lixeira nem
+    /// restauração, então quem chama precisa ter confirmado antes (D-024).
+    /// </summary>
+    public async Task<bool> DeleteTaskAsync(TaskItem task)
+    {
+        if (_tasks is null || task.ListId is null) return false;
+
+        var ct = _cts?.Token ?? CancellationToken.None;
+
+        try
+        {
+            await _tasks.Tasks.Delete(task.ListId, task.Id).ExecuteAsync(ct);
+
+            await PollAsync(ct);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> CreateTaskAsync(string title)
     {
         var listId = Current.DefaultTaskListId;

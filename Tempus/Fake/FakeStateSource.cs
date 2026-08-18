@@ -78,6 +78,12 @@ internal sealed class FakeStateSource
         return Current = Stamp(_script[_index]);
     }
 
+    public ShellState DeleteTask(string id)
+    {
+        _tasks.RemoveAll(t => t.Id == id);
+        return Current = Stamp(_script[_index]);
+    }
+
     /// <summary>
     /// O contador de tarefas vem sempre da lista viva, nunca do roteiro — é isso que faz concluir
     /// uma tarefa refletir na barra. Offline apaga os contadores em vez de mostrar o último valor

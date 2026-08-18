@@ -43,6 +43,7 @@ internal sealed class FloatingBarSurface : IShellSurface
     public event EventHandler? ExitRequested;
     public event EventHandler<string>? TaskToggled;
     public event EventHandler<string>? TaskCreated;
+    public event EventHandler<string>? TaskDeleted;
     public event EventHandler<string>? MeetingActivated;
 
     public void Show() => _window.Show();
@@ -66,6 +67,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         var panel = new TasksPanel(_window.CurrentPalette, anchor);
         panel.TaskToggled += (_, id) => TaskToggled?.Invoke(this, id);
         panel.TaskCreated += (_, title) => TaskCreated?.Invoke(this, title);
+        panel.TaskDeleted += (_, id) => TaskDeleted?.Invoke(this, id);
         panel.Dismissed += (_, _) => CloseTasks();
 
         _tasks = panel;

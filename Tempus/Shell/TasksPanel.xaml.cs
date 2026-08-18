@@ -47,6 +47,9 @@ internal partial class TasksPanel : Window
     /// <summary>Usuário criou uma tarefa. Carrega o título.</summary>
     public event EventHandler<string>? TaskCreated;
 
+    /// <summary>Usuário confirmou a exclusão. Carrega o id. Não tem volta (D-024).</summary>
+    public event EventHandler<string>? TaskDeleted;
+
     /// <summary>Perdeu o foco ou levou <c>Esc</c>: a superfície deve fechar este painel.</summary>
     public event EventHandler? Dismissed;
 
@@ -129,6 +132,7 @@ internal partial class TasksPanel : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // excluir
 
         // Caixa desenhada em vez de glifo de fonte: nenhuma dependência de qual versão do
         // Segoe MDL2/Fluent está instalada.
@@ -164,14 +168,31 @@ internal partial class TasksPanel : Window
         };
         Grid.SetColumn(due, 2);
 
+        var delete = BuildDeleteAction(task, row);
+        Grid.SetColumn(delete, 3);
+
         grid.Children.Add(box);
         grid.Children.Add(title);
         grid.Children.Add(due);
+        grid.Children.Add(delete);
         row.Child = grid;
 
         var hover = new SolidColorBrush(_palette.RowHover);
-        row.MouseEnter += (_, _) => row.Background = hover;
-        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        row.MouseEnter += (_, _) =>
+        {
+            row.Background = hover;
+
+            // O ✕ só existe sob o ponteiro. Treze tarefas com um ✕ permanente cada viram uma
+            // coluna de ruído ao lado do que importa, e a ação principal aqui é concluir.
+            if (delete.Tag is null) delete.Visibility = Visibility.Visible;
+        };
+        row.MouseLeave += (_, _) =>
+        {
+            row.Background = Brushes.Transparent;
+
+            // Tag marcada = confirmação aberta; some só depois de resolvida.
+            if (delete.Tag is null) delete.Visibility = Visibility.Collapsed;
+        };
         row.MouseLeftButtonUp += (_, e) =>
         {
             e.Handled = true;
@@ -179,6 +200,87 @@ internal partial class TasksPanel : Window
         };
 
         return row;
+    }
+
+    /// <summary>
+    /// O ✕ de excluir, com confirmação na própria linha.
+    /// <para>
+    /// Excluir <b>não tem volta</b>: a API do Google Tasks não expõe lixeira. Um clique só,
+    /// irreversível, num alvo de 16px ao lado de outro clicável é armadilha — o primeiro clique
+    /// troca o ✕ por "Excluir?" e só o segundo apaga. Sair da linha com o ponteiro cancela.
+    /// </para>
+    /// </summary>
+    private FrameworkElement BuildDeleteAction(TaskItem task, Border row)
+    {
+        // Alvo generoso de propósito. A primeira versão tinha ~25px de largura, e errá-lo não era
+        // inofensivo: o clique caía na linha, que conclui a tarefa. Quinze pixels de imprecisão
+        // mudavam o resultado. Quando vizinhos têm efeitos diferentes e irreversíveis, o alvo
+        // menor precisa ser grande o bastante para não se errar.
+        var host = new Border
+        {
+            MinWidth = 44,
+            MinHeight = 26,
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(10, 3, 10, 3),
+            Margin = new Thickness(10, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            ToolTip = "Excluir tarefa",
+        };
+
+        var glyph = new TextBlock
+        {
+            Text = "✕",
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(_palette.Muted),
+        };
+
+        host.Child = glyph;
+
+        host.MouseEnter += (_, _) =>
+        {
+            if (host.Tag is null) glyph.Foreground = new SolidColorBrush(_palette.CriticalBackground);
+        };
+        host.MouseLeave += (_, _) =>
+        {
+            if (host.Tag is null) glyph.Foreground = new SolidColorBrush(_palette.Muted);
+        };
+
+        host.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true; // sem isto o clique borbulha para a linha e conclui a tarefa
+
+            if (host.Tag is null)
+            {
+                host.Tag = "confirmando";
+                host.Background = new SolidColorBrush(_palette.CriticalBackground);
+                host.ToolTip = "Clique de novo para excluir — sair da linha cancela";
+                glyph.Text = "Excluir?";
+                glyph.Foreground = new SolidColorBrush(_palette.CriticalForeground);
+                return;
+            }
+
+            TaskDeleted?.Invoke(this, task.Id);
+        };
+
+        // Tirar o ponteiro da linha desarma a confirmação: quem se afastou não quis.
+        row.MouseLeave += (_, _) =>
+        {
+            if (host.Tag is null) return;
+
+            host.Tag = null;
+            host.Background = Brushes.Transparent;
+            host.ToolTip = "Excluir tarefa";
+            glyph.Text = "✕";
+            glyph.Foreground = new SolidColorBrush(_palette.Muted);
+        };
+
+        return host;
     }
 
     private static string DueLabel(TaskItem task, TaskBucket bucket) => bucket switch
