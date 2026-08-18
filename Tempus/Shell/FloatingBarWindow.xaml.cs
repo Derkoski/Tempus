@@ -106,6 +106,9 @@ internal partial class FloatingBarWindow : Window
 
     /// <summary>"Agora não": empurra a pausa 30 min para frente. Repetível.</summary>
     public event EventHandler? BreakPostponed;
+
+    /// <summary>"Estou tirando agora": fixa a pausa deste período na hora atual.</summary>
+    public event EventHandler? BreakStartedNow;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
@@ -668,13 +671,19 @@ internal partial class FloatingBarWindow : Window
         // Só o gesto do dia aparece aqui. Ligar e desligar a funcionalidade é decisão de
         // instalação e mora no appsettings — colocá-la no menu convidaria a desligar de vez num
         // dia ruim, que é justamente o dia em que a pausa importa mais.
-        if (_state.Breaks.Count > 0 || _state.BreaksDismissed)
+        if (_state.BreaksEnabled)
         {
             menu.Items.Add(new Separator());
 
             // "Agora não" é diferente de "hoje não": adiar empurra 30 min e é repetível; dispensar
             // encerra o assunto até amanhã. Separar os dois evita que um dia corrido desligue a
             // folga por inteiro quando bastaria empurrá-la.
+            // Sempre disponível: a folga é sugestão, não agendamento. Ela pode acontecer numa
+            // hora que o Tempus não previu, e depois que as duas do dia venceram este é o único
+            // gesto que sobra — sem ele, uma folga perdida fica inalcançável.
+            if (!_state.BreaksDismissed)
+                menu.Items.Add(MenuItemFor("Tirar pausa agora", BreakStartedNow));
+
             // Só quando há pausa por vir. Depois que as duas passaram não há o que empurrar, e
             // oferecer a opção seria prometer uma ação que não faz nada.
             if (!_state.BreaksDismissed && _state.NextBreak(DateTimeOffset.Now) is not null)

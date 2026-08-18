@@ -78,6 +78,12 @@ internal sealed record ShellState
     /// </summary>
     public bool BreaksDismissed { get; init; }
 
+    /// <summary>
+    /// A funcionalidade de pausas está ligada. Distinto de ter pausa hoje: governa se os gestos
+    /// aparecem no menu, porque "tirar agora" faz sentido mesmo sem nenhuma pausa planejada de pé.
+    /// </summary>
+    public bool BreaksEnabled { get; init; }
+
     /// <summary>Períodos que o usuário marcou como já tirados, clicando no slot.</summary>
     public IReadOnlyList<BreakPeriod> BreaksTaken { get; init; } = [];
 

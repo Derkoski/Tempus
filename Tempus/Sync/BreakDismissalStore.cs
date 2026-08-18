@@ -29,10 +29,31 @@ internal sealed record BreakDayState
     /// </summary>
     public List<BreakPostponement> Postponed { get; init; } = [];
 
+    /// <summary>
+    /// "Estou tirando agora." Fixa a pausa do período no horário escolhido, ignorando o meio do
+    /// período e a agenda.
+    /// <para>
+    /// Existe porque a pausa é do período e não do instante (D-023): perdida, ela some — o que
+    /// impede a cobrança, mas também tirava do usuário a chance de tirá-la mais tarde. Este é o
+    /// gesto que devolve a decisão a quem descansa.
+    /// </para>
+    /// </summary>
+    public List<BreakStart> Started { get; init; } = [];
+
     /// <summary>O piso de cada período, para o planejador. Vazio quando nada foi adiado.</summary>
     public Dictionary<BreakPeriod, DateTimeOffset> Floors() =>
         Postponed.GroupBy(p => p.Period)
                  .ToDictionary(g => g.Key, g => g.Max(p => p.Until));
+
+    public BreakDayState WithStarted(BreakPeriod period, DateTimeOffset at) => this with
+    {
+        Started = [.. Started.Where(s => s.Period != period), new() { Period = period, At = at }],
+
+        // Começar de novo desfaz o "já tirei" e qualquer adiamento do mesmo período: os três
+        // gestos falam do mesmo descanso, e o último a ser dado é o que vale.
+        Taken = [.. Taken.Where(p => p != period)],
+        Postponed = [.. Postponed.Where(p => p.Period != period)],
+    };
 
     [JsonIgnore]
     public static BreakDayState Empty { get; } = new();
@@ -50,6 +71,12 @@ internal sealed record BreakPostponement
 {
     public BreakPeriod Period { get; init; }
     public DateTimeOffset Until { get; init; }
+}
+
+internal sealed record BreakStart
+{
+    public BreakPeriod Period { get; init; }
+    public DateTimeOffset At { get; init; }
 }
 
 /// <summary>

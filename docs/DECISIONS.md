@@ -1183,3 +1183,32 @@ própria pausa, o que torna o gesto monotônico: 17:50 → 18:20 → 18:50 → 1
 E o menu oferecia "Adiar" mesmo com as duas pausas do dia já vencidas, quando o clique não fazia
 nada. Agora ele só aparece havendo pausa por vir — prometer uma ação que não faz nada é pior que
 não oferecê-la.
+
+### Emenda ao D-023 — a folga é sugestão, e o usuário manda nela
+
+Formulado pelo usuário em 2026-08-18: *"a folga é uma sugestão, pode ou não acontecer naquele
+horário ou em um horário inesperado."*
+
+Isso expôs uma consequência não intencional do D-023. Tornar a pausa **do período e não do
+instante** matou a perseguição — mas também tornou a folga perdida **inalcançável**: às 16h, com as
+duas pausas do dia vencidas, o slot colapsava e não sobrava gesto nenhum. O usuário queria descansar
+e o app não tinha como registrar.
+
+**"Tirar pausa agora"** fixa a pausa do período na hora atual, ignorando o meio do período e a
+agenda. Sempre disponível com a funcionalidade ligada, inclusive com as duas do dia vencidas — é
+exatamente aí que ela serve. Desfaz o "já tirei" e qualquer adiamento do mesmo período: os três
+gestos falam do mesmo descanso, e o último a ser dado é o que vale.
+
+Os quatro gestos, agora completos:
+
+| Gesto | Diz | Onde |
+|-------|-----|------|
+| Tirar agora | "estou descansando" | menu |
+| Adiar 30 min | "agora não, mais tarde" | menu |
+| Tirei essa | "já descansei" | clique no slot |
+| Hoje não quero | "hoje não" | menu |
+
+**Sobre a call que cai em cima da folga**, também levantado: já funcionava e agora está registrado.
+O planejador recalcula da agenda a cada sync e descarta janelas ocupadas, então uma reunião longa
+sobre o horário ideal empurra a pausa para a primeira janela livre depois dela — verificado em uso
+no mesmo dia, com um treinamento de 14:00–15:00 movendo a pausa da tarde para 15:00–15:15.

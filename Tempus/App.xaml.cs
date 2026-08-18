@@ -86,6 +86,18 @@ public partial class App : Application
         surface.BreakDismissToggled += (_, _) => UpdateBreakState(
             state => state with { Dismissed = !state.Dismissed, Taken = [], Postponed = [] });
 
+        // "Estou tirando agora." Vale mesmo com as pausas do dia já vencidas — é o caso em que
+        // este gesto existe, e sem ele a folga perdida ficava inalcançável.
+        surface.BreakStartedNow += (_, _) => UpdateBreakState(state =>
+        {
+            var now = DateTimeOffset.Now;
+            var period = now < AtToday(now, _workDay.MiddayHour, _workDay.MiddayMinute)
+                ? BreakPeriod.Morning
+                : BreakPeriod.Afternoon;
+
+            return state.WithStarted(period, now);
+        });
+
         // "Agora não." Empurra 30 min; o planejador acha a próxima janela livre a partir dali.
         surface.BreakPostponed += (_, _) => UpdateBreakState(state =>
         {
@@ -242,6 +254,7 @@ public partial class App : Application
             Boundary = WorkDayResolver.Resolve(now, _workDay),
             Lookahead = Domain.Lookahead.Describe(snapshot.Upcoming, now),
             Breaks = breaks,
+            BreaksEnabled = _breaks.Enabled,
             BreaksDismissed = BreaksEnabledButDismissed(now),
             BreaksTaken = BreakState(now).Taken,
             LastSyncAt = snapshot.LastSuccessAt,
@@ -292,11 +305,32 @@ public partial class App : Application
     {
         if (BreaksEnabledButDismissed(now)) return [];
 
-        return BreakPlanner.Plan(agenda, now, _workDay, _breaks, BreakState(now).Floors());
+        var state = BreakState(now);
+        var planned = BreakPlanner.Plan(agenda, now, _workDay, _breaks, state.Floors());
+
+        if (state.Started.Count == 0) return planned;
+
+        // Pausa começada à mão manda no período: substitui a planejada, inclusive quando a
+        // planejada já passou — que é justamente quando este gesto serve.
+        var duration = TimeSpan.FromMinutes(Math.Max(1, _breaks.DurationMinutes));
+
+        var manual = state.Started.Select(s => new BreakSlot
+        {
+            Period = s.Period,
+            Start = s.At,
+            End = s.At + duration,
+        });
+
+        return [.. planned.Where(p => state.Started.All(s => s.Period != p.Period))
+                          .Concat(manual)
+                          .OrderBy(p => p.Start)];
     }
 
     private bool BreaksEnabledButDismissed(DateTimeOffset now) =>
         _breaks.Enabled && BreakState(now).Dismissed;
+
+    private static DateTimeOffset AtToday(DateTimeOffset now, int hour, int minute) =>
+        new(now.Year, now.Month, now.Day, hour, minute, 0, now.Offset);
 
     private BreakDayState BreakState(DateTimeOffset now) =>
         _dismissals?.Load(DateOnly.FromDateTime(now.Date)) ?? BreakDayState.Empty;

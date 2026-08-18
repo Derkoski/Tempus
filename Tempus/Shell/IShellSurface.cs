@@ -52,6 +52,9 @@ internal interface IShellSurface : IDisposable
     /// <summary>"Agora não": empurra a pausa para frente (D-019).</summary>
     event EventHandler? BreakPostponed;
 
+    /// <summary>"Estou tirando agora": fixa a pausa do período na hora atual.</summary>
+    event EventHandler? BreakStartedNow;
+
     /// <summary>Usuário clicou na barra offline e quer reautenticar (<c>SEVERITY.md</c> §6).</summary>
     event EventHandler? ReauthRequested;
 
