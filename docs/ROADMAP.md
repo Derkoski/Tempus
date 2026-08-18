@@ -203,7 +203,8 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [x] **Escalada do nível 3** (D-025): vermelho sólido → pisca âmbar↔vermelho após 5 min, período
       1,2s, sólido se as animações do sistema estiverem desligadas. **Sem timer** — o alarme começa
       no fim marcado da reunião, então a escalada é uma subtração e sobrevive a restart de graça.
-      ⚠️ *Nesta máquina as animações do Windows estão desligadas, então na prática ele fica sólido*
+      Verificado pelo caminho real amostrando a cor do pixel: onze valores entre `C02626` e
+      `B4520C`. O caminho sólido (animações desligadas) também é comportamento testado
 - [ ] Persistência da supressão de `DayEnded` até a virada do dia — o mecanismo já existe
       (`AcknowledgementStore`, escopado por data); falta o sinal `DayEnded` usá-lo
 - [x] **Projeto de teste** — `Tempus.Tests` (xUnit), `InternalsVisibleTo` em vez de extrair

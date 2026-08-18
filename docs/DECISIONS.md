@@ -1257,8 +1257,16 @@ A **animação** foi verificada à parte, amostrando a cor do mesmo pixel doze v
 doze valores distintos oscilando entre `C02626` e `B4530A`, com os intermediários da interpolação.
 Teste unitário não pega fiação de `SolidColorBrush`; esta prova pega.
 
-**Achado:** nesta máquina `SystemParameters.ClientAreaAnimation` é **False** — as animações do
-Windows estão desligadas. Pela I8 isso é vermelho sólido, e é o que acontece. Ou seja, a escalada
-existe e está correta, mas **é invisível para este usuário** até que ele ligue animações em
-*Configurações → Acessibilidade → Efeitos visuais*. A prova acima só foi possível furando a guarda
-num build temporário.
+**Achado, e o que ele produziu.** Na primeira medição o pixel devolveu `C02626` doze vezes
+seguidas: sólido. A causa não era bug — `SystemParameters.ClientAreaAnimation` estava **False**,
+porque as animações do Windows estavam desligadas nesta máquina, e a I8 manda ficar sólido nesse
+caso. O código fez exatamente o que devia.
+
+A prova da animação exigiu furar a guarda num build temporário. **Em seguida o usuário ligou as
+animações no Windows**, e a medição foi refeita pelo caminho real, com a guarda no lugar: onze
+valores distintos entre `C02626` e `B4520C`. A escalada está verificada como é entregue, na
+configuração real da máquina.
+
+Fica registrado que o caminho sólido **também** é comportamento válido e testado: quem desliga
+animação costuma ter motivo — enjoo, epilepsia fotossensível, preferência — e o vermelho sólido já
+comunica o essencial. A escalada perde a forma, não o recado.
