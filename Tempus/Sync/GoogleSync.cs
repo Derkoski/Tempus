@@ -1,3 +1,4 @@
+using System.IO;
 using Google;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Calendar.v3;
@@ -506,6 +507,46 @@ internal sealed class GoogleSync : IDisposable
                 CompletedAt = ReadCompleted(task),
             };
         }
+    }
+
+    /// <summary>
+    /// <c>--dump-tasks</c>: escreve num arquivo o que o Google devolveu, cru e já convertido.
+    /// <para>
+    /// Existe porque "a data não apareceu" tem três culpados possíveis — o Google não mandou, o
+    /// parse errou, ou a tela não desenhou — e olhar a barra não distingue os três. Aqui só a
+    /// primeira metade do caminho aparece, então o que sobra fica isolado.
+    /// </para>
+    /// </summary>
+    public async Task<string> DumpTasksAsync(string path)
+    {
+        var ct = _cts?.Token ?? CancellationToken.None;
+        var lines = new List<string>();
+
+        if (_tasks is null && !await ConnectAsync(interactive: false, ct))
+            return "Não conectou ao Google — sem token válido?";
+
+        foreach (var list in await GetTaskListsAsync(ct))
+        {
+            if (list.Id is null) continue;
+
+            lines.Add($"=== lista '{list.Title}' ({list.Id})");
+
+            var request = _tasks!.Tasks.List(list.Id);
+            request.ShowCompleted = false;
+            request.ShowHidden = false;
+            request.MaxResults = 100;
+
+            foreach (var task in (await request.ExecuteAsync(ct)).Items ?? [])
+            {
+                lines.Add(
+                    $"  título   : {task.Title}\n" +
+                    $"  due lido : {ReadDue(task)?.ToString("yyyy-MM-dd") ?? "(null)"}\n" +
+                    $"  JSON cru : {Google.Apis.Json.NewtonsoftJsonSerializer.Instance.Serialize(task)}\n");
+            }
+        }
+
+        await File.WriteAllTextAsync(path, string.Join("\n", lines), ct);
+        return path;
     }
 
     private async Task<IList<GTaskList>> GetTaskListsAsync(CancellationToken ct)

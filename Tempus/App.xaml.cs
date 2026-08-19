@@ -89,6 +89,12 @@ public partial class App : Application
             return;
         }
 
+        if (e.Args.Contains("--dump-tasks", StringComparer.OrdinalIgnoreCase))
+        {
+            _ = RunTaskDumpAsync();
+            return;
+        }
+
         // Duas barras sobrepostas no mesmo pixel são um bug difícil de diagnosticar.
         _singleInstance = new Mutex(initiallyOwned: true, @"Local\Tempus.SingleInstance", out var isFirst);
         if (!isFirst)
@@ -621,6 +627,38 @@ public partial class App : Application
             "Tempus — sonda de notificação",
             MessageBoxButton.OK,
             opened ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
+    /// <summary>
+    /// <c>--dump-tasks</c>: despeja o que o Google devolveu num arquivo e sai. Diagnóstico para
+    /// separar "o Google não mandou" de "o Tempus não desenhou".
+    /// </summary>
+    private async Task RunTaskDumpAsync()
+    {
+        var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        var google = GoogleOptions.Load(settingsPath);
+        var user = new UserSettingsStore(GoogleOptions.DataDirectory).Load();
+
+        var auth = new GoogleAuth(
+            GoogleOptions.ClientSecretPath, GoogleOptions.TokenDirectory, user.LoginHint);
+
+        using var sync = new GoogleSync(auth, SyncOptions.Load(settingsPath), google.MailQuery);
+        var target = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "tempus-tasks-dump.txt");
+
+        string result;
+
+        try
+        {
+            result = await sync.DumpTasksAsync(target);
+        }
+        catch (Exception ex)
+        {
+            result = $"{ex.GetType().Name}: {ex.Message}";
+        }
+
+        MessageBox.Show(result, "Tempus — despejo de tarefas", MessageBoxButton.OK);
+        Shutdown();
     }
 
     // ---------------------------------------------------------------- demo
