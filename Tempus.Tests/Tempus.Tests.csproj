@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- net8.0-windows, e não net8.0, porque o projeto testado é WPF e um teste não pode ter
-         framework mais restrito que o alvo. Os testes em si não tocam UI: tudo aqui é domínio. -->
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- Espelha o TFM do projeto testado: um teste não pode ter framework mais restrito que o
+         alvo. A versão 10.0.19041 veio com os toasts (D-028), que precisam das projeções WinRT.
+         Os testes em si não tocam UI nem WinRT: tudo aqui é domínio. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
