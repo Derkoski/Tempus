@@ -167,10 +167,12 @@ Registrar aqui evita que uma sessão futura "ajude" adicionando isso:
 
 O Google Tasks tem **dois** conceitos de data desde novembro de 2025, e só um está na API:
 
-| Na interface do Google | Campo | O Tempus enxerga? |
+| Na interface do Google | Onde se define | O Tempus enxerga? |
 |---|---|---|
-| "Amanhã", "20 de ago" | `due` — data de vencimento clássica | **sim** |
-| "expira amanhã" | *prazo*, lançado em nov/2025 | **não** — não existe na API |
+| "Amanhã", "21 de ago" — data seca | **abrindo a tarefa**, ou pelo Google Agenda | **sim** — é o `due` da API |
+| "Expira amanhã", "Data de conclusão: …" com ícone de alvo | menu ⋮ → "Editar prazo" | **não** — o prazo não existe na API |
 
-O rótulo é o teste, e se autoverifica: quem quiser que o Tempus veja o prazo precisa usar o campo
-que a interface renderiza como a data seca. Não há workaround do lado do app.
+**O rótulo é o teste**, e se autoverifica. A pegadinha é que o gesto mais à mão — o menu de três
+pontos — escreve no campo que a API não vê, e o que funciona está a um clique dali, dentro da
+tarefa. Não há workaround do lado do app: o Google não expôs o prazo nem na revisão de nov/2025,
+onde inclusive reescreveu a descrição do `due` para dizer que ele **não** é o prazo.

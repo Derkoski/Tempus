@@ -1715,7 +1715,17 @@ Para inspecionar resposta de API, ler o **corpo HTTP**, nunca o objeto desserial
 - **`due` continua sendo a fonte** do vencimento no Tempus. Ele é escrevível, legível e o parse está correto — as medições 3 e 4 provam os dois sentidos.
 - **"Editar título e vencimento" continua na Fase 4.** Chegou a estar em risco: se o campo fosse morto, o editor nasceria quebrado. Não é o caso.
 - **Não há workaround para o prazo novo.** Tarefas em que o usuário usa "Adicionar prazo" continuarão sem data para o Tempus até o Google expor o campo. Nada a fazer no código.
-- **A regra prática, que se autoverifica:** se o Google Tasks escreve "**Amanhã**", o Tempus enxerga; se escreve "**expira amanhã**", não enxerga. O rótulo é o teste, e não depende de lembrar qual botão foi usado.
+- **A regra prática, que se autoverifica:** se o Google Tasks escreve "**Amanhã**" ou "**21 de ago**", o Tempus enxerga; se escreve "**Expira amanhã**" ou "**Data de conclusão: …**" com o ícone de alvo, não enxerga. O rótulo é o teste, e não depende de lembrar qual botão foi usado.
+
+### Onde fica cada campo na interface — confirmado em uso
+
+O menu rápido de três pontos oferece **"Editar prazo"**, que escreve no campo novo, invisível para a API. **Abrir a tarefa** — clicar no título, não no ⋮ — dá acesso ao campo de data clássico, que escreve no `due`.
+
+Confirmado pelo usuário em 2026-08-19: lançando por dentro da tarefa, as duas tarefas passaram a chegar com `due = 2026-08-21` e apareceram no painel.
+
+O outro caminho para o mesmo campo é o **Google Agenda**: a documentação define `due` como "o dia em que a tarefa fica visível na grade do calendário", então criar ou arrastar a tarefa lá mexe nele.
+
+É uma pegadinha de interface, não um defeito: o gesto mais à mão escreve no campo errado, e os dois ficam a um clique de distância um do outro.
 
 ### A sonda ficou
 
