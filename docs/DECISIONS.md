@@ -1696,6 +1696,20 @@ O Google lançou em **novembro de 2025** um campo de **prazo** (*deadline*), sep
 
 Não é o velho descompasso entre o campo da API e o que o Calendar usa — é um terceiro conceito, novo, e sem cobertura de API nenhuma.
 
+**A confirmação veio da documentação, não de notícia.** Na revisão `rev20251102` o Google **reescreveu a descrição do `due`**:
+
+> *Scheduled date for the task (as an RFC 3339 timestamp). Optional. This represents the day that the task should be done, or that the task is visible on the calendar grid.* **It doesn't represent the deadline of the task.**
+
+E a lista de campos dessa mesma revisão **não tem `deadline`**. O Google renomeou conceitualmente o `due` para "data agendada", declarou explicitamente que ele não é o prazo, e não expôs o prazo. **Atualizar a biblioteca cliente não resolve** — o campo não existe no contrato.
+
+**Consequência de vocabulário:** o que o painel chama de "Vencidas" é, no contrato novo, "agendada para um dia que já passou". Continua sendo a leitura útil no dia a dia, mas não é mais a mesma coisa que o "prazo" que o usuário vê no Google — e é por isso que os dois podem discordar sem que nenhum esteja errado.
+
+### Erro de método que quase passou
+
+A primeira "prova" foi um JSON que eu chamei de cru e **não era**: era a re-serialização do objeto já convertido pela biblioteca, que **descarta em silêncio** qualquer campo que não conheça — e a nossa é anterior ao lançamento do prazo. A conclusão sobreviveu porque o contrato mais novo também não tem o campo, mas o método estava errado e podia ter mentido.
+
+Para inspecionar resposta de API, ler o **corpo HTTP**, nunca o objeto desserializado.
+
 ### O que isso decide
 
 - **`due` continua sendo a fonte** do vencimento no Tempus. Ele é escrevível, legível e o parse está correto — as medições 3 e 4 provam os dois sentidos.
