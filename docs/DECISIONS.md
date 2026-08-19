@@ -1670,3 +1670,41 @@ só confirma vendo a tarefa aberta no retrato.
 `Reopen` é um valor a mais no `WriteKind`, um `case` na projeção e um `case` no executor. Ganha de
 graça a resposta imediata, a repetição automática, a reversão e a persistência. Era a aposta feita
 ao fazer confiabilidade antes de funcionalidade, e ela se pagou na primeira vez que foi cobrada.
+
+---
+
+## D-031 — O campo `due` da API não é o "prazo" da interface do Google
+
+**Status:** Aceita · 2026-08-19 · encontrada em uso, diagnosticada com `--dump-tasks`
+
+### O sintoma
+
+"Coloquei data nas tarefas no Google Tasks e não refletiu no Tempus."
+
+### O diagnóstico
+
+Quatro medições, nesta ordem, cada uma descartando um culpado:
+
+1. **JSON cru vindo do `tasks.list`** — sem campo `due`. O `updated` da tarefa **tinha** mudado, então a edição chegou ao Google; a data, não.
+2. **`tasks.get` na mesma tarefa** — resposta byte a byte idêntica, mesmo etag. Não era a chamada de lista.
+3. **Escrita pela API** com `due = 2026-08-20T00:00:00.000Z` — devolvida na criação, relida no `get`, e o parse do Tempus converteu certo. **O campo funciona nos dois sentidos.**
+4. **O usuário olhou a interface**: a tarefa escrita pela API aparece como "**Amanhã**"; as que ele datou pela interface aparecem como "**expira amanhã**". Rótulos diferentes, campos diferentes.
+
+### A causa
+
+O Google lançou em **novembro de 2025** um campo de **prazo** (*deadline*), separado da data de vencimento clássica. Ele **não está na API do Tasks**. O botão "Adicionar prazo" da interface escreve nele; o `due` que a API expõe é o outro.
+
+Não é o velho descompasso entre o campo da API e o que o Calendar usa — é um terceiro conceito, novo, e sem cobertura de API nenhuma.
+
+### O que isso decide
+
+- **`due` continua sendo a fonte** do vencimento no Tempus. Ele é escrevível, legível e o parse está correto — as medições 3 e 4 provam os dois sentidos.
+- **"Editar título e vencimento" continua na Fase 4.** Chegou a estar em risco: se o campo fosse morto, o editor nasceria quebrado. Não é o caso.
+- **Não há workaround para o prazo novo.** Tarefas em que o usuário usa "Adicionar prazo" continuarão sem data para o Tempus até o Google expor o campo. Nada a fazer no código.
+- **A regra prática, que se autoverifica:** se o Google Tasks escreve "**Amanhã**", o Tempus enxerga; se escreve "**expira amanhã**", não enxerga. O rótulo é o teste, e não depende de lembrar qual botão foi usado.
+
+### A sonda ficou
+
+`--dump-tasks` transformou "não refletiu" em resposta definitiva em duas execuções, separando "o Google não mandou" de "o Tempus não desenhou". Mesma justificativa do `--toast-probe` (D-028): a falha desse caminho é silenciosa. A sonda de escrita que criou a tarefa descartável foi **removida** — respondeu à pergunta e não se repete.
+
+**Sobre escrever na conta real:** a regra do D-024 diz para verificar escrita em demo. Aqui a pergunta só podia ser respondida contra a conta de verdade, então foi **perguntado antes**, feito com uma tarefa descartável em vez de uma real, e limpo em seguida.

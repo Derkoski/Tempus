@@ -162,3 +162,15 @@ Registrar aqui evita que uma sessão futura "ajude" adicionando isso:
    app. Nunca mostra dados velhos como se fossem atuais.
 10. Uso de CPU em repouso indistinguível de zero; nenhuma alocação por frame na barra. A animação
     de piscar não é exceção — ela só existe enquanto há alerta nível 3 não reconhecido.
+
+## Nota sobre vencimento de tarefas (D-031)
+
+O Google Tasks tem **dois** conceitos de data desde novembro de 2025, e só um está na API:
+
+| Na interface do Google | Campo | O Tempus enxerga? |
+|---|---|---|
+| "Amanhã", "20 de ago" | `due` — data de vencimento clássica | **sim** |
+| "expira amanhã" | *prazo*, lançado em nov/2025 | **não** — não existe na API |
+
+O rótulo é o teste, e se autoverifica: quem quiser que o Tempus veja o prazo precisa usar o campo
+que a interface renderiza como a data seca. Não há workaround do lado do app.
