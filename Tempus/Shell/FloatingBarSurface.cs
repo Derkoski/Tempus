@@ -50,13 +50,20 @@ internal sealed class FloatingBarSurface : IShellSurface
     public event EventHandler<string>? TaskToggled;
     public event EventHandler<string>? TaskCreated;
     public event EventHandler<string>? TaskDeleted;
+
+    /// <summary>"Tentar de novo" numa escrita que falhou. Carrega o id da <i>intenção</i>.</summary>
+    public event EventHandler<string>? TaskWriteRetried;
+
+    /// <summary>"Deixa pra lá": abandona a intenção sem tocar no Google.</summary>
+    public event EventHandler<string>? TaskWriteDiscarded;
+
     public event EventHandler<string>? MeetingActivated;
 
     public void Show() => _window.Show();
 
     public void Render(ShellState state) => _window.Render(state);
 
-    public void ToggleTasks(IReadOnlyList<TaskItem> tasks)
+    public void ToggleTasks(IReadOnlyList<TaskRow> tasks)
     {
         if (_tasks is not null)
         {
@@ -74,6 +81,8 @@ internal sealed class FloatingBarSurface : IShellSurface
         panel.TaskToggled += (_, id) => TaskToggled?.Invoke(this, id);
         panel.TaskCreated += (_, title) => TaskCreated?.Invoke(this, title);
         panel.TaskDeleted += (_, id) => TaskDeleted?.Invoke(this, id);
+        panel.WriteRetried += (_, id) => TaskWriteRetried?.Invoke(this, id);
+        panel.WriteDiscarded += (_, id) => TaskWriteDiscarded?.Invoke(this, id);
         panel.Dismissed += (_, _) => CloseTasks();
 
         _tasks = panel;
@@ -103,7 +112,7 @@ internal sealed class FloatingBarSurface : IShellSurface
     }
 
     public void RefreshOpenPanel(
-        IReadOnlyList<TaskItem> tasks,
+        IReadOnlyList<TaskRow> tasks,
         IReadOnlyList<AgendaItem> agenda,
         IReadOnlyList<BreakSlot> breaks)
     {

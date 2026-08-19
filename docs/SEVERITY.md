@@ -425,6 +425,28 @@ quando?** Só aquela ocorrência (§7 já define identidade de ocorrência), ou 
 inteiro até a próxima transição? Reconhecer "Daily acabou" deve calar também "Review já começou",
 que é um fato diferente sobre outro evento?
 
+### Q-02 — Escrita que não subiu é invisível com o painel fechado
+
+**Aberta em 2026-08-19, com o D-029.** Uma escrita que falha depois de três tentativas vira "não
+salvou" **no painel de tarefas**. Se o painel estiver fechado — que é o estado normal dele — o
+usuário não fica sabendo até abrir.
+
+O caminho óbvio seria um sinal na barra. Mas sinal novo é **cor nova**, e a regra 1 do projeto
+exige entrada nesta tabela e revisão de I1–I8 antes disso. Vale a pena gastar cor com "uma escrita
+não subiu"? Argumentos dos dois lados:
+
+- **A favor:** é a única classe de problema em que o app perdeu algo que o usuário mandou fazer.
+  Silêncio aqui é exatamente o defeito que o D-029 foi escrito para acabar.
+- **Contra:** o caso é raro e se auto-resolve na maioria das vezes (a fila repete sozinha), e o
+  vermelho já tem dono — reunião estourada e fim de jornada. Um terceiro motivo diluiria os dois.
+
+Duas saídas mais baratas que ainda não foram avaliadas: marcar o **contador de tarefas** que já
+existe na barra, sem introduzir severidade; ou não avisar em lugar nenhum e aceitar que a fila
+persistida resolve sozinha na próxima abertura.
+
+**Decidir depois de conviver.** Não há dado ainda sobre com que frequência uma escrita chega a
+falhar de verdade — e sem isso, qualquer escolha aqui é chute.
+
 ---
 
 As questões das duas primeiras rodadas foram fechadas em D-006, D-007, D-008, D-009, D-010 e nas

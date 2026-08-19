@@ -1,3 +1,4 @@
+using Google;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Calendar.v3;
 using Google.Apis.Calendar.v3.Data;
@@ -81,66 +82,89 @@ internal sealed class GoogleSync : IDisposable
 
     public Task RefreshAsync() => PollAsync(_cts?.Token ?? CancellationToken.None);
 
-    public async Task<bool> CompleteTaskAsync(TaskItem task)
+    /// <summary>
+    /// Executa uma intenção de escrita. É o executor que a <see cref="WriteQueue"/> injeta.
+    /// <para>
+    /// <b>Nunca lança e nunca engole em silêncio:</b> devolve sucesso ou o código HTTP que a fila
+    /// precisa para decidir se repete. Era o silêncio da versão anterior — <c>catch { return
+    /// false; }</c> com o resultado descartado por quem chamava — que fazia um clique sumir sem
+    /// deixar rastro.
+    /// </para>
+    /// <para>
+    /// Também <b>não sincroniza no fim</b>. Antes cada escrita disparava um <c>PollAsync</c>
+    /// completo — calendário, tarefas e Gmail — só para a tela reagir. A projeção otimista já faz
+    /// a tela reagir, e três cliques seguidos não precisam custar três leituras de tudo.
+    /// </para>
+    /// </summary>
+    public async Task<WriteOutcome> ApplyAsync(PendingWrite write, CancellationToken ct)
     {
-        if (_tasks is null || task.ListId is null) return false;
+        if (_tasks is null) return WriteOutcome.Failed(null, "Ainda não conectado ao Google");
 
-        var ct = _cts?.Token ?? CancellationToken.None;
+        // A lista pode não existir no momento do clique — o app pode ter subido sem sync ainda.
+        // Resolver aqui, e não no enfileiramento, deixa a intenção sobreviver a esse intervalo.
+        var listId = write.ListId ?? Current.DefaultTaskListId;
+        if (listId is null) return WriteOutcome.Failed(null, "Nenhuma lista de tarefas conhecida");
 
         try
         {
-            await _tasks.Tasks.Patch(new GTask { Status = "completed" }, task.ListId, task.Id)
-                .ExecuteAsync(ct);
+            switch (write.Kind)
+            {
+                case WriteKind.Create:
+                    await _tasks.Tasks.Insert(new GTask { Title = write.Title }, listId)
+                        .ExecuteAsync(ct);
+                    break;
 
-            await PollAsync(ct);
-            return true;
+                case WriteKind.Complete:
+                    await _tasks.Tasks
+                        .Patch(new GTask { Status = "completed" }, listId, write.TaskId)
+                        .ExecuteAsync(ct);
+                    break;
+
+                // Excluir não tem volta: a API do Google Tasks não expõe lixeira nem restauração,
+                // então quem enfileirou precisa ter confirmado antes (D-024).
+                case WriteKind.Delete:
+                    await _tasks.Tasks.Delete(listId, write.TaskId).ExecuteAsync(ct);
+                    break;
+            }
+
+            return WriteOutcome.Ok;
         }
-        catch (Exception)
+        catch (OperationCanceledException)
         {
-            return false;
+            throw;
+        }
+        catch (GoogleApiException ex)
+        {
+            return WriteOutcome.Failed((int)ex.HttpStatusCode, ex.Error?.Message ?? ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // Sem resposta HTTP: rede, DNS, timeout. A política trata como passageiro.
+            return WriteOutcome.Failed(null, ex.Message);
         }
     }
 
     /// <summary>
-    /// Apaga a tarefa. <b>Não tem volta:</b> a API do Google Tasks não expõe lixeira nem
-    /// restauração, então quem chama precisa ter confirmado antes (D-024).
+    /// Relê só as tarefas. Chamada quando a fila de escritas esvazia, para trocar as linhas
+    /// provisórias pelas de verdade sem pagar uma rodada completa de sync.
     /// </summary>
-    public async Task<bool> DeleteTaskAsync(TaskItem task)
+    public async Task RefreshTasksAsync()
     {
-        if (_tasks is null || task.ListId is null) return false;
+        if (_tasks is null) return;
 
         var ct = _cts?.Token ?? CancellationToken.None;
 
         try
         {
-            await _tasks.Tasks.Delete(task.ListId, task.Id).ExecuteAsync(ct);
+            var (tasks, defaultList) = await ReadTasksAsync(ct);
 
-            await PollAsync(ct);
-            return true;
+            // LastSuccessAt fica de fora de propósito: ele responde por "o retrato inteiro é
+            // confiável", e uma leitura parcial não pode adiar a ida para Offline (§0).
+            Publish(Current with { Tasks = tasks, DefaultTaskListId = defaultList });
         }
         catch (Exception)
         {
-            return false;
-        }
-    }
-
-    public async Task<bool> CreateTaskAsync(string title)
-    {
-        var listId = Current.DefaultTaskListId;
-        if (_tasks is null || listId is null) return false;
-
-        var ct = _cts?.Token ?? CancellationToken.None;
-
-        try
-        {
-            await _tasks.Tasks.Insert(new GTask { Title = title }, listId).ExecuteAsync(ct);
-
-            await PollAsync(ct);
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
+            // Falhar aqui não muda nada de importante: o próximo ciclo de sync relê tudo.
         }
     }
 

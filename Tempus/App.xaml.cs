@@ -34,6 +34,9 @@ public partial class App : Application
     private ToastOptions _toastOptions = ToastOptions.Default;
     private ToastChannel? _toasts;
 
+    private PendingWriteStore? _writeStore;
+    private WriteQueue? _writes;
+
     /// <summary>
     /// Chaves de toast já emitidas hoje (§5). Em memória, como o <see cref="_activeEventId"/>: um
     /// restart com o vermelho ainda de pé reemitir o aviso é o comportamento <b>certo</b>, porque
@@ -105,6 +108,7 @@ public partial class App : Application
         _acksDay = DateOnly.FromDateTime(DateTime.Today);
         _acknowledged = _acks.Load(_acksDay);
         _userStore = new UserSettingsStore(GoogleOptions.DataDirectory);
+        _writeStore = new PendingWriteStore(GoogleOptions.DataDirectory);
         _settingsPath = settingsPath;
 
         // Duas camadas: appsettings é padrão de fábrica, %APPDATA% é o que o usuário escolheu.
@@ -183,7 +187,7 @@ public partial class App : Application
         }
 
         if (isDemo)
-            StartDemo(surface);
+            StartDemo(surface, e.Args.Contains("--fail-writes", StringComparer.OrdinalIgnoreCase));
         else
             StartGoogle(surface, google with { LoginHint = _user.LoginHint }, SyncOptions.Load(settingsPath));
 
@@ -204,13 +208,28 @@ public partial class App : Application
         var sync = new GoogleSync(auth, cadence, options.MailQuery);
         _sync = sync;
 
+        // A fila é criada aqui porque precisa do executor, que é este sync. O store, não: ele já
+        // existe desde a subida, e a fila do disco pode ter trabalho de ontem esperando.
+        var writes = new WriteQueue(sync.ApplyAsync, _writeStore!);
+        _writes = writes;
+
+        // Escrita que subiu troca a linha provisória pela de verdade — só as tarefas, sem pagar
+        // uma rodada completa de calendário e Gmail.
+        writes.Drained += (_, _) => Dispatcher.InvokeAsync(() => _ = sync.RefreshTasksAsync());
+        writes.Changed += (_, _) => Dispatcher.InvokeAsync(() => RefreshTasks(surface));
+
         // O sync roda fora da thread de UI; tudo que toca a barra volta pelo dispatcher.
         sync.Updated += (_, snapshot) => Dispatcher.InvokeAsync(() =>
         {
             _snapshot = snapshot;
+
+            // Antes de desenhar: o retrato novo pode já refletir o que estava na fila, e nesse
+            // caso a intenção deixa de existir. É onde o servidor volta a ser a única verdade.
+            writes.Confirm(snapshot.Tasks);
+
             Rerender();
             surface.RefreshOpenPanel(
-                snapshot.Tasks, snapshot.Agenda, PlanBreaks(snapshot.Agenda, DateTimeOffset.Now));
+                CurrentTasks(), snapshot.Agenda, PlanBreaks(snapshot.Agenda, DateTimeOffset.Now));
         });
 
         // "Eu vi." Suprime a ocorrência e volta ao normal na hora (regra 2, invariante I3).
@@ -258,7 +277,7 @@ public partial class App : Application
         // dados, e vale a requisição extra para ele nunca ver uma lista velha.
         surface.TasksRequested += (_, _) =>
         {
-            surface.ToggleTasks(_snapshot.Tasks);
+            surface.ToggleTasks(CurrentTasks());
             _ = sync.RefreshAsync();
         };
         surface.AgendaRequested += (_, _) =>
@@ -266,20 +285,62 @@ public partial class App : Application
             surface.ToggleAgenda(_snapshot.Agenda, PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now));
             _ = sync.RefreshAsync();
         };
-        surface.TaskCreated += (_, title) => _ = sync.CreateTaskAsync(title);
-        surface.TaskToggled += (_, id) =>
+
+        // Os três gestos de escrita agora só registram a intenção. Quem fala com o Google é a
+        // fila, que repete sozinha e conta o que deu errado — antes o clique ia direto para a
+        // rede e sumia junto com ela.
+        surface.TaskCreated += (_, title) => Enqueue(surface, PendingWrite.For(
+            WriteKind.Create, DateTimeOffset.Now) with
         {
-            var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id);
-            if (task is not null) _ = sync.CompleteTaskAsync(task);
-        };
-        surface.TaskDeleted += (_, id) =>
-        {
-            var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id);
-            if (task is not null) _ = sync.DeleteTaskAsync(task);
-        };
+            Title = title,
+            ListId = _snapshot.DefaultTaskListId,
+        });
+
+        surface.TaskToggled += (_, id) => EnqueueFor(surface, WriteKind.Complete, id);
+        surface.TaskDeleted += (_, id) => EnqueueFor(surface, WriteKind.Delete, id);
+
+        surface.TaskWriteRetried += (_, id) => writes.Retry(id);
+        surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);
 
         surface.Render(BuildState(_snapshot));
         sync.Start();
+        writes.Start();
+    }
+
+    /// <summary>
+    /// O que a tela mostra: o retrato do servidor com as intenções pendentes por cima.
+    /// <para>
+    /// Um lugar só, alimentando a barra <b>e</b> o painel. Se cada um projetasse por conta, o chip
+    /// diria "2 tarefas abertas" enquanto a lista logo acima mostrasse uma.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<TaskRow> CurrentTasks() =>
+        TaskProjection.Apply(_snapshot.Tasks, _writes?.Pending ?? []);
+
+    private void EnqueueFor(FloatingBarSurface surface, WriteKind kind, string id)
+    {
+        var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id);
+        if (task is null) return;
+
+        Enqueue(surface, PendingWrite.For(kind, DateTimeOffset.Now) with
+        {
+            TaskId = task.Id,
+            ListId = task.ListId,
+        });
+    }
+
+    private void Enqueue(FloatingBarSurface surface, PendingWrite write)
+    {
+        _writes?.Enqueue(write);
+        RefreshTasks(surface);
+    }
+
+    /// <summary>Redesenha barra e painel a partir da mesma projeção.</summary>
+    private void RefreshTasks(FloatingBarSurface surface)
+    {
+        Rerender();
+        surface.RefreshOpenPanel(
+            CurrentTasks(), _snapshot.Agenda, PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now));
     }
 
     /// <summary>
@@ -299,8 +360,12 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Estado da Fase 1: dados reais, sem a máquina de severidade ainda. Só distingue "dá para
-    /// confiar no que temos" de <c>Offline</c>. A escala 0–3 do <c>SEVERITY.md</c> entra na Fase 3.
+    /// O retrato sincronizado vira o que a barra desenha: <c>Offline</c> quando não dá para
+    /// confiar nos dados (§0), e a escala 0–3 do <c>SEVERITY.md</c> quando dá.
+    /// <para>
+    /// As tarefas entram pela <b>projeção</b>, não pelo retrato cru: o que o usuário acabou de
+    /// fazer e ainda não subiu já conta aqui, senão a barra contradiz o painel.
+    /// </para>
     /// </summary>
     private ShellState BuildState(SyncSnapshot snapshot)
     {
@@ -350,8 +415,10 @@ public partial class App : Application
         if (_activeEventId is not null && candidates.All(c => c.Id != _activeEventId))
             _activeEventId = null;
 
+        var tasks = CurrentTasks().Select(r => r.Item).ToList();
+
         var signals = Domain.Signals.Evaluate(
-            snapshot.Agenda, snapshot.Tasks, now, _workDay, SignalThresholds.Default, _acknowledged,
+            snapshot.Agenda, tasks, now, _workDay, SignalThresholds.Default, _acknowledged,
             _dayEnded, _activeEventId);
 
         var winner = _gate.Apply(Arbiter.Winner(signals), now);
@@ -369,7 +436,7 @@ public partial class App : Application
             IsEscalated =
                 winner?.IsEscalatedAt(now, TimeSpan.FromMinutes(
                     Math.Max(5, _thresholds.EscalationMinutes))) == true,
-            OpenTasks = snapshot.Tasks.Count(t => !t.IsCompleted),
+            OpenTasks = tasks.Count(t => !t.IsCompleted),
             UnreadMail = snapshot.UnreadMail,
             Time = time,
 
@@ -561,37 +628,40 @@ public partial class App : Application
     /// <c>--demo</c>: percorre todos os estados visuais com dados falsos, sem tocar na rede.
     /// Serve para trabalhar na UI sem depender do OAuth.
     /// </summary>
-    private void StartDemo(FloatingBarSurface surface)
+    private void StartDemo(FloatingBarSurface surface, bool failWrites)
     {
-        var demo = new FakeStateSource();
+        var demo = new FakeStateSource { FailWrites = failWrites };
         _demo = demo;
+
+        // Fila própria, com arquivo próprio: escrita falsa não pode entrar na fila que vai subir
+        // para a conta de verdade. O código exercitado, esse sim, é exatamente o mesmo.
+        var writes = new WriteQueue(
+            demo.ApplyAsync, new PendingWriteStore(GoogleOptions.DataDirectory, "pending-writes.demo.json"));
+
+        _writes = writes;
+        writes.Changed += (_, _) => Dispatcher.InvokeAsync(() => RenderDemo(surface, demo));
 
         surface.Acknowledged += (_, _) => surface.Render(demo.Acknowledge());
         surface.ReauthRequested += (_, _) => surface.Render(demo.Reconnect());
         surface.SyncRequested += (_, _) => surface.Render(demo.Advance());
-        surface.TasksRequested += (_, _) => surface.ToggleTasks(demo.Tasks);
+        surface.TasksRequested += (_, _) => surface.ToggleTasks(DemoRows(demo));
         surface.AgendaRequested += (_, _) =>
             surface.ToggleAgenda(demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
-        surface.TaskToggled += (_, id) =>
-        {
-            surface.Render(demo.ToggleTask(id));
-            surface.RefreshOpenPanel(
-                demo.Tasks, demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
-        };
-        surface.TaskCreated += (_, title) =>
-        {
-            surface.Render(demo.CreateTask(title));
-            surface.RefreshOpenPanel(
-                demo.Tasks, demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
-        };
-        surface.TaskDeleted += (_, id) =>
-        {
-            surface.Render(demo.DeleteTask(id));
-            surface.RefreshOpenPanel(
-                demo.Tasks, demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
-        };
+
+        surface.TaskCreated += (_, title) => EnqueueDemo(surface, demo, PendingWrite.For(
+            WriteKind.Create, DateTimeOffset.Now) with { Title = title });
+
+        surface.TaskToggled += (_, id) => EnqueueDemo(surface, demo, PendingWrite.For(
+            WriteKind.Complete, DateTimeOffset.Now) with { TaskId = id });
+
+        surface.TaskDeleted += (_, id) => EnqueueDemo(surface, demo, PendingWrite.For(
+            WriteKind.Delete, DateTimeOffset.Now) with { TaskId = id });
+
+        surface.TaskWriteRetried += (_, id) => writes.Retry(id);
+        surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);
 
         surface.Render(demo.Current);
+        writes.Start();
 
         var timer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -599,6 +669,22 @@ public partial class App : Application
         };
         timer.Tick += (_, _) => surface.Render(demo.Advance());
         timer.Start();
+    }
+
+    private IReadOnlyList<TaskRow> DemoRows(FakeStateSource demo) =>
+        TaskProjection.Apply(demo.Tasks, _writes?.Pending ?? []);
+
+    private void EnqueueDemo(FloatingBarSurface surface, FakeStateSource demo, PendingWrite write)
+    {
+        _writes?.Enqueue(write);
+        RenderDemo(surface, demo);
+    }
+
+    private void RenderDemo(FloatingBarSurface surface, FakeStateSource demo)
+    {
+        surface.Render(demo.WithPending(_writes?.Pending ?? []));
+        surface.RefreshOpenPanel(
+            DemoRows(demo), demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
     }
 
     // ---------------------------------------------------------------- utilidades
@@ -618,6 +704,10 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _refresh?.Stop();
+
+        // A fila já gravou tudo em disco a cada mudança; parar aqui só encerra a bomba. O que não
+        // subiu sobe na próxima abertura, que é o motivo de ela ser persistida.
+        _writes?.Dispose();
         _sync?.Dispose();
         _surface?.Dispose();
         _singleInstance?.Dispose();

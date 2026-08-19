@@ -22,8 +22,12 @@ internal interface IShellSurface : IDisposable
     /// <summary>Idempotente: chamar com o mesmo estado duas vezes não deve causar efeito visual.</summary>
     void Render(ShellState state);
 
-    /// <summary>Abre o painel S2, ou fecha se já estiver aberto.</summary>
-    void ToggleTasks(IReadOnlyList<TaskItem> tasks);
+    /// <summary>
+    /// Abre o painel S2, ou fecha se já estiver aberto. Recebe <see cref="TaskRow"/>, e não
+    /// <c>TaskItem</c>, porque a lista que a tela mostra inclui o que o usuário acabou de fazer e
+    /// ainda não subiu (D-029).
+    /// </summary>
+    void ToggleTasks(IReadOnlyList<TaskRow> tasks);
 
     /// <summary>Abre o painel S3, ou fecha se já estiver aberto.</summary>
     void ToggleAgenda(IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks);
@@ -33,7 +37,7 @@ internal interface IShellSurface : IDisposable
     /// mudam por baixo de um painel já aberto — concluir uma tarefa, por exemplo.
     /// </summary>
     void RefreshOpenPanel(
-        IReadOnlyList<TaskItem> tasks,
+        IReadOnlyList<TaskRow> tasks,
         IReadOnlyList<AgendaItem> agenda,
         IReadOnlyList<BreakSlot> breaks);
 

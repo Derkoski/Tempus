@@ -29,10 +29,11 @@ sinais do §2 avaliados como funções puras, arbitragem com desempate por categ
 20 s na descida, nível 3 que escala e sai com um clique, `Offline` que anula a escala, pausas de
 descanso, tela de configuração e toasts de nível 3.
 
-**Fase 4 é a próxima**: Tasks bidirecional — editar título e vencimento, fila de escritas offline,
-resolução de conflito. Falta também o critério de aceite 7 do `SPEC.md`, verificado formalmente.
+**Fase 4 em andamento.** A primeira fatia entregou escrita otimista com reversão, fila persistida
+com repetição e resolução de conflito (D-029). Falta **editar título e vencimento**, mais os
+critérios de aceite 7 (tarefas, nos dois sentidos) e 8 (contador de e-mail).
 
-`Tempus.Tests` (xUnit) tem 101 testes e roda em ~100 ms. As oito invariantes I1–I8 têm teste e
+`Tempus.Tests` (xUnit) tem 144 testes e roda em ~120 ms. As oito invariantes I1–I8 têm teste e
 nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execução trava o build.
 
 ## Regras deste projeto
@@ -62,6 +63,10 @@ nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execuç�
 11. **Respeite a lista de fora-de-escopo** de `SPEC.md`. Keep e Chat foram cortados por motivos
     técnicos documentados em D-004, e a detecção de microfone por D-006 — nenhum por falta de
     tempo.
+12. **Escrita nunca falha em silêncio.** Todo gesto que muda dado no Google passa pela
+    `WriteQueue`: aparece na tela na hora, repete sozinho, e vira "não salvou" visível se desistir
+    (D-029). Nada de `catch { return false; }` com o resultado descartado por quem chamou — foi
+    exatamente isso que fazia um clique sumir sem deixar rastro.
 
 ## Como trabalhamos
 
@@ -76,6 +81,7 @@ nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execuç�
 dotnet build Tempus/Tempus.csproj              # deve terminar com 0 avisos
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe          # dados reais do Google
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --demo   # dados falsos, sem rede
+./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --demo --fail-writes  # escrita sempre falha
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --toast-probe  # confere as notificações
 dotnet test Tempus.Tests/Tempus.Tests.csproj   # domínio e invariantes; feche o app antes
 ```

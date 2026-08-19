@@ -1,15 +1,22 @@
 using Tempus.Domain;
 using Tempus.Shell;
+using Tempus.Sync;
 
 namespace Tempus.Fake;
 
 /// <summary>
-/// Dados falsos para a Fase 2. Percorre um roteiro que cobre <b>todos</b> os estados visuais do
+/// Dados falsos. Percorre um roteiro que cobre <b>todos</b> os estados visuais do
 /// <c>docs/SEVERITY.md</c> e mantém uma lista de tarefas mutável, para que o laço painel→barra
 /// funcione de verdade: concluir uma tarefa faz o contador da barra cair.
 /// <para>
-/// Existe para que as fases 1 e 2 do roadmap sejam independentes — a barra e os painéis podem ser
-/// validados sem depender do OAuth. Sai de cena na Fase 3.
+/// Continua em cena depois da Fase 3 por causa da regra do D-024: <b>escrita se verifica em demo,
+/// nunca na conta real</b>. Um clique de teste 15 pixels fora do alvo já concluiu uma tarefa de
+/// verdade do usuário uma vez.
+/// </para>
+/// <para>
+/// A escrita aqui é o mesmo caminho da real: entra pela <see cref="WriteQueue"/> e chega em
+/// <see cref="ApplyAsync"/>. Se fosse um atalho, verificar em demo não provaria nada sobre o
+/// código que roda de verdade.
 /// </para>
 /// </summary>
 internal sealed class FakeStateSource
@@ -19,9 +26,18 @@ internal sealed class FakeStateSource
     private readonly List<TaskItem> _tasks;
     private readonly List<AgendaItem> _agenda;
     private readonly ShellState[] _script;
+    private readonly object _gate = new();
 
+    private IReadOnlyList<PendingWrite> _pending = [];
     private int _index;
     private int _nextId = 100;
+
+    /// <summary>
+    /// <c>--fail-writes</c>: toda escrita falha como se a rede estivesse fora. Existe para
+    /// exercitar o caminho que não dá para provocar sob demanda — a linha esmaecida, as três
+    /// tentativas, a pílula de "não salvou", o repetir e o descartar.
+    /// </summary>
+    public bool FailWrites { get; init; }
 
     public FakeStateSource()
     {
@@ -44,7 +60,11 @@ internal sealed class FakeStateSource
 
     public ShellState Current { get; private set; }
 
-    public IReadOnlyList<TaskItem> Tasks => _tasks;
+    /// <summary>Cópia: a fila escreve fora da thread de UI, que é quem lê.</summary>
+    public IReadOnlyList<TaskItem> Tasks
+    {
+        get { lock (_gate) return [.. _tasks]; }
+    }
 
     public IReadOnlyList<AgendaItem> Agenda => _agenda;
 
@@ -64,24 +84,39 @@ internal sealed class FakeStateSource
     /// <summary>Simula o re-consent semanal bem-sucedido (<c>SEVERITY.md</c> §6).</summary>
     public ShellState Reconnect() => Acknowledge();
 
-    public ShellState ToggleTask(string id)
+    /// <summary>Redesenha a barra levando em conta o que ainda não subiu.</summary>
+    public ShellState WithPending(IReadOnlyList<PendingWrite> pending)
     {
-        var i = _tasks.FindIndex(t => t.Id == id);
-        if (i >= 0) _tasks[i] = _tasks[i] with { IsCompleted = !_tasks[i].IsCompleted };
-
+        _pending = pending;
         return Current = Stamp(_script[_index]);
     }
 
-    public ShellState CreateTask(string title)
+    /// <summary>O executor que a <see cref="WriteQueue"/> injeta no lugar do Google.</summary>
+    public Task<WriteOutcome> ApplyAsync(PendingWrite write, CancellationToken ct)
     {
-        _tasks.Add(new TaskItem { Id = $"t{_nextId++}", Title = title });
-        return Current = Stamp(_script[_index]);
-    }
+        if (FailWrites)
+            return Task.FromResult(WriteOutcome.Failed(null, "Falha simulada por --fail-writes"));
 
-    public ShellState DeleteTask(string id)
-    {
-        _tasks.RemoveAll(t => t.Id == id);
-        return Current = Stamp(_script[_index]);
+        lock (_gate)
+        {
+            switch (write.Kind)
+            {
+                case WriteKind.Create:
+                    _tasks.Add(new TaskItem { Id = $"t{_nextId++}", Title = write.Title ?? "" });
+                    break;
+
+                case WriteKind.Complete:
+                    var i = _tasks.FindIndex(t => t.Id == write.TaskId);
+                    if (i >= 0) _tasks[i] = _tasks[i] with { IsCompleted = true };
+                    break;
+
+                case WriteKind.Delete:
+                    _tasks.RemoveAll(t => t.Id == write.TaskId);
+                    break;
+            }
+        }
+
+        return Task.FromResult(WriteOutcome.Ok);
     }
 
     /// <summary>
@@ -99,7 +134,9 @@ internal sealed class FakeStateSource
         }
         : state with
         {
-            OpenTasks = _tasks.Count(t => !t.IsCompleted),
+            // Pela projeção, não pela lista crua: senão o contador da barra discordaria do painel
+            // enquanto uma escrita estivesse a caminho.
+            OpenTasks = TaskProjection.Apply(Tasks, _pending).Count(r => !r.Item.IsCompleted),
             UnreadMail = Mail,
             LastSyncAt = DateTimeOffset.Now,
             Time = TimeStatusResolver.Resolve(

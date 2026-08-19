@@ -279,15 +279,33 @@ mentiria.*
 - [x] Criar e concluir tarefa (antecipado na Fase 1)
 - [x] **Excluir tarefa** (D-024) — ✕ no hover, com confirmação de dois cliques na própria linha.
       Excluir no Google Tasks não tem lixeira
-- [ ] Editar título e vencimento
-- [ ] Fila local de escritas offline, reproduzida ao voltar a conexão
-- [ ] Resolução de conflito: última escrita vence, Google ganha em empate
-- [ ] Atualização otimista da UI com reversão em caso de falha
-- [ ] Critério de aceite 6 do `SPEC.md` verificado nos dois sentidos
+- [x] **Fila local de escritas, reproduzida ao voltar a conexão** (D-029) — `WriteQueue` com
+      backoff de 2/8/30 s, três tentativas, e `pending-writes.json` em `%APPDATA%`. A janela de
+      perigo era real: `IsUsable` aceita `Failing` por até 10 min, então a barra ficava viva e
+      clicável com a rede caída, perdendo toda escrita em silêncio
+- [x] **Atualização otimista com reversão** (D-029) — `TaskProjection` aplica as intenções
+      pendentes sobre o retrato do servidor. A reversão não tem código próprio: o efeito otimista
+      só vale enquanto pendente. A projeção alimenta **barra e painel**, para os dois nunca
+      discordarem
+- [x] **Resolução de conflito: Google ganha empate** (D-029) — `IsConfirmed` compara a intenção
+      com o retrato; confirmada, ela deixa de existir. Não foi preciso escrever regra de conflito,
+      ela é consequência de a intenção ser temporária. O mesmo mecanismo impede duplicata quando a
+      resposta se perde mas a escrita deu certo
+- [ ] Editar título e vencimento — **próxima fatia.** Fica barata: dois valores a mais no
+      `WriteKind` e a UI de edição. Confiabilidade veio antes de propósito, para não empilhar
+      escrita nova sobre um mecanismo que perde escrita
+- [ ] Critério de aceite **7** do `SPEC.md` verificado nos dois sentidos — *o roadmap dizia 6, que
+      é o do meio-dia/17:00 entregue na Fase 3; o de tarefas é o 7*
 
 **Regra aprendida em D-024:** verificação de escrita usa o **modo demo**, nunca a conta real. Um
 clique de teste 15 pixels fora do alvo concluiu uma tarefa de verdade do usuário. `FakeStateSource`
-ganhou `DeleteTask` no mesmo commit.
+ganhou `DeleteTask` no mesmo commit, e em D-029 passou a expor `ApplyAsync` — o demo escreve pela
+**mesma fila** do caminho real, senão verificar em demo não provaria nada. `--demo --fail-writes`
+faz toda escrita falhar, para exercitar o que não dá para provocar sob demanda.
+
+**O defeito que só o teste visual pegou (D-029):** `Discard` gravava sem avisar a tela, e a linha
+descartada continuava lá. Os unitários não viam porque não observam o evento. É a terceira vez que
+a lição aparece — D-025, D-028 e agora: teste de unidade prova a decisão, não a fiação.
 
 ---
 
@@ -301,7 +319,8 @@ existia na barra sem dado por trás.*
 - [x] `gmail.readonly` no consent (restricted, permitido em Testing mode para test users)
 - [x] Contagem de não-lidos, polling de 60s, sem tocar em conteúdo
 - [x] Contador sempre neutro, nunca colorindo a barra (`SEVERITY.md` §2.4)
-- [ ] Critério de aceite 7 do `SPEC.md` verificado formalmente
+- [ ] Critério de aceite **8** do `SPEC.md` verificado formalmente — *o roadmap dizia 7, que é o
+      de tarefas, da Fase 4; o do contador de e-mail é o 8*
 - [ ] **Toast de `Offline`** — o único dos toasts cortados no D-028 que vale reabrir. Uma vez por
       semana, quando o *refresh token* expira (D-003): é a hora em que a barra deixa de ser
       confiável e o usuário não tem como saber sem olhar. Nasce aqui, e não na Fase 3, porque

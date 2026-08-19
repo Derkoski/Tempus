@@ -1477,3 +1477,123 @@ por si — é a única mudança estrutural do lote e não toca uma linha de lóg
 
 **Consequências.** A Fase 3 fecha. O `ToastPolicy` é puro e testado como o resto do domínio
 (regra 8); quem fala com o Windows é `ToastChannel`, que não decide nada.
+
+---
+
+## D-029 — Escrita otimista com reversão: o clique deixa de sumir
+
+**Status:** Aceita · 2026-08-19 · primeira fatia da Fase 4
+
+### O defeito
+
+As três escritas que existiam — concluir, criar, excluir — eram *fire-and-forget* com falha
+silenciosa: `catch (Exception) { return false; }` no `GoogleSync`, e o resultado descartado com
+`_ =` por quem chamava. Falhou? Nada acontece e ninguém fica sabendo.
+
+Três fatos tornavam isso concreto:
+
+1. **A janela de perigo dura dez minutos.** `IsUsable` aceita `Failing` desde que o último sync
+   tenha menos de 10 min. Com a rede caída a barra continua viva, o painel continua clicável, e
+   toda escrita nesse intervalo se perdia.
+2. **Criar era perda de dado de verdade.** A caixa de texto era limpa *antes* de o evento
+   disparar. O título digitado sumia da tela mesmo quando não virava tarefa nenhuma, e não havia
+   como reconstruí-lo.
+3. **A tela só mudava depois da ida e volta**, porque cada escrita disparava um `PollAsync`
+   completo — calendário, tarefas e Gmail — só para a linha sumir.
+
+### A intenção vira dado
+
+`PendingWrite` registra o que o usuário mandou fazer. É o que permite mostrar antes de confirmar,
+repetir depois, e sobreviver a um restart. `TaskProjection.Apply(servidor, pendentes)` é o que a
+tela mostra — função pura, como o resto do domínio (regra 8).
+
+**A regra que resume tudo:** o efeito otimista vale *enquanto* a escrita está pendente. Assim que
+ela falha, a linha volta à verdade do servidor e carrega o aviso. **A reversão não tem código
+próprio** — cai da mesma função.
+
+Isso **não fere a regra 10** ("nunca mostrar dado velho como se fosse atual"). Pendente não é dado
+velho: é o dado mais novo que existe, produzido pelo usuário há um instante. O que a regra proíbe
+é apresentar o passado como presente, e é justamente isso que a reversão evita.
+
+### A projeção é central, não só do painel
+
+A barra conta pela mesma projeção que o painel desenha. Sem isso o chip diria "2 tarefas abertas"
+enquanto a lista logo acima mostra uma — e duas superfícies que discordam custam mais confiança
+que a soma dos dois erros separados.
+
+### "Google ganha empate" cai de graça
+
+`TaskProjection.IsConfirmed` compara a intenção com o retrato do servidor. Confirmada, a intenção
+**deixa de existir** e o servidor volta a ser a única verdade. Não foi preciso escrever regra de
+conflito: ela é consequência de a intenção ser temporária por construção.
+
+O mesmo mecanismo impede **duplicata depois de um restart**, quando a escrita deu certo mas a
+resposta se perdeu. Para criação, sem timestamp no retrato, a comparação é por título aberto e
+igual — erra para o lado de não duplicar, que é o lado certo: uma criação engolida se refaz com um
+clique, e uma tarefa duplicada incomoda até alguém apagar na mão.
+
+### Repetição: três tentativas, e 403 não é permanente
+
+`WritePolicy` decide, `WriteQueue` executa — mesma divisão do D-028. Backoff de 2 s, 8 s, 30 s;
+depois de três tentativas vira "não salvou" e a decisão passa a ser do usuário.
+
+Permanente é só **400, 404 e 410**. O **403 fica de fora de propósito**: o Google usa 403 tanto
+para permissão negada quanto para `rateLimitExceeded`, e tratá-lo como permanente descartaria
+escrita legítima numa rajada. Permissão negada apenas gasta três tentativas antes de virar "não
+salvou", que é um final honesto.
+
+`Classify` recebe o **código HTTP**, não a exceção do SDK: com a exceção, o domínio passaria a
+depender do cliente HTTP e deixaria de ser testável sem ele.
+
+### A fila é persistida
+
+`%APPDATA%\Tempus\pending-writes.json`. O caso que dói é o que atravessa o fechamento do app: você
+digita uma tarefa com a rede caída e fecha o notebook. Concluir e excluir se refazem olhando a
+lista; um título digitado, não.
+
+Ao subir, `Pending` volta a tentar com tentativas zeradas — o app caiu, mas a rede pode ter
+voltado. `Failed` continua esperando o clique. Fila vazia **apaga** o arquivo em vez de gravar
+`[]`: o estado normal é não dever nada, e a ausência torna isso óbvio para quem olhar a pasta.
+
+### O painel
+
+Pendente é **esmaecida** — sem cor nova, só menos presença. Falhada ganha a pílula `não salvou`,
+na cor crítica que as vencidas já usam, porque quer dizer a mesma coisa: isto precisa de você. O
+motivo exato fica no tooltip.
+
+Numa linha falhada o ✕ significa **descartar a alteração**, não apagar a tarefa, e a palavra da
+confirmação muda junto — "Descartar?" em vez de "Excluir?". Um glifo com dois significados só é
+honesto se disser qual está em jogo na hora de decidir.
+
+Efeito colateral bem-vindo: limpar a caixa ao criar passou a ser honesto, porque a linha
+provisória aparece na hora. O defeito 2 morreu sem tratamento próprio.
+
+### `--demo --fail-writes`
+
+O modo demo passa pela **mesma fila** e chega em `FakeStateSource.ApplyAsync`. Se fosse um atalho,
+a regra do D-024 — verificar escrita em demo, nunca na conta real — não provaria nada sobre o
+código que roda de verdade. `--fail-writes` faz toda escrita falhar, para exercitar o caminho que
+não dá para provocar sob demanda.
+
+Fila própria, com arquivo próprio (`pending-writes.demo.json`): escrita falsa não pode entrar na
+fila que vai subir para a conta de verdade.
+
+### O defeito que só o teste visual pegou
+
+`Discard` gravava sem avisar: a intenção saía da fila e a linha continuava na tela até algo não
+relacionado forçar um desenho. Os testes unitários não viam porque não observam o evento. Agora
+**toda** mudança passa por um `Announce()` que grava e avisa juntos — e há teste de regressão
+para os quatro caminhos.
+
+É a mesma lição do D-025 e do D-028: teste de unidade prova a decisão, não a fiação.
+
+### O que ficou de fora
+
+**Editar título e vencimento** é a próxima fatia, e fica barata: dois valores a mais no
+`WriteKind` e a UI de edição. Foi decidido com o usuário fazer confiabilidade primeiro —
+acrescentar duas escritas novas sobre um mecanismo que perde escrita seria construir sobre o
+problema.
+
+**Escrita falhada não vira sinal de severidade.** Com o painel fechado ela é invisível, e isso
+pede um sinal na barra — mas sinal novo é cor nova, que exige entrada na tabela do `SEVERITY.md` e
+revisão de I1–I8 (regra 1). Virou **Q-02** em `SEVERITY.md` §9 em vez de virar suposição no código.
