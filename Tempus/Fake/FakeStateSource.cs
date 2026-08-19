@@ -51,6 +51,23 @@ internal sealed class FakeStateSource
             new TaskItem { Id = "t4", Title = "Preparar slides da Review de sprint", Due = today },
             new TaskItem { Id = "t5", Title = "Avaliar migração para .NET 10", Due = today.AddDays(6) },
             new TaskItem { Id = "t6", Title = "Anotar ideias para o Tempus" },
+
+            // Duas já concluídas, para a seção de desfazer ter o que mostrar sem exigir que
+            // alguém conclua uma antes de poder testá-la (D-030).
+            new TaskItem
+            {
+                Id = "t7",
+                Title = "Fechar o apontamento de horas",
+                IsCompleted = true,
+                CompletedAt = DateTimeOffset.Now.AddMinutes(-40),
+            },
+            new TaskItem
+            {
+                Id = "t8",
+                Title = "Responder a pesquisa de clima",
+                IsCompleted = true,
+                CompletedAt = DateTimeOffset.Now.AddDays(-2),
+            },
         ];
 
         _agenda = BuildAgenda();
@@ -107,7 +124,18 @@ internal sealed class FakeStateSource
 
                 case WriteKind.Complete:
                     var i = _tasks.FindIndex(t => t.Id == write.TaskId);
-                    if (i >= 0) _tasks[i] = _tasks[i] with { IsCompleted = true };
+                    if (i >= 0)
+                        _tasks[i] = _tasks[i] with
+                        {
+                            IsCompleted = true,
+                            CompletedAt = DateTimeOffset.Now,
+                        };
+                    break;
+
+                case WriteKind.Reopen:
+                    var j = _tasks.FindIndex(t => t.Id == write.TaskId);
+                    if (j >= 0)
+                        _tasks[j] = _tasks[j] with { IsCompleted = false, CompletedAt = null };
                     break;
 
                 case WriteKind.Delete:

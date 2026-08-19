@@ -23,6 +23,13 @@ internal sealed record SyncOptions
     /// <summary>Quanto tempo sem input do usuário até considerar ocioso.</summary>
     public int IdleAfterSeconds { get; init; } = 180;
 
+    /// <summary>
+    /// Por quantos dias para trás as tarefas concluídas continuam alcançáveis para desfazer
+    /// (D-030). Sete cobre "marquei sem querer" e "mudei de ideia na semana"; ilimitado só faria a
+    /// lista crescer com coisa que ninguém vai reabrir.
+    /// </summary>
+    public int CompletedDays { get; init; } = 7;
+
     public TimeSpan Active => TimeSpan.FromSeconds(Math.Max(5, ActiveSeconds));
     public TimeSpan Idle => TimeSpan.FromSeconds(Math.Max(ActiveSeconds, IdleSeconds));
     public TimeSpan IdleAfter => TimeSpan.FromSeconds(Math.Max(30, IdleAfterSeconds));

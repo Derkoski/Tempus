@@ -1597,3 +1597,76 @@ problema.
 **Escrita falhada não vira sinal de severidade.** Com o painel fechado ela é invisível, e isso
 pede um sinal na barra — mas sinal novo é cor nova, que exige entrada na tabela do `SEVERITY.md` e
 revisão de I1–I8 (regra 1). Virou **Q-02** em `SEVERITY.md` §9 em vez de virar suposição no código.
+
+---
+
+## D-030 — Desfazer conclusão: a metade que faltava do clique único
+
+**Status:** Aceita · 2026-08-19 · encontrada em uso
+
+### O buraco
+
+O usuário marcou uma tarefa como concluída sem querer e **não tinha como desfazer**. A tarefa
+some da lista no instante do clique e o painel não conhece concluídas — a única saída era abrir o
+Google Tasks no navegador.
+
+Isso não é só uma funcionalidade ausente: é uma **incoerência do próprio modelo de gesto**. O
+D-024 deu dois cliques ao ✕ porque excluir não tem volta. Concluir ficou com um clique só, ao lado
+do ✕, sob a premissa de que é reversível. **A premissa era falsa** — não havia volta. Ou concluir
+encarecia para dois cliques, ou ganhava a volta. Encarecer o gesto mais frequente do painel para
+proteger contra um erro raro é o negócio errado; então ganhou a volta.
+
+### Duas requisições, não uma
+
+`showCompleted` na mesma consulta seria mais curto e está errado por dois motivos:
+
+- **`MaxResults` é compartilhado.** Um monte de concluídas empurraria tarefas abertas para fora do
+  retrato. Perder aberta para mostrar concluída é o pior negócio possível aqui.
+- **`completedMin` filtra por data de conclusão**, e é plausível que exclua quem não tem nenhuma —
+  que é toda tarefa aberta. Nenhuma documentação garante o contrário.
+
+Separadas, cada consulta tem um trabalho e as duas dúvidas somem. A segunda ainda é filtrada no
+cliente para `IsCompleted`, porque ela pode devolver abertas e duplicá-las contaria a mesma tarefa
+duas vezes no chip da barra.
+
+Custo: dobra as chamadas de `tasks.list` por lista. Com uma ou duas listas e cadência de 15 s
+ativos, é irrelevante perto da quota — e a alternativa era um retrato que às vezes mente.
+
+`showHidden` junto com `showCompleted`: no Google Tasks concluir **também esconde**, e sem os dois
+a tarefa não volta.
+
+### Janela de sete dias
+
+`Sync.CompletedDays`, padrão 7. Cobre "marquei sem querer" e "mudei de ideia na semana". Ilimitado
+só faria a lista crescer com coisa que ninguém vai reabrir, e ainda por cima competindo por
+`MaxResults`.
+
+### O gesto é simétrico
+
+Clicar numa linha aberta marca; clicar numa concluída desmarca. **O mesmo gesto nos dois sentidos**
+torna a volta óbvia sem precisar de botão nomeado — quem descobriu como concluir já sabe como
+desfazer.
+
+A seção nasce **recolhida**, uma linha só (`▸ Concluídas · 2`). O painel responde "o que está
+aberto", e concluída não é resposta para isso; mas precisa estar ao alcance de um clique, senão o
+buraco continua. O estado de expansão mora no painel e sobrevive aos redesenhos — um sync não pode
+recolher a seção embaixo do clique do usuário —, mas **não** é persistido: cada abertura volta a
+responder a pergunta principal.
+
+Ordenadas da **mais recente para a mais antiga**: a marcada sem querer é a última, e fica no topo,
+exatamente onde o clique que a desfaz precisa alcançar. É por isso que `TaskItem` ganhou
+`CompletedAt`, e por isso ele converte para o fuso local — ao contrário do vencimento, aqui a hora
+importa.
+
+### Assimetria na confirmação
+
+Para `Complete`, sumir do retrato **confirma** (a leitura de abertas não traz concluídas). Para
+`Reopen`, sumir **não** confirma: a tarefa pode ter caído da janela de sete dias em vez de ter
+voltado a aberta, e confirmar aí seria dizer "pronto" sobre algo que talvez não aconteceu. `Reopen`
+só confirma vendo a tarefa aberta no retrato.
+
+### Custou pouco por causa do D-029
+
+`Reopen` é um valor a mais no `WriteKind`, um `case` na projeção e um `case` no executor. Ganha de
+graça a resposta imediata, a repetição automática, a reversão e a persistência. Era a aposta feita
+ao fazer confiabilidade antes de funcionalidade, e ela se pagou na primeira vez que foi cobrada.

@@ -91,6 +91,45 @@ public class TaskProjectionTests
         Assert.True(linha.HasFailed);
     }
 
+    // ---------------------------------------------------------------- desfazer conclusão
+
+    [Fact]
+    public void Reabrir_pendente_devolve_a_tarefa_a_lista_aberta()
+    {
+        var rows = TaskProjection.Apply(
+            [Task("t1", done: true)], [Write(WriteKind.Reopen, "t1")]);
+
+        var linha = rows.Single();
+        Assert.False(linha.Item.IsCompleted);
+        Assert.True(linha.IsPending);
+    }
+
+    [Fact]
+    public void Reabrir_que_falhou_deixa_a_tarefa_concluida_de_novo()
+    {
+        var rows = TaskProjection.Apply(
+            [Task("t1", done: true)], [Failed(Write(WriteKind.Reopen, "t1"))]);
+
+        var linha = rows.Single();
+        Assert.True(linha.Item.IsCompleted);
+        Assert.True(linha.HasFailed);
+    }
+
+    /// <summary>
+    /// Assimetria de propósito: para <c>Complete</c>, sumir do retrato confirma; para
+    /// <c>Reopen</c>, não. Uma concluída pode ter caído da janela de sete dias em vez de ter
+    /// voltado a aberta, e confirmar aí seria dizer "pronto" sobre algo que talvez não aconteceu.
+    /// </summary>
+    [Fact]
+    public void Reabrir_so_confirma_vendo_a_tarefa_aberta_no_retrato()
+    {
+        var write = Write(WriteKind.Reopen, "t1");
+
+        Assert.False(TaskProjection.IsConfirmed(write, [Task("t1", done: true)]));
+        Assert.False(TaskProjection.IsConfirmed(write, []));
+        Assert.True(TaskProjection.IsConfirmed(write, [Task("t1")]));
+    }
+
     // ---------------------------------------------------------------- confirmação
 
     [Fact]

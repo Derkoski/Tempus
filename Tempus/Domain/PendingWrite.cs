@@ -6,6 +6,13 @@ internal enum WriteKind
     Create,
     Complete,
     Delete,
+
+    /// <summary>
+    /// Desfaz um <see cref="Complete"/>. É a metade que faltava para concluir poder ser um clique
+    /// só: excluir pede dois cliques porque não tem volta, e concluir só pode pedir um porque tem
+    /// (D-030).
+    /// </summary>
+    Reopen,
 }
 
 internal enum WriteState

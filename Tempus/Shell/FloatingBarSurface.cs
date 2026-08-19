@@ -57,6 +57,9 @@ internal sealed class FloatingBarSurface : IShellSurface
     /// <summary>"Deixa pra lá": abandona a intenção sem tocar no Google.</summary>
     public event EventHandler<string>? TaskWriteDiscarded;
 
+    /// <summary>Desmarcar uma concluída, devolvendo-a à lista de abertas.</summary>
+    public event EventHandler<string>? TaskReopened;
+
     public event EventHandler<string>? MeetingActivated;
 
     public void Show() => _window.Show();
@@ -83,6 +86,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         panel.TaskDeleted += (_, id) => TaskDeleted?.Invoke(this, id);
         panel.WriteRetried += (_, id) => TaskWriteRetried?.Invoke(this, id);
         panel.WriteDiscarded += (_, id) => TaskWriteDiscarded?.Invoke(this, id);
+        panel.TaskReopened += (_, id) => TaskReopened?.Invoke(this, id);
         panel.Dismissed += (_, _) => CloseTasks();
 
         _tasks = panel;

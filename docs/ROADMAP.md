@@ -291,6 +291,10 @@ mentiria.*
       com o retrato; confirmada, ela deixa de existir. Não foi preciso escrever regra de conflito,
       ela é consequência de a intenção ser temporária. O mesmo mecanismo impede duplicata quando a
       resposta se perde mas a escrita deu certo
+- [x] **Desfazer conclusão** (D-030) — seção "Concluídas" recolhida no rodapé do painel, com
+      janela de 7 dias; clicar numa concluída desmarca, simétrico a clicar numa aberta para
+      marcar. Encontrado em uso: concluir tinha um clique só sob a premissa de ser reversível, e
+      não era. Custou um `WriteKind` a mais porque o D-029 já tinha feito o caminho
 - [ ] Editar título e vencimento — **próxima fatia.** Fica barata: dois valores a mais no
       `WriteKind` e a UI de edição. Confiabilidade veio antes de propósito, para não empilhar
       escrita nova sobre um mecanismo que perde escrita

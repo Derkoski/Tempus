@@ -23,6 +23,15 @@ internal partial class TasksPanel : Window
     private readonly PanelHost _host;
     private readonly Palette _palette;
 
+    /// <summary>
+    /// Estado da seção de concluídas. Mora no painel, e não em disco: ele responde "o que está
+    /// aberto", e cada abertura deve voltar a responder isso. Mas sobrevive aos redesenhos, senão
+    /// um sync recolheria a seção embaixo do clique do usuário.
+    /// </summary>
+    private bool _showCompleted;
+
+    private IReadOnlyList<TaskRow> _last = [];
+
     public TasksPanel(Palette palette, NativeMethods.RECT anchor)
     {
         _palette = palette;
@@ -59,6 +68,9 @@ internal partial class TasksPanel : Window
     /// <summary>"Deixa pra lá": abandona a intenção. Carrega o id da <b>intenção</b>.</summary>
     public event EventHandler<string>? WriteDiscarded;
 
+    /// <summary>Desmarcar uma concluída: ela volta para a lista de abertas. Carrega o id.</summary>
+    public event EventHandler<string>? TaskReopened;
+
     /// <summary>Perdeu o foco ou levou <c>Esc</c>: a superfície deve fechar este painel.</summary>
     public event EventHandler? Dismissed;
 
@@ -66,6 +78,8 @@ internal partial class TasksPanel : Window
 
     public void Render(IReadOnlyList<TaskRow> tasks)
     {
+        _last = tasks;
+
         var open = tasks.Where(t => !t.Item.IsCompleted).ToList();
         var today = DateOnly.FromDateTime(DateTime.Today);
         var failed = open.Count(r => r.HasFailed);
@@ -90,26 +104,185 @@ internal partial class TasksPanel : Window
                 Margin = new Thickness(6, 14, 6, 18),
                 Foreground = new SolidColorBrush(_palette.Muted),
             });
-            return;
         }
-
-        // A ordem dos buckets é a ordem do enum: vencidas primeiro.
-        var buckets = open
-            .GroupBy(r => r.Item.Bucket(today))
-            .OrderBy(g => g.Key);
-
-        foreach (var bucket in buckets)
+        else
         {
-            Groups.Children.Add(BuildGroupHeader(bucket.Key, bucket.Count()));
+            // A ordem dos buckets é a ordem do enum: vencidas primeiro.
+            var buckets = open
+                .GroupBy(r => r.Item.Bucket(today))
+                .OrderBy(g => g.Key);
 
-            var ordered = bucket
-                .OrderBy(r => r.Item.Due ?? DateOnly.MaxValue)
-                .ThenBy(r => r.Item.Title);
+            foreach (var bucket in buckets)
+            {
+                Groups.Children.Add(BuildGroupHeader(bucket.Key, bucket.Count()));
 
-            foreach (var row in ordered) Groups.Children.Add(BuildRow(row, bucket.Key));
+                var ordered = bucket
+                    .OrderBy(r => r.Item.Due ?? DateOnly.MaxValue)
+                    .ThenBy(r => r.Item.Title);
+
+                foreach (var row in ordered) Groups.Children.Add(BuildRow(row, bucket.Key));
+            }
         }
 
+        RenderCompleted([.. tasks.Where(t => t.Item.IsCompleted)]);
         RepositionAfterLayout();
+    }
+
+    /// <summary>
+    /// A seção de concluídas, recolhida por padrão.
+    /// <para>
+    /// O painel responde "o que está aberto", e concluída não é resposta para isso — por isso ela
+    /// entra atrás de um clique, e não na lista. Mas precisa existir: sem volta, concluir seria um
+    /// gesto irreversível de um clique só, ao lado de outro clicável. O ✕ ganhou dois cliques pelo
+    /// mesmo motivo (D-024); aqui a saída foi dar a volta em vez de encarecer o gesto (D-030).
+    /// </para>
+    /// <para>
+    /// Ordenadas da mais recente para a mais antiga: a marcada sem querer é a última, e fica no
+    /// topo, ao alcance do clique que a desfaz.
+    /// </para>
+    /// </summary>
+    private void RenderCompleted(IReadOnlyList<TaskRow> done)
+    {
+        if (done.Count == 0) return;
+
+        Groups.Children.Add(BuildCompletedHeader(done.Count));
+
+        if (!_showCompleted) return;
+
+        var ordered = done
+            .OrderByDescending(r => r.Item.CompletedAt ?? DateTimeOffset.MinValue)
+            .ThenBy(r => r.Item.Title);
+
+        foreach (var row in ordered) Groups.Children.Add(BuildCompletedRow(row));
+    }
+
+    private UIElement BuildCompletedHeader(int count)
+    {
+        var header = new Border
+        {
+            Padding = new Thickness(6, 10, 6, 4),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            ToolTip = _showCompleted ? "Ocultar concluídas" : "Mostrar concluídas para desmarcar",
+            Child = new TextBlock
+            {
+                Text = $"{(_showCompleted ? "▾" : "▸")}  Concluídas  ·  {count}",
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(_palette.Muted),
+            },
+        };
+
+        header.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            _showCompleted = !_showCompleted;
+            Render(_last);
+        };
+
+        return header;
+    }
+
+    /// <summary>
+    /// Uma concluída. Clicar desmarca — simétrico à linha aberta, onde clicar marca. O mesmo gesto
+    /// nos dois sentidos é o que torna a volta óbvia sem precisar de botão nomeado.
+    /// </summary>
+    private UIElement BuildCompletedRow(TaskRow entry)
+    {
+        var row = new Border
+        {
+            CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(6, 7, 8, 7),
+            Background = Brushes.Transparent,
+            Cursor = entry.IsPending ? Cursors.Arrow : Cursors.Hand,
+            Opacity = entry.IsPending ? 0.55 : 1.0,
+            ToolTip = "Clique para desmarcar e devolver à lista",
+        };
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        // Caixa marcada, desenhada — mesma decisão da aberta: nada de glifo de fonte, para não
+        // depender de qual versão do Segoe está instalada.
+        var box = new Border
+        {
+            Width = 15,
+            Height = 15,
+            CornerRadius = new CornerRadius(3),
+            Background = new SolidColorBrush(_palette.Muted),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 9, 0),
+            Child = new TextBlock
+            {
+                Text = "✓",
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(_palette.PanelBackground),
+            },
+        };
+        Grid.SetColumn(box, 0);
+
+        var title = new TextBlock
+        {
+            Text = entry.Item.Title,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextDecorations = TextDecorations.Strikethrough,
+            Foreground = new SolidColorBrush(_palette.Muted),
+        };
+        Grid.SetColumn(title, 1);
+
+        var status = entry.HasFailed
+            ? BuildRetryAction(entry)
+            : new TextBlock
+            {
+                Text = CompletedLabel(entry.Item.CompletedAt),
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0),
+                Foreground = new SolidColorBrush(_palette.Muted),
+            };
+        Grid.SetColumn(status, 2);
+
+        grid.Children.Add(box);
+        grid.Children.Add(title);
+        grid.Children.Add(status);
+        row.Child = grid;
+
+        if (entry.IsPending) return row;
+
+        var hover = new SolidColorBrush(_palette.RowHover);
+        row.MouseEnter += (_, _) => row.Background = hover;
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+        row.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+
+            // Falha pendente de decisão trava o gesto, como na linha aberta: duas intenções
+            // conflitantes sobre a mesma tarefa na fila não teriam resposta certa.
+            if (entry.HasFailed) return;
+
+            TaskReopened?.Invoke(this, entry.Item.Id);
+        };
+
+        return row;
+    }
+
+    private static string CompletedLabel(DateTimeOffset? at)
+    {
+        if (at is not { } when) return "";
+
+        var days = (DateTime.Today - when.LocalDateTime.Date).Days;
+
+        return days switch
+        {
+            <= 0 => when.ToLocalTime().ToString("HH:mm"),
+            1 => "ontem",
+            _ => $"há {days} dias",
+        };
     }
 
     /// <summary>

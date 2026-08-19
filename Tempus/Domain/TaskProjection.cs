@@ -60,6 +60,14 @@ internal static class TaskProjection
                     });
                     break;
 
+                case WriteKind.Reopen:
+                    Replace(rows, write.TaskId, row => row with
+                    {
+                        Item = row.Item with { IsCompleted = false, CompletedAt = null },
+                        Write = write,
+                    });
+                    break;
+
                 case WriteKind.Delete:
                     rows.RemoveAll(r => r.Item.Id == write.TaskId);
                     break;
@@ -84,9 +92,14 @@ internal static class TaskProjection
         // um clique, e uma tarefa duplicada incomoda até alguém apagar na mão.
         WriteKind.Create => server.Any(t => !t.IsCompleted && SameTitle(t.Title, write.Title)),
 
-        // Ausente conta como concluída: a leitura pede ShowCompleted = false, então tarefa
-        // concluída simplesmente some do retrato.
+        // Ausente também conta: a leitura traz concluídas só de uma janela recente (D-030), então
+        // uma concluída antiga some do retrato — e sumir é indistinguível de estar concluída.
         WriteKind.Complete => server.FirstOrDefault(t => t.Id == write.TaskId) is null or { IsCompleted: true },
+
+        // Reabrir é o oposto, e ausente aqui NÃO confirma: se a tarefa saiu do retrato, ela pode
+        // ter caído da janela de concluídas em vez de ter voltado a aberta. Confirmar seria dizer
+        // "pronto" sobre algo que talvez continue concluída.
+        WriteKind.Reopen => server.Any(t => t.Id == write.TaskId && !t.IsCompleted),
 
         WriteKind.Delete => server.All(t => t.Id != write.TaskId),
 

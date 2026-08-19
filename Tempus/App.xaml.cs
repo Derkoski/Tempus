@@ -205,7 +205,7 @@ public partial class App : Application
         var auth = new GoogleAuth(
             GoogleOptions.ClientSecretPath, GoogleOptions.TokenDirectory, options.LoginHint);
 
-        var sync = new GoogleSync(auth, cadence, options.MailQuery);
+        var sync = new GoogleSync(auth, cadence, options.MailQuery, cadence.CompletedDays);
         _sync = sync;
 
         // A fila é criada aqui porque precisa do executor, que é este sync. O store, não: ele já
@@ -298,6 +298,7 @@ public partial class App : Application
 
         surface.TaskToggled += (_, id) => EnqueueFor(surface, WriteKind.Complete, id);
         surface.TaskDeleted += (_, id) => EnqueueFor(surface, WriteKind.Delete, id);
+        surface.TaskReopened += (_, id) => EnqueueFor(surface, WriteKind.Reopen, id);
 
         surface.TaskWriteRetried += (_, id) => writes.Retry(id);
         surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);
@@ -656,6 +657,9 @@ public partial class App : Application
 
         surface.TaskDeleted += (_, id) => EnqueueDemo(surface, demo, PendingWrite.For(
             WriteKind.Delete, DateTimeOffset.Now) with { TaskId = id });
+
+        surface.TaskReopened += (_, id) => EnqueueDemo(surface, demo, PendingWrite.For(
+            WriteKind.Reopen, DateTimeOffset.Now) with { TaskId = id });
 
         surface.TaskWriteRetried += (_, id) => writes.Retry(id);
         surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);

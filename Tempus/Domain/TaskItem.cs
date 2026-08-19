@@ -18,6 +18,13 @@ internal sealed record TaskItem
 
     public bool IsCompleted { get; init; }
 
+    /// <summary>
+    /// Quando foi concluída. Serve para ordenar a lista de concluídas da mais recente para a mais
+    /// antiga — que é a ordem em que a tarefa marcada sem querer está no topo, ao alcance do
+    /// clique que a desfaz (D-030).
+    /// </summary>
+    public DateTimeOffset? CompletedAt { get; init; }
+
     public TaskBucket Bucket(DateOnly today) => Due switch
     {
         null => TaskBucket.NoDate,

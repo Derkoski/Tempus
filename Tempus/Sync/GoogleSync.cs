@@ -39,6 +39,10 @@ internal sealed class GoogleSync : IDisposable
     private readonly GoogleAuth _auth;
     private readonly SyncOptions _options;
     private readonly string _mailQuery;
+
+    /// <summary>Por quantos dias para trás as concluídas continuam alcançáveis (D-030).</summary>
+    private readonly int _completedDays;
+
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private CalendarService? _calendar;
@@ -51,11 +55,12 @@ internal sealed class GoogleSync : IDisposable
     private int? _unreadMail;
     private DateTimeOffset _unreadAt;
 
-    public GoogleSync(GoogleAuth auth, SyncOptions options, string mailQuery)
+    public GoogleSync(GoogleAuth auth, SyncOptions options, string mailQuery, int completedDays = 7)
     {
         _auth = auth;
         _options = options;
         _mailQuery = mailQuery;
+        _completedDays = completedDays;
     }
 
     public event EventHandler<SyncSnapshot>? Updated;
@@ -117,6 +122,14 @@ internal sealed class GoogleSync : IDisposable
                 case WriteKind.Complete:
                     await _tasks.Tasks
                         .Patch(new GTask { Status = "completed" }, listId, write.TaskId)
+                        .ExecuteAsync(ct);
+                    break;
+
+                // Voltar o status para needsAction limpa o carimbo de conclusão e desesconde a
+                // tarefa; não é preciso mexer em `completed` nem em `hidden` à mão.
+                case WriteKind.Reopen:
+                    await _tasks.Tasks
+                        .Patch(new GTask { Status = "needsAction" }, listId, write.TaskId)
                         .ExecuteAsync(ct);
                     break;
 
@@ -447,30 +460,52 @@ internal sealed class GoogleSync : IDisposable
 
             defaultList ??= list.Id; // a primeira lista é a padrão do Google Tasks
 
-            var request = _tasks!.Tasks.List(list.Id);
-            request.ShowCompleted = false;
-            request.ShowHidden = false;
-            request.MaxResults = 100;
+            var open = _tasks!.Tasks.List(list.Id);
+            open.ShowCompleted = false;
+            open.ShowHidden = false;
+            open.MaxResults = 100;
 
-            var response = await request.ExecuteAsync(ct);
+            result.AddRange(Read(await open.ExecuteAsync(ct), list.Id));
 
-            foreach (var task in response.Items ?? [])
-            {
-                if (task.Id is null || string.IsNullOrWhiteSpace(task.Title)) continue;
-                if (task.Deleted == true) continue;
+            // Segunda requisição, e não `showCompleted` na primeira, por dois motivos. Um: com
+            // `MaxResults` compartilhado, um monte de concluídas empurraria tarefas abertas para
+            // fora do retrato — perder aberta para mostrar concluída é o pior negócio possível.
+            // Dois: `completedMin` filtra por data de conclusão, e é plausível que exclua quem não
+            // tem nenhuma, que é justamente toda tarefa aberta. Separadas, cada consulta tem um
+            // trabalho e nenhuma das dúvidas importa.
+            var done = _tasks.Tasks.List(list.Id);
+            done.ShowCompleted = true;
+            done.ShowHidden = true; // no Google Tasks, concluir também esconde
+            done.CompletedMin = DateTime.UtcNow
+                .AddDays(-Math.Max(1, _completedDays))
+                .ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+            done.MaxResults = 100;
 
-                result.Add(new TaskItem
-                {
-                    Id = task.Id,
-                    ListId = list.Id,
-                    Title = task.Title,
-                    Due = ReadDue(task),
-                    IsCompleted = task.Status == "completed",
-                });
-            }
+            // Filtrado no cliente também: a consulta pode devolver abertas, e elas já vieram da
+            // primeira — duplicar contaria a mesma tarefa duas vezes no chip da barra.
+            result.AddRange(Read(await done.ExecuteAsync(ct), list.Id).Where(t => t.IsCompleted));
         }
 
         return (result, defaultList);
+    }
+
+    private static IEnumerable<TaskItem> Read(Google.Apis.Tasks.v1.Data.Tasks response, string listId)
+    {
+        foreach (var task in response.Items ?? [])
+        {
+            if (task.Id is null || string.IsNullOrWhiteSpace(task.Title)) continue;
+            if (task.Deleted == true) continue;
+
+            yield return new TaskItem
+            {
+                Id = task.Id,
+                ListId = listId,
+                Title = task.Title,
+                Due = ReadDue(task),
+                IsCompleted = task.Status == "completed",
+                CompletedAt = ReadCompleted(task),
+            };
+        }
     }
 
     private async Task<IList<GTaskList>> GetTaskListsAsync(CancellationToken ct)
@@ -543,6 +578,24 @@ internal sealed class GoogleSync : IDisposable
             System.Globalization.DateTimeStyles.RoundtripKind,
             out var due)
             ? DateOnly.FromDateTime(due.UtcDateTime.Date)
+            : null;
+    }
+
+    /// <summary>
+    /// Instante da conclusão. Aqui a hora <b>importa</b> — é o que ordena as concluídas da mais
+    /// recente para a mais antiga, deixando a marcada sem querer no topo (D-030). Por isso, ao
+    /// contrário do vencimento, este converte para o fuso local.
+    /// </summary>
+    private static DateTimeOffset? ReadCompleted(GTask task)
+    {
+        if (string.IsNullOrWhiteSpace(task.Completed)) return null;
+
+        return DateTimeOffset.TryParse(
+            task.Completed,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind,
+            out var completed)
+            ? completed.ToLocalTime()
             : null;
     }
 
