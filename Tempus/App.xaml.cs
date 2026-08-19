@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Tempus.Domain;
 using Tempus.Fake;
+using Tempus.Interop;
 using Tempus.Shell;
 using Tempus.Sync;
 
@@ -30,6 +31,25 @@ public partial class App : Application
     private readonly SeverityGate _gate = new();
     private DayEndedOptions _dayEnded = DayEndedOptions.Default;
 
+    private ToastOptions _toastOptions = ToastOptions.Default;
+    private ToastChannel? _toasts;
+
+    /// <summary>
+    /// Chaves de toast já emitidas hoje (§5). Em memória, como o <see cref="_activeEventId"/>: um
+    /// restart com o vermelho ainda de pé reemitir o aviso é o comportamento <b>certo</b>, porque
+    /// a situação continua sem resolução. Persistir isto compraria silêncio depois de um restart —
+    /// que é exatamente quando o usuário mais precisa de um lembrete do que ficou aberto.
+    /// </summary>
+    private readonly HashSet<string> _toastsSent = [];
+
+    /// <summary>
+    /// O sinal que a barra está exibindo, guardado pelo <see cref="BuildState"/> para o
+    /// <see cref="Rerender"/> decidir sobre interromper. Fica aqui, e não no
+    /// <see cref="ShellState"/>, porque o estado é o que a superfície desenha — e toast não é
+    /// desenho, é outra saída.
+    /// </summary>
+    private Signal? _shownSignal;
+
     /// <summary>
     /// Qual reuniao o usuario declarou estar atendendo entre sobrepostas (SEVERITY 8).
     /// <para>
@@ -53,6 +73,19 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Antes de qualquer janela: depois de a primeira subir, o shell já agrupou o processo sob
+        // a identidade herdada de quem o lançou, e o toast sairia com o nome errado — ou não sairia.
+        AppIdentity.Declare();
+
+        // Antes do mutex de instância única, de propósito: a sonda é diagnóstico e precisa rodar
+        // com a barra já no ar, que é a situação em que se desconfia das notificações.
+        if (e.Args.Contains("--toast-probe", StringComparer.OrdinalIgnoreCase))
+        {
+            RunToastProbe();
+            Shutdown();
+            return;
+        }
+
         // Duas barras sobrepostas no mesmo pixel são um bug difícil de diagnosticar.
         _singleInstance = new Mutex(initiallyOwned: true, @"Local\Tempus.SingleInstance", out var isFirst);
         if (!isFirst)
@@ -66,6 +99,7 @@ public partial class App : Application
         var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
         _thresholds = ThresholdsLoader.Load(settingsPath);
         _dayEnded = ThresholdsLoader.LoadDayEnded(settingsPath);
+        _toastOptions = ThresholdsLoader.LoadToasts(settingsPath);
         _dismissals = new BreakDismissalStore(GoogleOptions.DataDirectory);
         _acks = new AcknowledgementStore(GoogleOptions.DataDirectory);
         _acksDay = DateOnly.FromDateTime(DateTime.Today);
@@ -140,6 +174,14 @@ public partial class App : Application
 
         surface.SettingsRequested += (_, _) => ShowSettings(isFirstRun: false);
 
+        // O modo demo fica de fora: ele percorre os estados a cada 4 s, e um demo que dispara
+        // notificação de verdade seria insuportável — e enganoso, porque anunciaria dado falso.
+        if (_toastOptions.Enabled && !isDemo)
+        {
+            _toasts = new ToastChannel();
+            _toasts.Open();
+        }
+
         if (isDemo)
             StartDemo(surface);
         else
@@ -185,7 +227,15 @@ public partial class App : Application
 
             if (seen.Count == 0) return;
 
-            foreach (var occurrence in seen) _acknowledged.Add(occurrence!);
+            foreach (var occurrence in seen)
+            {
+                _acknowledged.Add(occurrence!);
+
+                // "Eu vi" apaga a cor e o eco junto. Deixar o aviso na Central depois de resolvido
+                // é mostrar dado velho com cara de atual — a regra 10 vale para a notificação
+                // também, não só para os contadores.
+                _toasts?.Withdraw(ToastPolicy.TagFor(occurrence!));
+            }
 
             _acks!.Save(_acksDay, _acknowledged);
 
@@ -261,6 +311,10 @@ public partial class App : Application
         // avaliá-los produziria uma resposta com cara de certeza.
         if (!snapshot.IsUsable(now))
         {
+            // Sem sinal avaliado não há o que anunciar. É o §0 valendo também para a interrupção:
+            // offline não é "está tudo bem", é "não sabemos" — e não se acorda ninguém para isso.
+            _shownSignal = null;
+
             return new ShellState
             {
                 IsOffline = true,
@@ -277,6 +331,10 @@ public partial class App : Application
         {
             _acksDay = today;
             _acknowledged = _acks?.Load(today) ?? [];
+
+            // As ocorrências de fronteira do dia são identificadas pela data (§7), então guardar as
+            // de ontem só faria o app calar o primeiro aviso de hoje.
+            _toastsSent.Clear();
         }
 
         var time = TimeStatusResolver.Resolve(
@@ -297,6 +355,7 @@ public partial class App : Application
             _dayEnded, _activeEventId);
 
         var winner = _gate.Apply(Arbiter.Winner(signals), now);
+        _shownSignal = winner;
 
         return new ShellState
         {
@@ -438,6 +497,62 @@ public partial class App : Application
         if (_demo is not null) return; // o modo demo tem seu próprio ritmo
 
         _surface?.Render(BuildState(_snapshot));
+
+        // Depois de desenhar, nunca antes: a barra é a superfície principal e o toast é o eco. Se
+        // as duas coisas discordassem por um instante, que a discordância caia do lado de quem
+        // ainda não interrompeu ninguém.
+        Announce(DateTimeOffset.Now);
+    }
+
+    /// <summary>
+    /// A interrupção do §5, se houver. A decisão é do <see cref="ToastPolicy"/>; aqui só se junta
+    /// o que ele não tem como saber — se há apresentação em curso e o que já foi emitido.
+    /// </summary>
+    private void Announce(DateTimeOffset now)
+    {
+        if (_toasts is not { IsAvailable: true }) return;
+
+        var pedido = ToastPolicy.Decide(
+            _shownSignal, now, ForegroundState.ShouldYieldScreen(), _toastsSent, _toastOptions);
+
+        if (pedido is null) return;
+
+        _toastsSent.UnionWith(pedido.Consumes);
+        _toasts.Show(pedido.Title, pedido.Body, pedido.Tag);
+    }
+
+    /// <summary>
+    /// <c>--toast-probe</c>: emite um toast de exemplo e diz o que aconteceu.
+    /// <para>
+    /// Existe porque a falha típica desse caminho é <b>silenciosa</b> — sem o atalho com o AUMID o
+    /// Windows aceita a chamada e não mostra nada. Vale principalmente ao instalar em outra máquina
+    /// (o app roda em duas): confirma a entrega sem esperar um nível 3 de verdade acontecer.
+    /// </para>
+    /// </summary>
+    private static void RunToastProbe()
+    {
+        var channel = new ToastChannel();
+        var opened = channel.Open();
+
+        if (opened)
+        {
+            channel.Show(
+                "Sonda do Tempus",
+                "Se você está lendo isto, as notificações de nível 3 vão chegar.",
+                "probe");
+        }
+
+        MessageBox.Show(
+            opened
+                ? "Canal aberto e toast enviado.\n\nNão apareceu nada? O envio funcionou, então o "
+                  + "problema está nas notificações do Windows: Configurações › Sistema › "
+                  + "Notificações, e confira o Assistente de Foco."
+                : "Não foi possível abrir o canal.\n\nNormalmente é o atalho do Menu Iniciar: "
+                  + "rode scripts\\install.ps1 ou crie o atalho manualmente."
+                  + $"\n\nMotivo: {channel.LastError ?? "desconhecido"}",
+            "Tempus — sonda de notificação",
+            MessageBoxButton.OK,
+            opened ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
 
     // ---------------------------------------------------------------- demo

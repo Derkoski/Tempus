@@ -66,6 +66,18 @@ autoriza, e pronto. É o caminho correto.
 Se você não tiver o SDK do .NET na máquina nova, gere o pacote **aqui**, copie a pasta `publish/`
 para lá e rode o `install.ps1` sem `-Publish`.
 
+**Confira as notificações**, porque elas falham em silêncio:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Tempus\Tempus.exe" --toast-probe
+```
+
+Deve aparecer um toast de exemplo e uma caixa dizendo o que aconteceu. O app precisa de um atalho
+no Menu Iniciar carregando o *AppUserModelID* `Sponte.Tempus` — ele grava isso sozinho no atalho
+que o `install.ps1` cria, na primeira subida. Sem o atalho, o Windows **aceita** a chamada e não
+mostra nada, que é por que a sonda existe (D-028). Se ela disser que o canal abriu e mesmo assim
+nada aparecer, o problema está em *Configurações › Sistema › Notificações*.
+
 ## O que esperar de atrito
 
 **SmartScreen vai avisar** que o app não é reconhecido, porque o executável não é assinado. É

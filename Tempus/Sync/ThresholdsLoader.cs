@@ -31,6 +31,14 @@ internal static class ThresholdsLoader
     public static DayEndedOptions LoadDayEnded(string path) =>
         Section(path, "DayEnded", DayEndedOptions.Default);
 
+    /// <summary>
+    /// Interrupções (§5). Ao contrário das pausas, o fallback vem <b>ligado</b>: sem a seção no
+    /// arquivo o toast de nível 3 existe, porque ele é a contraparte da regra 2 e não uma
+    /// funcionalidade extra.
+    /// </summary>
+    public static ToastOptions LoadToasts(string path) =>
+        Section(path, "Toasts", ToastOptions.Default);
+
     private static T Section<T>(string path, string name, T fallback)
     {
         try

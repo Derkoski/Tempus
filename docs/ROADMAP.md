@@ -223,7 +223,14 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [x] **I8** — coberta junto com a escalada (D-025)
 - [x] **I1, I4, I5** — cobertas junto com a arbitragem e a histerese (D-026). **As oito
       invariantes tem teste; nao resta nenhum `Skip`**
-- [ ] Toasts com AUMID registrado, com deduplicação e supressão em apresentação
+- [x] **Toasts de nível 3** (D-028) — `MeetingRanIntoNext` e `DayEnded`, duas interrupções por
+      ocorrência: ao entrar e ao escalar. AUMID `Sponte.Tempus` gravado no atalho **existente** do
+      Menu Iniciar, sem reescrever o instalador. Deduplicação por `(ocorrência, tipo)`; apresentação
+      **retém** e não descarta. Decisão pura em `ToastPolicy` (11 testes); `ToastChannel` só entrega.
+      Verificado pelo caminho real: `DayEnded` com 2 tarefas abertas produziu o banner na tela e o
+      registro no `wpndatabase.db` do Windows
+- [ ] ~~Toast das três transições de âmbar e do `Offline`~~ — especificados no §5, **cortados de
+      propósito** (D-028). O de `Offline` é o mais defensável e virou item da Fase 5
 - [x] Feriados computados localmente, com Páscoa por Meeus/Jones/Butcher (D-008) — `BrazilianHolidays`,
       cobrindo nacionais, Paraná e Pato Branco, mais emendas por lista manual
 - [x] Fronteiras do dia configuráveis (D-007) — `WorkDayOptions` (08:00/12:00/13:00/17:00) e
@@ -231,8 +238,10 @@ controles do WPF ignorando o tema, e propriedade derivada vazando para o JSON.
 - [x] **`DayEnded.CountMode`** (D-007) — `AllOpen` (padrao) ou `DueTodayOrOverdue`, em
       `appsettings.json`. O meio-dia usa o mesmo criterio
 
-**Marco:** ao fim desta fase o produto já entrega o valor central. Fases 4 e 5 são
-complementos.
+**Marco atingido em 2026-08-19.** O produto entrega o valor central: os onze sinais do §2 são
+avaliados, um só chega à barra, a descida tem histerese, o nível 3 escala e é reconhecível com um
+clique, e o vermelho agora interrompe quando precisa. As oito invariantes têm teste. Fases 4 e 5
+são complementos.
 
 ### ⚠️ Os testes deixaram de ser opcionais
 
@@ -293,6 +302,10 @@ existia na barra sem dado por trás.*
 - [x] Contagem de não-lidos, polling de 60s, sem tocar em conteúdo
 - [x] Contador sempre neutro, nunca colorindo a barra (`SEVERITY.md` §2.4)
 - [ ] Critério de aceite 7 do `SPEC.md` verificado formalmente
+- [ ] **Toast de `Offline`** — o único dos toasts cortados no D-028 que vale reabrir. Uma vez por
+      semana, quando o *refresh token* expira (D-003): é a hora em que a barra deixa de ser
+      confiável e o usuário não tem como saber sem olhar. Nasce aqui, e não na Fase 3, porque
+      depende de conviver com os de nível 3 primeiro e medir se a interrupção sobrou ou faltou
 
 **Desvio consciente:** conta **conversas** via `users.threads.list` com query, e não
 `messagesUnread` do rótulo `UNREAD` como este roadmap previa. O caminho planejado errava por dois

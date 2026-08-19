@@ -331,6 +331,24 @@ Supressões:
 - Deduplicação por `(idDoSinal, idDaOcorrência)` — estourar a mesma reunião não gera toast
   a cada tick.
 
+### Notas de implementação (D-028)
+
+A tabela acima é o **alvo**. O que está no ar hoje é a última linha e só ela: `MeetingRanIntoNext`
+e `DayEnded`, os dois sinais que nunca se limpam sozinhos. As três transições de âmbar e o toast
+de `Offline` estão especificados e **não implementados**, por escolha registrada no D-028 — o
+orçamento de interrupção é menor que o de cor, e é mais fácil subir esse escopo depois do que
+descê-lo.
+
+Três coisas que a tabela não diz e o código precisou decidir:
+
+- **Retido não é descartado.** Durante apresentação nada sai *e nada é marcado como enviado*. Na
+  volta, se o vermelho ainda estiver de pé, a interrupção acontece. Se as duas — entrada e
+  escalada — estiverem vencidas ao mesmo tempo, sai só a escalada.
+- **O toast não tem botão.** Ele anuncia; o gesto continua sendo o clique na barra, e o corpo do
+  texto diz isso. Reconhecer na barra também retira o aviso da Central de Ações.
+- **A deduplicação não sobrevive a restart**, ao contrário do reconhecimento. Reemitir depois de
+  um restart, com a situação ainda sem resolução, é o comportamento certo.
+
 ## 6. Fluxo de re-consent
 
 Acontece toda semana por design (D-003), então precisa ser barato:

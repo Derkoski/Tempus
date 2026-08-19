@@ -16,19 +16,24 @@ Ferramenta pessoal de um único usuário — não é produto para distribuir.
 
 ## Stack
 
-- **WPF sobre .NET 8** (`net8.0-windows`), app não-empacotado. SDK instalado: 8.0.303.
+- **WPF sobre .NET 8** (`net8.0-windows10.0.19041.0`), app não-empacotado. SDK instalado: 8.0.303.
+  A versão do Windows no TFM veio com os toasts (D-028), que precisam das projeções WinRT.
 - Interop Win32 pesado: posicionamento de janela, DPI, toasts, sessões de áudio.
 - `Google.Apis.Calendar.v3`, `Google.Apis.Tasks.v1`, `Google.Apis.Gmail.v1`.
 - Sem framework de UI de terceiros, sem MVVM toolkit — o app é pequeno demais para justificar.
 
 ## Estado atual
 
-**Fase 0 concluída** (fundação documental). Fase 1 (spike de OAuth) e Fase 2 (spike visual da
-barra) são as próximas e podem andar em paralelo.
+**Fases 0 a 3 e 5 concluídas** (2026-08-19). A barra roda em uso real com dados do Google: onze
+sinais do §2 avaliados como funções puras, arbitragem com desempate por categoria, histerese de
+20 s na descida, nível 3 que escala e sai com um clique, `Offline` que anula a escala, pausas de
+descanso, tela de configuração e toasts de nível 3.
 
-⚠️ `Tempus/Tempus.csproj` ainda é um scaffold `Microsoft.NET.Sdk.Web` com um "Hello World" de
-minimal API. Foi criado por engano, **não representa nenhuma decisão** e é descartado na Fase 2.
-Não construa nada em cima dele.
+**Fase 4 é a próxima**: Tasks bidirecional — editar título e vencimento, fila de escritas offline,
+resolução de conflito. Falta também o critério de aceite 7 do `SPEC.md`, verificado formalmente.
+
+`Tempus.Tests` (xUnit) tem 101 testes e roda em ~100 ms. As oito invariantes I1–I8 têm teste e
+nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execução trava o build.
 
 ## Regras deste projeto
 
@@ -69,8 +74,9 @@ Não construa nada em cima dele.
 
 ```bash
 dotnet build Tempus/Tempus.csproj              # deve terminar com 0 avisos
-./Tempus/bin/Debug/net8.0-windows/Tempus.exe   # dados reais do Google
-./Tempus/bin/Debug/net8.0-windows/Tempus.exe --demo   # dados falsos, sem rede
+./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe          # dados reais do Google
+./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --demo   # dados falsos, sem rede
+./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --toast-probe  # confere as notificações
 dotnet test Tempus.Tests/Tempus.Tests.csproj   # domínio e invariantes; feche o app antes
 ```
 

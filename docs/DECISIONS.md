@@ -1383,3 +1383,97 @@ inconsistência que ninguém lembraria de explicar depois.
 **Consequências.** A Fase 3 fica com um item: os toasts (§5), que exigem AUMID registrado e mudança
 de *target framework* para acessar as APIs de notificação do Windows. É trabalho de natureza
 diferente do que veio até aqui, e merece decisão própria.
+
+---
+
+## D-028 — Toasts: só o vermelho tem licença para interromper
+
+**Status:** Aceita · 2026-08-19 · implementa `SEVERITY.md` §5 (parcialmente, de propósito)
+
+### O escopo, que é menor que o §5
+
+O §5 prevê quatro coisas: toast ao entrar em `Offline`, toast em três transições de âmbar, e duas
+interrupções por nível 3. **Só as duas últimas foram implementadas.**
+
+O corte não é falta de tempo. Cor é ambiente — você olha quando quer; toast é interrupção — ele te
+acha. O orçamento de interrupção é muito menor que o de cor, e a regra 1 já diz que se o vermelho
+aparecer mais de ~3× num dia normal o modelo está errado. Começar pelos dois sinais que **nunca se
+limpam sozinhos** (`MeetingRanIntoNext` e `DayEnded`) dá uma ou duas interrupções por dia. Os
+âmbares escolhidos pelo §5 dariam uma dúzia, e boa parte delas duplicaria o lembrete que o próprio
+Google Calendar já dispara.
+
+Subir o escopo depois é acrescentar casos em `ToastPolicy`. Descer, depois de acostumar o usuário
+a ser interrompido, é bem mais caro — e o desacostumar acontece do jeito ruim, com ele desligando
+tudo.
+
+O toast de `Offline` continua sendo a ideia mais defensável que ficou de fora, e está anotado no
+`ROADMAP.md`: uma vez por semana, quando o *refresh token* expira (D-003).
+
+### O toast é anúncio, não ação
+
+**Sem botões e sem tratador de clique.** Um app não empacotado — que é o nosso caso desde o D-001 —
+só recebe ativação de toast registrando um servidor COM no registro do Windows, com o
+desregistro correspondente na desinstalação. É bastante máquina para um app de um usuário só, e ela
+existiria para duplicar um gesto que já funciona: o clique na barra.
+
+Então o corpo do toast **diz em voz alta** onde está o gesto: "Clique na barra para dispensar".
+Sem isso o usuário procuraria o botão que não existe.
+
+O reconhecimento na barra também **retira o aviso da Central de Ações**. Deixar lá um vermelho já
+resolvido é mostrar dado velho com cara de atual — a regra 10 vale para a notificação, não só para
+os contadores.
+
+### Supressão é retenção, não descarte
+
+Em apresentação, tela cheia ou D3D exclusivo, nada sai — e **nada é marcado como enviado**.
+Terminada a apresentação, se o vermelho ainda estiver de pé, a interrupção acontece na volta.
+
+Descartar seria perder justamente o aviso mais valioso: apresentação é quando é mais fácil estourar
+o horário e não perceber.
+
+Consequência: depois de uma apresentação longa, a entrada e a escalada podem estar vencidas ao
+mesmo tempo. Nesse caso sai **só a escalada**, e a entrada é consumida em silêncio. Duas
+interrupções em sequência não são dois avisos; são um susto.
+
+### A deduplicação vive em memória
+
+Chave `(ocorrência, tipo)`, com a ocorrência do §7 — que já carrega evento, início e fim, então
+remarcar uma reunião produz chave nova, e remarcar é de fato uma situação nova.
+
+O conjunto **não é persistido**, ao contrário dos reconhecimentos. Um restart com o vermelho ainda
+de pé reemite o aviso, e isso é o comportamento certo: a situação continua sem resolução, e o
+momento logo após um restart é exatamente quando se perdeu o contexto do que estava aberto.
+
+### AUMID: a parte que falha em silêncio
+
+App não empacotado só notifica se duas coisas concordarem: o processo declara um
+*AppUserModelID*, e existe um atalho no Menu Iniciar com o mesmo ID na propriedade
+`System.AppUserModel.ID`. Sem o atalho a chamada **não falha** — ela simplesmente não mostra nada.
+
+O `install.ps1` cria o atalho via `WScript.Shell`, que não sabe gravar propriedades. Em vez de
+reescrever o instalador com ~120 linhas de interop em PowerShell, o app **conserta o atalho
+existente** na subida: carrega o `.lnk`, acrescenta a propriedade e preserva o alvo. Isso é o que
+permite rodar o build de desenvolvimento sem sequestrar o atalho da instalação — o AUMID vale para
+a máquina, não para o caminho do executável.
+
+`InitPropVariantFromString` **não serve**: apesar de documentado, é uma função *inline* do
+`propvarutil.h` e não um export de verdade; o P/Invoke morre com `EntryPointNotFoundException` em
+tempo de execução. O `PROPVARIANT` é montado à mão — `VT_LPWSTR` e string em memória COM, que é o
+que aquele helper faria.
+
+### `--toast-probe`
+
+Uma sonda permanente, não andaime de depuração. A falha típica deste caminho é silenciosa, e o app
+roda em duas máquinas (`DEPLOY.md`): confirmar a entrega ao instalar, sem esperar um nível 3 de
+verdade acontecer, vale as dez linhas. Ela diz **por que** falhou quando falha — um diagnóstico que
+só diz "falhou" é meio diagnóstico.
+
+### *Target framework*
+
+`net8.0-windows` → `net8.0-windows10.0.19041.0`, pelas projeções WinRT de
+`Windows.UI.Notifications`. Subiu junto no projeto de testes, que não pode ter alvo mais restrito
+que o testado. Foi commitada **sozinha**, antes de qualquer código de toast, para ser revertível
+por si — é a única mudança estrutural do lote e não toca uma linha de lógica.
+
+**Consequências.** A Fase 3 fecha. O `ToastPolicy` é puro e testado como o resto do domínio
+(regra 8); quem fala com o Windows é `ToastChannel`, que não decide nada.
