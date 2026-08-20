@@ -73,6 +73,16 @@ internal sealed record ShellState
     public string? SignalOccurrence { get; init; }
 
     /// <summary>
+    /// O chip está repetindo o que o slot de tempo já conta, e por isso não é desenhado (D-033).
+    /// <para>
+    /// <b>Só afeta o desenho.</b> A severidade, o reconhecimento e o toast continuam valendo — é
+    /// por isso que a decisão chega como uma flag de apresentação em vez de o sinal ser removido
+    /// da arbitragem.
+    /// </para>
+    /// </summary>
+    public bool ChipRepeatsTime { get; init; }
+
+    /// <summary>
     /// As reuniões concorrentes quando há sobreposição sem escolha feita (§8). Vazio no caso
     /// normal. Com duas ou mais, o clique no chip abre o seletor em vez de reconhecer — é uma
     /// pergunta, e responder vale mais que silenciar.

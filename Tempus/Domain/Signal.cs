@@ -42,6 +42,13 @@ internal sealed record Signal
     public required string Occurrence { get; init; }
 
     /// <summary>
+    /// O evento de que este sinal fala, ou <c>null</c> nos que não falam de nenhum — fronteiras do
+    /// dia e tarefas. Explícito, e não extraído da <see cref="Occurrence"/>, pelo mesmo motivo do
+    /// <see cref="TimeStatus.EventId"/>: comparar por pedaço de string quebraria em silêncio.
+    /// </summary>
+    public string? EventId { get; init; }
+
+    /// <summary>
     /// Some sozinho depois de uma janela, sem exigir clique. Vale para o que é passageiro por
     /// natureza — uma reunião isolada que acabou não merece cobrar gesto do usuário.
     /// </summary>

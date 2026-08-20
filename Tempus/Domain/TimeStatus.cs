@@ -80,6 +80,17 @@ internal sealed record TimeStatus
     /// </summary>
     public string? Occurrence { get; init; }
 
+    /// <summary>
+    /// O evento de que este humor está falando, explícito.
+    /// <para>
+    /// Existe separado da <see cref="Occurrence"/> porque comparar eventos por pedaço de string —
+    /// a ocorrência é <c>humor|evento|início|fim</c> — funcionaria hoje e quebraria no dia em que
+    /// o formato mudasse, em silêncio. É o que permite ao chip saber se está repetindo o que o
+    /// slot já disse (D-033).
+    /// </para>
+    /// </summary>
+    public string? EventId { get; init; }
+
     /// <summary>Rótulo e detalhe juntos, para quem precisa da frase inteira.</summary>
     public string Text => Summary is null ? Label : $"{Label} · {Summary}";
 
@@ -245,6 +256,7 @@ internal static class TimeStatusResolver
             Summary = summary,
             NamesAnEvent = true,
             Occurrence = endingSoon ? OccurrenceOf(TimeMood.EndingSoon, current) : null,
+            EventId = current.Id,
             CallUrl = current.Conference?.Url,
             Detail = next is null
                 ? $"Termina às {current.End.ToLocalTime():HH:mm}"
@@ -272,6 +284,11 @@ internal static class TimeStatusResolver
             NamesAnEvent = true,
             IsEscalated = over >= escalation,
             Occurrence = OccurrenceOf(TimeMood.Overrun, ended),
+
+            // A que estourou, não a que invadiu: é dela que o MeetingRanIntoNext também fala, e é
+            // esse pareamento que faz o chip saber que estaria repetindo (D-033).
+            EventId = ended.Id,
+
             // A que invadiu, quando existe: às 12:22 o que importa é entrar na que já começou,
             // não voltar para a que devia ter acabado.
             CallUrl = (invading ? next!.Conference ?? ended.Conference : ended.Conference)?.Url,
@@ -337,6 +354,7 @@ internal static class TimeStatusResolver
             Summary = $"{when} · {next.Title}",
             NamesAnEvent = true,
             Occurrence = mood == TimeMood.Imminent ? OccurrenceOf(TimeMood.Imminent, next) : null,
+            EventId = next.Id,
 
             // Só a partir de "Começando" o clique entra na call. Antes disso ele abre a agenda:
             // clicar em "Livre" e cair dentro de uma reunião que só começa daqui a quatro horas é

@@ -38,6 +38,16 @@ internal partial class FloatingBarWindow : Window
     private readonly SolidColorBrush _chipBorderBrush = new(Colors.Transparent);
 
     private readonly SolidColorBrush _statusBrush = new(Colors.Transparent);
+
+    /// <summary>
+    /// Quanto tempo o "Abrindo a call…" fica no ar. Curto de propósito: é confirmação de clique,
+    /// não status — o navegador leva mais que isso e tudo bem, o que faltava era saber que o
+    /// clique pegou.
+    /// </summary>
+    private static readonly TimeSpan OpeningFeedback = TimeSpan.FromSeconds(3);
+
+    /// <summary>Até quando mostrar a confirmação. Instante, não estado.</summary>
+    private DateTimeOffset _openingUntil;
     private bool _isStatusBlinking;
     private readonly DispatcherTimer _timer;
     private readonly DispatcherTimer _settleTimer;
@@ -200,7 +210,10 @@ internal partial class FloatingBarWindow : Window
                 _ => _palette.BarForeground,
             });
 
-        ReasonChip.Visibility = string.IsNullOrEmpty(state.Reason)
+        // Some quando não há motivo, e também quando o motivo é o mesmo que o slot já conta
+        // (D-033). Hidden e não Collapsed: o chip guarda o lugar dele na grade, senão o texto do
+        // compromisso ao lado saltaria de largura a cada alarme que vai e vem.
+        ReasonChip.Visibility = string.IsNullOrEmpty(state.Reason) || state.ChipRepeatsTime
             ? Visibility.Hidden
             : Visibility.Visible;
 
@@ -317,12 +330,29 @@ internal partial class FloatingBarWindow : Window
             return;
         }
 
+        var joinable = state.Time.CallUrl is { Length: > 0 };
+
         LookaheadText.Visibility = Visibility.Visible;
-        LookaheadText.Text = detail;
+
+        // Retorno do clique: abrir o navegador demora, e sem isto o gesto não devolve nada — você
+        // fica sem saber se registrou. Mesmo motivo do "Abrindo o navegador…" do re-consent.
+        // Transitório de verdade: o próximo render depois da janela já traz o texto real de volta,
+        // porque um aviso preso viraria dado velho com cara de atual (regra 10).
+        LookaheadText.Text = DateTimeOffset.Now < _openingUntil
+            ? "Abrindo a call…"
+
+            // O ▶ diz que dali se entra, antes de precisar passar o mouse. Sem cor: afordância não
+            // precisa gastar o orçamento da regra 1, e o espaço agora sobra porque o chip repetido
+            // deixou de ser desenhado (D-033).
+            : joinable ? $"▶ {detail}" : detail;
+
         LookaheadText.Foreground = new SolidColorBrush(
             state.Time.NamesAnEvent ? _palette.BarForeground : _palette.Muted);
-        LookaheadText.ToolTip =
-            $"{state.Time.Detail ?? detail}{Environment.NewLine}Clique para abrir a agenda";
+
+        // Dizia "Clique para abrir a agenda" mesmo quando o clique entrava na call — a dica
+        // contradizia o que o gesto fazia.
+        LookaheadText.ToolTip = $"{state.Time.Detail ?? detail}{Environment.NewLine}"
+            + (joinable ? "Clique para entrar na call" : "Clique para abrir a agenda");
     }
 
     /// <summary>
@@ -730,11 +760,36 @@ internal partial class FloatingBarWindow : Window
 
         if (_state.Time.CallUrl is { Length: > 0 } url)
         {
+            ShowOpening();
             MeetingActivated?.Invoke(this, url);
             return;
         }
 
         Raise(AgendaRequested);
+    }
+
+    /// <summary>
+    /// Confirma o clique enquanto o navegador não aparece. Sem isto o gesto não devolve nada e não
+    /// dá para saber se registrou — o mesmo problema que o re-consent resolve com "Abrindo o
+    /// navegador…".
+    /// </summary>
+    private void ShowOpening()
+    {
+        _openingUntil = DateTimeOffset.Now + OpeningFeedback;
+
+        RenderLookahead(_state); // na hora, sem esperar o ciclo de render
+
+        // Um disparo só para devolver o texto no fim da janela. Sem ele a mensagem ficaria no ar
+        // até o próximo render de rotina, que pode demorar mais que ela deveria durar.
+        var restore = new DispatcherTimer(DispatcherPriority.Background) { Interval = OpeningFeedback };
+
+        restore.Tick += (s, _) =>
+        {
+            ((DispatcherTimer)s!).Stop();
+            RenderLookahead(_state);
+        };
+
+        restore.Start();
     }
 
     /// <summary>

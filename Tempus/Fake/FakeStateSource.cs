@@ -250,6 +250,18 @@ internal sealed class FakeStateSource
         },
         new ShellState { Severity = Severity.Info, Reason = "2 reuniões agora — qual?" },
 
+        // O chip calado por repetição (D-033). Tem motivo e severidade — o alarme existe, vence a
+        // arbitragem e aceita o clique — mas o slot já está contando a mesma reunião, então ele
+        // não é desenhado. Está no roteiro porque o modo demo não passa pelo BuildState e sem isto
+        // a supressão não teria como ser vista na tela.
+        new ShellState
+        {
+            Severity = Severity.Attention,
+            Reason = "Daily começou às 14:00",
+            ChipRepeatsTime = true,
+            CanAcknowledge = true,
+        },
+
         // O vermelho principal do produto (SEVERITY.md §2.1).
         new ShellState
         {

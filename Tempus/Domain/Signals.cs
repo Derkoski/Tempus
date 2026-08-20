@@ -104,6 +104,7 @@ internal static class Signals
                 Reason = $"{candidates.Count} reuniões agora — qual?",
                 Category = SignalCategory.Call,
                 Occurrence = Signal.OccurrenceFor(SignalNames.MeetingAmbiguous, active!),
+                EventId = active!.Id,
                 Since = candidates.Max(c => c.Start),
             };
         }
@@ -136,6 +137,7 @@ internal static class Signals
                         : $"{e.Title} em {Minutes(toStart)}",
                     Category = SignalCategory.Call,
                     Occurrence = Signal.OccurrenceFor(name, e),
+                    EventId = e.Id,
                     Since = e.Start - upcoming,
                 };
             }
@@ -149,6 +151,7 @@ internal static class Signals
                     Reason = $"{e.Title} começou às {e.Start.ToLocalTime():HH:mm}",
                     Category = SignalCategory.Call,
                     Occurrence = Signal.OccurrenceFor(SignalNames.MeetingStarted, e),
+                    EventId = e.Id,
                     Since = e.Start,
                 };
 
@@ -163,6 +166,7 @@ internal static class Signals
                         Reason = $"Sem intervalo: {seguinte.Title} às {seguinte.Start.ToLocalTime():HH:mm}",
                         Category = SignalCategory.Call,
                         Occurrence = Signal.OccurrenceFor(SignalNames.MeetingBackToBack, e),
+                        EventId = e.Id,
                         Since = e.Start,
                     };
                 }
@@ -183,6 +187,7 @@ internal static class Signals
                     Reason = $"{e.Title} acabou — {invasora.Title} já começou",
                     Category = SignalCategory.Call,
                     Occurrence = Signal.OccurrenceFor(SignalNames.MeetingRanIntoNext, e),
+                    EventId = e.Id,
                     Since = e.End,
                 };
             }
@@ -197,6 +202,7 @@ internal static class Signals
                     Reason = $"{e.Title} acabou às {e.End.ToLocalTime():HH:mm}",
                     Category = SignalCategory.Call,
                     Occurrence = Signal.OccurrenceFor(SignalNames.MeetingEnded, e),
+                    EventId = e.Id,
                     SelfClearing = true,
                     Since = e.End,
                 };

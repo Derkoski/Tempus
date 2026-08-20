@@ -436,6 +436,11 @@ public partial class App : Application
             Severity = winner?.Severity ?? Severity.Calm,
             Reason = winner?.Reason ?? "",
             SignalOccurrence = winner is { SelfClearing: false } ? winner.Occurrence : null,
+
+            // D-033: o slot é o dono da narrativa de call. Quando o chip só repetiria o mesmo
+            // evento, ele não é desenhado — mas continua vencendo aqui, alimentando o toast e
+            // aceitando o clique de "eu vi". É supressão de pintura, não de alarme.
+            ChipRepeatsTime = ChipEcho.Repeats(time.Mood, winner?.Name, time.EventId, winner?.EventId),
             ActiveEventChoices = _activeEventId is null && candidates.Count > 1 ? candidates : [],
 
             // O chip escala pelo mesmo critério do bloco de estado (D-025): o instante em que o

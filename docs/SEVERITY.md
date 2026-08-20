@@ -92,6 +92,17 @@ vermelho de alarme preenche o chip e só sai com clique.
 > o slot está no ar o dia inteiro, e porque tirar o preenchimento dele apagaria a escalada do
 > `Overrun`.
 
+> **Emenda de 2026-08-20, mais tarde (D-033).** Fechando a Q-03, a divisão de trabalho entre os
+> dois ficou explícita: **o slot é o dono da narrativa de call**, e o chip existe para o que o slot
+> não sabe dizer — tarefas, fronteiras do dia, e a pergunta de reuniões sobrepostas. Quando o chip
+> falaria do **mesmo evento** que o slot já narra, ele não é desenhado.
+>
+> A supressão é só de pintura: o sinal continua vencendo a arbitragem (§4), disparando o toast (§5)
+> e aceitando o reconhecimento (§10). Some o desenho, nunca o alarme.
+>
+> A I9 continua valendo para o que sobra — dois assuntos diferentes que caiam na mesma família de
+> cor.
+
 ## 1.5 Humor temporal — o sinal ambiente
 
 Este é o estado que fica visível o dia inteiro, então a cor tem que informar sem cansar.
@@ -463,7 +474,7 @@ persistida resolve sozinha na próxima abertura.
 **Decidir depois de conviver.** Não há dado ainda sobre com que frequência uma escrita chega a
 falhar de verdade — e sem isso, qualquer escolha aqui é chute.
 
-### Q-03 — O chip e o slot frequentemente dizem o mesmo fato
+### Q-03 — O chip e o slot frequentemente dizem o mesmo fato  ✅ FECHADA em 2026-08-20 (D-033)
 
 **Aberta em 2026-08-20, junto com o D-032.** Ao investigar a colisão de cor apareceu algo maior: em
 boa parte do ciclo de call as duas áreas **narram o mesmo acontecimento**.
@@ -484,10 +495,19 @@ deixando-o para o que o slot não sabe dizer — tarefas vencidas, fronteiras do
 diferente. Apresentada ao usuário em 2026-08-20 junto com a I9; ele **escolheu** só separar
 visualmente, por ser mudança menor e mais previsível.
 
-Registrado porque a observação é boa e não deve ser redescoberta como bug. **O que mudaria a
-decisão:** conviver com a I9 e perceber que ler a mesma coisa duas vezes incomoda mais que a cor
-repetida incomodava. A supressão seria presentacional — o sinal continuaria vencendo a arbitragem,
-alimentando o toast (§5) e aceitando o reconhecimento (§10).
+#### Resposta — fechada no mesmo dia
+
+O que destravou não foi mudar de ideia: foi descobrir **por que** a alternativa tinha sido
+recusada. O usuário temia perder o clique de entrar na call — *"eu só não queria perder o clique
+pra entrar na call se eu me atrasar 1 minuto"*.
+
+**O receio não se sustentava.** A entrada nunca esteve no chip: ela mora em `Time.CallUrl`, que é
+do **slot**, e o clique que entra é o do texto do compromisso. O chip só reconhece, escolhe reunião
+ou abre a agenda. Calá-lo não custava nada da entrada.
+
+Com isso a supressão foi implementada no **D-033**, e a entrada ganhou o que faltava: um **▶** que
+diz que dali se entra, e um "Abrindo a call…" que confirma que o clique pegou. A pergunta certa não
+era "cor ou redundância?", era "o que o usuário está protegendo?".
 
 ---
 

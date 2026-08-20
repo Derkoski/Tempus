@@ -1811,3 +1811,89 @@ preenchimento quando não colidem.
 A redundância entre as duas áreas — elas frequentemente dizem o **mesmo fato** — virou **Q-03** no
 `SEVERITY.md` §9. Foi apresentada ao usuário como alternativa mais profunda e ele escolheu só a
 separação visual, por ser mudança menor. Registrada em vez de assumida.
+
+---
+
+## D-033 — O slot é o dono da narrativa de call; o chip é para o resto
+
+**Status:** Aceita · 2026-08-20 · fecha a Q-03 do `SEVERITY.md` §9
+
+### O que destravou
+
+A Q-03 tinha sido aberta no D-032 e **recusada pelo usuário** no mesmo dia. O que a destravou não
+foi mudar de ideia — foi descobrir o motivo da recusa:
+
+> *"Eu só não queria perder o clique pra entrar na call se eu me atrasar 1 minuto... mas se tiver
+> uma forma de tirar essa redundância e também manter a possibilidade de entrada rápida com um
+> click e que fique claro que estou entrando, seria ótimo."*
+
+**O receio não se sustentava.** A entrada nunca esteve no chip:
+
+| Área | O clique faz |
+|---|---|
+| Pílula de estado | reconhece se há alarme; senão entra na call |
+| **Texto do compromisso** | **entra na call, sempre** — nunca reconhece |
+| Chip de motivo | reconhece · escolhe reunião · abre agenda — **nunca entra** |
+
+A lição de processo vale mais que a técnica: a pergunta certa não era "cor ou redundância?", era
+**"o que o usuário está protegendo?"**. Uma recusa costuma ter uma restrição embaixo, e ela quase
+sempre é mais fácil de satisfazer do que a recusa sugere.
+
+### Tabela explícita, não regra por categoria
+
+`ChipEcho` lista quais sinais cada humor já conta:
+
+| Humor | Já conta |
+|---|---|
+| `Approaching` | `MeetingUpcoming` |
+| `Imminent` | `MeetingImminent` |
+| `InMeeting` · `EndingSoon` | `MeetingStarted`, `MeetingBackToBack` |
+| `Overrun` | `MeetingRanIntoNext`, `MeetingEnded` |
+
+A regra "todo sinal de categoria `Call` é eco" pareceria mais elegante e **estaria errada**:
+`MeetingAmbiguous` é de categoria `Call` e fala do mesmo evento, mas ali o chip está **fazendo uma
+pergunta** que o slot não sabe fazer, e cujo clique abre o seletor do §8. Calá-lo quebraria o
+gesto. Fora da tabela, nunca é suprimido — como `MiddayCheckpoint`, `DayEnded` e `TaskOverdue`.
+
+### Só de pintura, e o teste que garante
+
+O sinal calado continua vencendo a arbitragem, alimentando o toast e aceitando o reconhecimento.
+Se a supressão mexesse na arbitragem, o vermelho das 17:00 poderia sumir sem ninguém ver — por isso
+existe um teste que afirma exatamente isso: chip suprimido, `Arbiter.Winner` inalterado.
+
+O caso se resolve sozinho quando deveria: passados os 10 min de `Overrun`, o humor troca de evento,
+os `EventId` deixam de bater e o chip reaparece com o vermelho ainda não reconhecido.
+
+### `EventId` explícito
+
+A ocorrência é `humor|evento|início|fim`, e dava para extrair o evento por *substring*. Não foi
+feito: funcionaria hoje e quebraria em silêncio no dia em que o formato mudasse. `TimeStatus` e
+`Signal` ganharam `EventId` de verdade.
+
+**Na dúvida, o chip fala.** Sem evento de algum dos lados não há supressão: perder um alarme é
+caro, repetir uma informação não é.
+
+### Deixar claro que ali se entra — antes e depois
+
+*"Que fique claro que estou entrando"* tem duas leituras, e as duas eram lacunas:
+
+- **Antes:** o texto do compromisso ganhou um **▶** quando há link. Sem cor — afordância não paga
+  o orçamento da regra 1 — e o espaço sobra justamente porque o chip repetido calou. Sem link não
+  há glifo, que é a distinção do D-022 finalmente visível em vez de escondida no tooltip.
+- **Depois:** o clique passa a responder **"Abrindo a call…"** por 3 s. Abrir o navegador demora, e
+  o gesto não devolvia nada. **O projeto já tinha resolvido isso uma vez**, no re-consent, pelo
+  mesmo motivo.
+
+De quebra, o tooltip daquele texto dizia "Clique para abrir a agenda" **mesmo quando o clique
+entrava na call** — a dica contradizia o gesto. Corrigido.
+
+### O modo demo não passava pelo `BuildState`
+
+A supressão é decidida em `App.BuildState`, que o demo não usa: ele desenha estados roteirizados.
+Sem intervenção, a tira de verificação **não exercitaria nada** desta decisão — e teria dado a
+impressão de que exercitava.
+
+O roteiro ganhou um estado com `ChipRepeatsTime`, e é ele que aparece na tira: severidade âmbar,
+motivo preenchido, reconhecível, e nenhum chip desenhado. É a mesma lição do D-025, D-028, D-029 e
+D-032 aparecendo pela quinta vez — **teste de unidade prova a decisão, não a fiação** —, agora com
+um agravante novo: um caminho de verificação pode estar cego sem avisar.
