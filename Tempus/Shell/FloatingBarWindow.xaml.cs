@@ -580,14 +580,52 @@ internal partial class FloatingBarWindow : Window
     {
         if (!_isBarVisible || _handle == IntPtr.Zero) return;
 
-        // Só reafirma se estiver mesmo atrás. Reafirmar sem perguntar joga a barra para o topo da
-        // faixa topmost a cada rodada — inclusive por cima do menu de contexto e das dicas dela
-        // própria, que desapareciam atrás da barra enquanto o usuário os lia.
-        if (NativeMethods.IsInFrontOf(_handle, NativeMethods.FindWindow("Shell_TrayWnd", null)))
-            return;
+        // Só reafirma se estiver mesmo coberta. Reafirmar sem perguntar joga a barra para o topo
+        // da faixa topmost a cada rodada — inclusive por cima do menu de contexto e das dicas dela
+        // própria, que desapareciam atrás da barra enquanto o usuário os lia (D-021).
+        if (OwnsItsPixels()) return;
+
+        // Sair e voltar da faixa topmost. Reafirmar HWND_TOPMOST numa janela que **já é** topmost
+        // costuma ser ignorado pelo Windows — foi por isso que a barra ficava enterrada sob a
+        // taskbar depois do menu Iniciar mesmo com esta chamada rodando a cada segundo. A saída
+        // e o retorno forçam a reinserção no topo da faixa (D-035).
+        SetWindowPos(_handle, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
         SetWindowPos(_handle, HWND_TOPMOST, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
+    /// <summary>
+    /// A barra é mesmo quem recebe o pixel — e portanto o clique — no próprio retângulo?
+    /// <para>
+    /// <b>A pergunta direta, no lugar de um proxy.</b> O D-021 perguntava "estou na frente do
+    /// <c>Shell_TrayWnd</c>?", que respondia certo para o caso que ele resolvia e errado para o
+    /// menu Iniciar: com ele aberto a barra sumia enquanto <i>todos</i> os indicadores diziam que
+    /// estava tudo bem — visível, topmost, no retângulo certo, não encoberta na enumeração de
+    /// janelas e sem <i>cloaking</i> do DWM. Só o <c>WindowFromPoint</c> discordava, e é ele que
+    /// decide de quem é o pixel (D-035).
+    /// </para>
+    /// </summary>
+    private bool OwnsItsPixels()
+    {
+        if (_appliedRect is not { } rect) return false;
+
+        var owner = NativeMethods.WindowAt(
+            rect.Left + (rect.Width / 2), rect.Top + (rect.Height / 2));
+
+        if (owner == _handle) return true;
+
+        // Janela nossa por cima é legítima: é o menu de contexto ou a dica da própria barra, e
+        // reafirmar aqui os enterraria — que era o defeito que o D-021 consertou.
+        return owner != IntPtr.Zero && BelongsToThisProcess(owner);
+    }
+
+    private static bool BelongsToThisProcess(IntPtr window)
+    {
+        NativeMethods.GetWindowThreadProcessId(window, out var owner);
+
+        return owner == (uint)Environment.ProcessId;
     }
 
     /// <summary>

@@ -1967,3 +1967,60 @@ A cascata do D-017 leu os links do Teams do corpo dos convites importados sem ne
 Irmã da `--dump-tasks` (D-031). "Não aparece" pode ser calendário não lido, evento filtrado pelo
 §2.1, ou janela de tempo, e a barra não distingue os três. Respondeu de primeira: três calendários,
 "Backlog Pearson" presente, link do Teams extraído.
+
+---
+
+## D-035 — A pergunta certa sobre ordem Z é "de quem é o pixel?"
+
+**Status:** Aceita · 2026-08-20 · encontrada em uso
+
+### O sintoma
+
+*"Se eu clico no botão iniciar do Windows, o Tempus some e fica assim até eu clicar em outro
+lugar."*
+
+### O diagnóstico, e quatro medidas que mentiram
+
+Com o menu Iniciar aberto, **todos** os indicadores diziam que estava tudo bem:
+
+| Medida | Resposta | Conclusão errada |
+|---|---|---|
+| `SHQueryUserNotificationState` | `QUNS_APP` | não é supressão de tela cheia |
+| retângulo do `Shell_TrayWnd` | inalterado | a taskbar não recolheu |
+| `IsWindowVisible` + `WS_EX_TOPMOST` + rect | tudo certo | a barra não se escondeu |
+| `DWMWA_CLOAKED` | zero | o DWM não a ocultou |
+| `EnumWindows` sobre o retângulo | a barra no topo | nada a cobre |
+
+Só uma discordava: **`WindowFromPoint` no centro da barra devolvia `Shell_TrayWnd`**. E é ela que
+manda — é quem decide de quem é o pixel e de quem é o clique.
+
+A lição de método: a enumeração de ordem Z **não é confiável** para essa pergunta, e eu quase
+descartei o único dado correto porque ele estava sozinho contra quatro.
+
+### Dois defeitos, não um
+
+**1. O guard perguntava por um proxy.** O D-021 checava `IsInFrontOf(barra, Shell_TrayWnd)` — que
+respondia certo para o caso dele e errado aqui. Agora a pergunta é direta: *a barra é quem recebe o
+pixel no próprio centro?* Se sim, não mexe. Se quem está lá é uma janela **nossa**, também não mexe
+— é o menu de contexto ou a dica, e enterrá-los era exatamente o defeito que o D-021 consertou.
+
+**2. Reafirmar `HWND_TOPMOST` numa janela que já é topmost é ignorado.** Este era o defeito
+silencioso: mesmo depois de detectar corretamente que estava enterrada, a chamada de `SetWindowPos`
+rodava a cada segundo **sem efeito nenhum**. A saída para `HWND_NOTOPMOST` e o retorno imediato a
+`HWND_TOPMOST` forçam a reinserção no topo da faixa.
+
+Detectar sem conseguir corrigir é pior que não detectar: gasta CPU e dá a impressão de que há uma
+rede de segurança onde não há.
+
+### O que ficou, honestamente
+
+**Enquanto o menu Iniciar está aberto, a barra continua coberta.** O explorer reergue a taskbar a
+cada tentativa nossa, e insistir a 16 ms seria uma queda de braço com o shell — CPU à toa, tremor
+na tela, e a regra 9 violada por um ganho que dura o tempo de um menu aberto.
+
+O que mudou é o que importa: **fechou o menu, a barra volta em ~1 s**, sozinha. Antes ficava
+enterrada até o usuário clicar em outra janela por acaso.
+
+É a fragilidade estrutural que o D-002 aceitou ao escolher barra flutuante em vez de `SetParent`.
+A escolha continua certa — `SetParent` em `Shell_TrayWnd` quebraria a cada atualização do Windows —
+e este é o preço dela, agora com o limite conhecido e medido em vez de suposto.

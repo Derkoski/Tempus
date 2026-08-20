@@ -15,6 +15,13 @@ internal static class NativeMethods
 
     public static readonly IntPtr HWND_TOPMOST = new(-1);
 
+    /// <summary>
+    /// Sair da faixa topmost para poder voltar a ela. Reafirmar <c>HWND_TOPMOST</c> numa janela que
+    /// já é topmost costuma ser ignorado; a saída e o retorno forçam a reinserção no topo da faixa
+    /// (D-035).
+    /// </summary>
+    public static readonly IntPtr HWND_NOTOPMOST = new(-2);
+
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOACTIVATE = 0x0010;
@@ -207,6 +214,33 @@ internal static class NativeMethods
     /// Devolve <c>true</c> se <c>b</c> não for encontrado: sem taskbar não há atrás de quê ficar.
     /// </para>
     /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(POINT point);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder name, int max);
+
+    /// <summary>
+    /// Quem de fato recebe o pixel — e portanto o clique — naquele ponto.
+    /// <para>
+    /// É a pergunta que importa, e nem sempre bate com a ordem Z enumerável: superfícies do shell
+    /// vivem em faixas que o <c>EnumWindows</c> não ordena de forma confiável, e foi exatamente
+    /// isso que fez a barra sumir com o menu Iniciar aberto enquanto todos os outros indicadores
+    /// diziam que ela estava no topo (D-035).
+    /// </para>
+    /// </summary>
+    public static IntPtr WindowAt(int x, int y) => WindowFromPoint(new POINT { X = x, Y = y });
+
     public static bool IsInFrontOf(IntPtr a, IntPtr b)
     {
         if (a == IntPtr.Zero || b == IntPtr.Zero) return true;
