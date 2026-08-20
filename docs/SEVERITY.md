@@ -345,8 +345,29 @@ diferentes:
 | `Offline` | sim (cinza) | uma vez, quando entra no estado |
 | 0 `Calm` | sim (neutro) | nunca |
 | 1 `Info` | sim | nunca |
-| 2 `Attention` | sim | só em transições escolhidas: `MeetingImminent`, `MeetingStarted`, `MiddayCheckpoint` |
+| 2 `Attention` | sim | só em transições escolhidas: `MiddayCheckpoint` |
 | 3 `Critical` | sim | duas vezes: ao entrar, e ao escalar para piscante em 5 min |
+
+**Fora da tabela, porque não é uma linha dela:** o **ciclo de call** tem interrupção própria,
+duas por reunião (D-039). Não é o sinal que dispara, é o **humor temporal** — `MeetingUpcoming` é
+nível 1 e qualquer tarefa vencida o derrota na arbitragem, o que faria o aviso da call sumir por
+causa de algo que não tem nada com ela.
+
+| Momento | Fica na tela? | Sai como |
+|---------|---------------|----------|
+| T−10 min | não; expira na Central quando a reunião começa | `Título · Começa em 10 min, às 13:00` |
+| T−2 min | **sim, até o clique** | o mesmo texto, com a mesma etiqueta |
+
+Mesma etiqueta nos dois: o fixo **substitui** o passageiro em vez de empilhar. E o fixo engole o
+passageiro que nunca saiu, exatamente como a escalada do nível 3 engole a entrada.
+
+**Duas regras que valem para todo toast, e as duas têm teste:**
+
+1. **Todo toast que fica na tela tem pelo menos um botão.** Não é preferência — o Windows exige
+   ação para honrar `scenario="reminder"`, e sem ela degrada para toast comum **sem reclamar**.
+   Reunião presencial, sem link de call, ainda sai com "Dispensar" só por isso.
+2. **Todo toast de nível 3 oferece o "eu vi".** É a contraparte da regra 2 na notificação: se ele
+   interrompe e não oferece o gesto, cobra uma ação que só existe em outro lugar.
 
 Supressões:
 
@@ -358,23 +379,32 @@ Supressões:
 - Deduplicação por `(idDoSinal, idDaOcorrência)` — estourar a mesma reunião não gera toast
   a cada tick.
 
-### Notas de implementação (D-028)
+### Notas de implementação (D-028, revisto no D-039)
 
-A tabela acima é o **alvo**. O que está no ar hoje é a última linha e só ela: `MeetingRanIntoNext`
-e `DayEnded`, os dois sinais que nunca se limpam sozinhos. As três transições de âmbar e o toast
-de `Offline` estão especificados e **não implementados**, por escolha registrada no D-028 — o
-orçamento de interrupção é menor que o de cor, e é mais fácil subir esse escopo depois do que
-descê-lo.
+No ar hoje: o **nível 3** (`MeetingRanIntoNext` e `DayEnded`, os dois sinais que nunca se limpam
+sozinhos) e o **ciclo de call**. Continuam especificados e **não implementados** o
+`MiddayCheckpoint` e o aviso de `Offline` — o primeiro por escolha do usuário no D-039, porque
+interromper todo dia às 12:00 pelo fato mais previsível do dia andaria para trás; o segundo por
+falta de pedido.
 
-Três coisas que a tabela não diz e o código precisou decidir:
+Coisas que a tabela não diz e o código precisou decidir:
 
-- **Retido não é descartado.** Durante apresentação nada sai *e nada é marcado como enviado*. Na
-  volta, se o vermelho ainda estiver de pé, a interrupção acontece. Se as duas — entrada e
-  escalada — estiverem vencidas ao mesmo tempo, sai só a escalada.
-- **O toast não tem botão.** Ele anuncia; o gesto continua sendo o clique na barra, e o corpo do
-  texto diz isso. Reconhecer na barra também retira o aviso da Central de Ações.
+- **Retido não é descartado.** Durante apresentação nada sai *e nada é marcado como enviado*. Vale
+  para os dois caminhos. Na volta, se a situação ainda estiver de pé, a interrupção acontece. Se
+  as duas do mesmo assunto estiverem vencidas ao mesmo tempo, sai só a mais atual.
+- **Quando as duas cabem no mesmo instante, interrompe a pior.** Estar invadindo a próxima call é
+  notícia mais urgente que a seguinte estar por vir.
+- **Botão que não depende de nós.** `Entrar na call` é `activationType="protocol"` com a URL crua:
+  o shell a abre sozinho, então esse botão funciona mesmo com o resto quebrado. Só o `eu vi` e o
+  clique no corpo voltam ao processo, e o clique no corpo faz o que o clique na barra faz (D-038).
+- **O aviso sai da tela quando o assunto acaba.** `History.Remove` tira da Central e não tira da
+  tela; com toast fixo isso deixaria pendurado um vermelho já resolvido (regra 10). Três saídas: o
+  botão, o clique na barra, e a retirada automática.
 - **A deduplicação não sobrevive a restart**, ao contrário do reconhecimento. Reemitir depois de
   um restart, com a situação ainda sem resolução, é o comportamento certo.
+- **Pendente:** o nível 3 ainda **não** fura o Não Perturbe, que esta seção pede. Precisa de
+  `scenario="urgent"`, que no Windows 11 depende de marcar o Tempus como prioritário nas
+  Configurações — passo manual, não código.
 
 ## 6. Fluxo de re-consent
 

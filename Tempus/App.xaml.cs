@@ -46,6 +46,17 @@ public partial class App : Application
     private readonly HashSet<string> _toastsSent = [];
 
     /// <summary>
+    /// Etiqueta → ocorrência dos toasts que este processo emitiu e que podem estar na tela.
+    /// <para>
+    /// Existe por causa do aviso <b>fixo</b> (D-039): ele não some sozinho, então alguém precisa
+    /// saber que ele está lá para retirá-lo quando o assunto acabar. Não se confunde com o
+    /// <see cref="_toastsSent"/>, que responde "já saiu?" e nunca esquece; este responde "ainda
+    /// está de pé?" e esvazia.
+    /// </para>
+    /// </summary>
+    private readonly Dictionary<string, string> _standing = [];
+
+    /// <summary>
     /// O sinal que a barra está exibindo, guardado pelo <see cref="BuildState"/> para o
     /// <see cref="Rerender"/> decidir sobre interromper. Fica aqui, e não no
     /// <see cref="ShellState"/>, porque o estado é o que a superfície desenha — e toast não é
@@ -195,6 +206,7 @@ public partial class App : Application
         if (_toastOptions.Enabled && !isDemo)
         {
             _toasts = new ToastChannel();
+            _toasts.Activated += (_, argument) => OnToastActivated(argument);
             _toasts.Open();
         }
 
@@ -245,35 +257,7 @@ public partial class App : Application
         });
 
         // "Eu vi." Suprime a ocorrência e volta ao normal na hora (regra 2, invariante I3).
-        surface.Acknowledged += (_, _) =>
-        {
-            var state = BuildState(_snapshot);
-
-            // Reconhece as duas coisas que podem estar alarmando: o humor temporal no bloco de
-            // estado e o sinal no chip. São vocabulários diferentes (§0.5) e podem estar acesos ao
-            // mesmo tempo — "eu vi" cala os dois, senão o clique resolveria metade.
-            var seen = new[] { state.Time.Occurrence, state.SignalOccurrence }
-                .Where(o => o is not null)
-                .ToList();
-
-            if (seen.Count == 0) return;
-
-            foreach (var occurrence in seen)
-            {
-                _acknowledged.Add(occurrence!);
-
-                // "Eu vi" apaga a cor e o eco junto. Deixar o aviso na Central depois de resolvido
-                // é mostrar dado velho com cara de atual — a regra 10 vale para a notificação
-                // também, não só para os contadores.
-                _toasts?.Withdraw(ToastPolicy.TagFor(occurrence!));
-            }
-
-            _acks!.Save(_acksDay, _acknowledged);
-
-            // I4 não se aplica ao reconhecimento: a descida é imediata.
-            _gate.Reset(DateTimeOffset.Now);
-            Rerender();
-        };
+        surface.Acknowledged += (_, _) => AcknowledgeCurrent();
 
         // SEVERITY 8: o usuario declara qual reuniao e a dele, e a partir dai so ela alimenta os
         // sinais do 2.1. E a mesma logica do D-006 — o app pergunta em vez de inferir.
@@ -581,30 +565,142 @@ public partial class App : Application
     {
         if (_demo is not null) return; // o modo demo tem seu próprio ritmo
 
-        _surface?.Render(BuildState(_snapshot));
+        var state = BuildState(_snapshot);
+        _surface?.Render(state);
 
         // Depois de desenhar, nunca antes: a barra é a superfície principal e o toast é o eco. Se
         // as duas coisas discordassem por um instante, que a discordância caia do lado de quem
         // ainda não interrompeu ninguém.
-        Announce(DateTimeOffset.Now);
+        Announce(state, DateTimeOffset.Now);
     }
 
     /// <summary>
     /// A interrupção do §5, se houver. A decisão é do <see cref="ToastPolicy"/>; aqui só se junta
     /// o que ele não tem como saber — se há apresentação em curso e o que já foi emitido.
     /// </summary>
-    private void Announce(DateTimeOffset now)
+    private void Announce(ShellState state, DateTimeOffset now)
     {
         if (_toasts is not { IsAvailable: true }) return;
 
+        Retire(state);
+
         var pedido = ToastPolicy.Decide(
-            _shownSignal, now, ForegroundState.ShouldYieldScreen(), _toastsSent, _toastOptions);
+            _shownSignal,
+            state.Time,
+            MeetingOf(state.Time),
+            now,
+            ForegroundState.ShouldYieldScreen(),
+            _toastsSent,
+            _toastOptions);
 
         if (pedido is null) return;
 
         _toastsSent.UnionWith(pedido.Consumes);
-        _toasts.Show(pedido.Title, pedido.Body, pedido.Tag);
+        _standing[pedido.Tag] = pedido.Occurrence;
+        _toasts.Show(pedido);
     }
+
+    /// <summary>
+    /// "Eu vi": suprime a ocorrência e volta ao normal na hora (regra 2, invariante I3).
+    /// <para>
+    /// Tem nome próprio, e não é mais um lambda no fio da barra, porque agora <b>duas</b>
+    /// superfícies fazem o mesmo gesto — o clique na barra e o botão do toast (D-039). Se cada uma
+    /// tivesse a sua cópia, elas divergiriam no primeiro conserto.
+    /// </para>
+    /// </summary>
+    private void AcknowledgeCurrent()
+    {
+        var state = BuildState(_snapshot);
+
+        // Reconhece as duas coisas que podem estar alarmando: o humor temporal no bloco de
+        // estado e o sinal no chip. São vocabulários diferentes (§0.5) e podem estar acesos ao
+        // mesmo tempo — "eu vi" cala os dois, senão o clique resolveria metade.
+        var seen = new[] { state.Time.Occurrence, state.SignalOccurrence }
+            .Where(o => o is not null)
+            .ToList();
+
+        if (seen.Count == 0) return;
+
+        foreach (var occurrence in seen)
+        {
+            _acknowledged.Add(occurrence!);
+
+            // "Eu vi" apaga a cor e o eco junto. Deixar o aviso na Central depois de resolvido
+            // é mostrar dado velho com cara de atual — a regra 10 vale para a notificação
+            // também, não só para os contadores.
+            var tag = ToastPolicy.TagFor(occurrence!);
+            _toasts?.Withdraw(tag);
+            _standing.Remove(tag);
+        }
+
+        _acks!.Save(_acksDay, _acknowledged);
+
+        // I4 não se aplica ao reconhecimento: a descida é imediata.
+        _gate.Reset(DateTimeOffset.Now);
+        Rerender();
+    }
+
+    /// <summary>
+    /// O evento de que o humor temporal está falando. O <see cref="TimeStatus"/> guarda o id
+    /// explícito justamente para esta busca não precisar fatiar a ocorrência.
+    /// </summary>
+    private AgendaItem? MeetingOf(TimeStatus time) =>
+        time.EventId is null ? null : _snapshot.Agenda.FirstOrDefault(e => e.Id == time.EventId);
+
+    /// <summary>
+    /// Tira da tela o aviso fixo cuja situação acabou sozinha (D-039).
+    /// <para>
+    /// Sem isto, um aviso de reunião que ninguém tocou ficaria pendurado depois de ela terminar —
+    /// dado velho com cara de atual, que é o que a regra 10 proíbe. Os três caminhos de saída são
+    /// o botão, o clique na barra (que já chama <c>Withdraw</c>) e este aqui.
+    /// </para>
+    /// </summary>
+    private void Retire(ShellState state)
+    {
+        if (_standing.Count == 0) return;
+
+        // Continua de pé o que ainda é assunto: o alarme que a barra exibe, e a reunião de que o
+        // humor fala. Qualquer outra coisa que tenhamos emitido já passou.
+        var current = MeetingOf(state.Time) is { } meeting
+            ? new[] { state.SignalOccurrence, ToastPolicy.SubjectOf(meeting) }
+            : [state.SignalOccurrence];
+
+        foreach (var (tag, occurrence) in _standing.ToList())
+        {
+            if (current.Contains(occurrence)) continue;
+
+            _toasts?.Withdraw(tag);
+            _standing.Remove(tag);
+        }
+    }
+
+    /// <summary>
+    /// Um botão do toast, ou o corpo dele. Chega de uma thread do WinRT — daí o dispatcher.
+    /// <para>
+    /// O contrato é o do D-038, o mesmo do clique na barra: reconhecer ganha de tudo, e onde não há
+    /// o que reconhecer o gesto abre a agenda do dia. Duas superfícies, uma regra.
+    /// </para>
+    /// </summary>
+    private void OnToastActivated(string argument) => Dispatcher.InvokeAsync(() =>
+    {
+        if (argument.StartsWith("ack|", StringComparison.Ordinal))
+        {
+            AcknowledgeCurrent();
+            return;
+        }
+
+        if (BuildState(_snapshot).CanAcknowledge)
+        {
+            AcknowledgeCurrent();
+            return;
+        }
+
+        if (_surface is FloatingBarSurface surface)
+        {
+            surface.ToggleAgenda(
+                _snapshot.Agenda, PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now));
+        }
+    });
 
     /// <summary>
     /// <c>--toast-probe</c>: emite um toast de exemplo e diz o que aconteceu.
@@ -619,25 +715,83 @@ public partial class App : Application
         var channel = new ToastChannel();
         var opened = channel.Open();
 
-        if (opened)
+        if (!opened)
         {
-            channel.Show(
-                "Sonda do Tempus",
-                "Se você está lendo isto, as notificações de nível 3 vão chegar.",
-                "probe");
+            MessageBox.Show(
+                "Não foi possível abrir o canal.\n\nNormalmente é o atalho do Menu Iniciar: "
+                + "rode scripts\\install.ps1 ou crie o atalho manualmente."
+                + $"\n\nMotivo: {channel.LastError ?? "desconhecido"}",
+                "Tempus — sonda de notificação",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+
+            return;
+        }
+
+        var voltas = new List<string>();
+        channel.Activated += (_, argument) =>
+            voltas.Add(argument.Length == 0 ? "(corpo, sem argumento)" : argument);
+
+        channel.Show(new ToastRequest
+        {
+            Title = "Sonda do Tempus",
+
+            // Um clique só: qualquer botão dispensa o toast. Então a sonda pede o único que
+            // realmente está em dúvida — os outros dois são resolvidos pelo Windows.
+            Body = "Clique em \"Eu vi\" para medir se o clique volta ao aplicativo.",
+            Kind = ToastKind.MeetingStanding,
+            Tag = "probe",
+            Occurrence = "probe|sonda",
+            Consumes = [],
+            StaysOnScreen = true,
+            Actions =
+            [
+                new ToastAction("Eu vi", ToastActionKind.Acknowledge, "probe|sonda"),
+                new ToastAction("Dispensar", ToastActionKind.Dismiss),
+            ],
+        });
+
+        // A sonda precisa continuar viva para o clique chegar — é exatamente essa dependência que
+        // ela existe para medir. Bombeia mensagens em vez de dormir: sem isso o WinRT não entrega.
+        var prazo = DateTime.UtcNow.AddSeconds(60);
+
+        while (DateTime.UtcNow < prazo && voltas.Count == 0)
+        {
+            Current.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+            Thread.Sleep(100);
+        }
+
+        channel.Withdraw("probe");
+
+        // Também em arquivo, no padrão das outras sondas: o MessageBox responde a quem está na
+        // frente da tela, e o arquivo responde a quem está lendo o diagnóstico depois.
+        try
+        {
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), "tempus-toast-probe.txt"),
+                voltas.Count > 0
+                    ? $"ativacao=OK\nargumentos={string.Join(" | ", voltas)}\n"
+                    : "ativacao=NAO CHEGOU\n");
+        }
+        catch (Exception e)
+        {
+            Debug.WriteLine($"Relatório da sonda não gravado: {e.Message}");
         }
 
         MessageBox.Show(
-            opened
-                ? "Canal aberto e toast enviado.\n\nNão apareceu nada? O envio funcionou, então o "
-                  + "problema está nas notificações do Windows: Configurações › Sistema › "
-                  + "Notificações, e confira o Assistente de Foco."
-                : "Não foi possível abrir o canal.\n\nNormalmente é o atalho do Menu Iniciar: "
-                  + "rode scripts\\install.ps1 ou crie o atalho manualmente."
-                  + $"\n\nMotivo: {channel.LastError ?? "desconhecido"}",
+            voltas.Count > 0
+                ? "Canal aberto, aviso entregue e o clique VOLTOU ao processo.\n\n"
+                  + $"Argumentos recebidos: {string.Join(" · ", voltas)}\n\n"
+                  + "É o que o botão \"Eu vi\" precisa para funcionar."
+                : "Canal aberto e aviso entregue, mas nenhum clique voltou em 60 s.\n\n"
+                  + "Se você clicou e nada chegou, a ativação em primeiro plano não funciona nesta "
+                  + "máquina: \"Entrar na call\" e \"Dispensar\" continuam valendo (são resolvidos "
+                  + "pelo Windows), mas o \"Eu vi\" precisa do plano B do D-039.\n\n"
+                  + "Se você não clicou, rode de novo e clique.",
             "Tempus — sonda de notificação",
             MessageBoxButton.OK,
-            opened ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            MessageBoxImage.Information);
     }
 
     /// <summary>

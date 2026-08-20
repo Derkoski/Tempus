@@ -27,13 +27,14 @@ Ferramenta pessoal de um único usuário — não é produto para distribuir.
 **Fases 0 a 3 e 5 concluídas** (2026-08-19). A barra roda em uso real com dados do Google: onze
 sinais do §2 avaliados como funções puras, arbitragem com desempate por categoria, histerese de
 20 s na descida, nível 3 que escala e sai com um clique, `Offline` que anula a escala, pausas de
-descanso, tela de configuração e toasts de nível 3.
+descanso, tela de configuração e toasts com botão — nível 3 mais o aviso de reunião em dois tempos,
+passageiro aos 10 min e fixo aos 2 até o clique (D-039).
 
 **Fase 4 em andamento.** A primeira fatia entregou escrita otimista com reversão, fila persistida
 com repetição e resolução de conflito (D-029). Falta **editar título e vencimento**, mais os
 critérios de aceite 7 (tarefas, nos dois sentidos) e 8 (contador de e-mail).
 
-`Tempus.Tests` (xUnit) tem 144 testes e roda em ~120 ms. As oito invariantes I1–I8 têm teste e
+`Tempus.Tests` (xUnit) tem 199 testes e roda em ~250 ms. As oito invariantes I1–I8 têm teste e
 nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execução trava o build.
 
 ## Regras deste projeto
@@ -82,7 +83,7 @@ dotnet build Tempus/Tempus.csproj              # deve terminar com 0 avisos
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe          # dados reais do Google
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --demo   # dados falsos, sem rede
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --demo --fail-writes  # escrita sempre falha
-./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --toast-probe  # confere as notificações
+./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --toast-probe  # notificação: entrega E clique de volta
 dotnet test Tempus.Tests/Tempus.Tests.csproj   # domínio e invariantes; feche o app antes
 ```
 

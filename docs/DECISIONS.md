@@ -2217,3 +2217,119 @@ Testei primeiro na barra real e **silenciei um alarme do usuário sem querer**: 
 A regra do D-024 — verificar escrita no modo demo, nunca na conta real — vale também para **gesto**:
 um clique de teste na barra real consome estado real. A verificação foi refeita no demo, onde o
 clique na pílula em `Ocupado` abriu a agenda do dia, que é exatamente o caso relatado.
+
+---
+
+## D-039 — O toast vira gesto, e a reunião avisa duas vezes
+
+**Status:** Aceita · 2026-08-20 · encontrada em uso
+
+### O sintoma
+
+*"o toast deveria ser mais bem usado, até agora apareceu só uma vez, e quando fui clicar fechou.
+na reunião atual, não apareceu o toast pra mim, deveria aparecer o toast e ficar aberto"*
+
+Três queixas numa frase, e as três eram consequências diretas do escopo mínimo do D-028.
+
+### Por que apareceu só uma vez
+
+Nada tinha quebrado. Só existiam duas fontes de toast — `MeetingRanIntoNext` e `DayEnded` — e a
+regra 1 quer justamente que elas sejam raras. Somados os ~5 segundos de tela e a retenção durante
+apresentação, o aviso podia ter saído e passado despercebido.
+
+O modelo estava certo; o **orçamento de interrupção** é que tinha ficado pequeno demais. O D-028
+disse que subir esse escopo depois seria barato, e foi.
+
+### A reunião, em dois tempos
+
+O usuário desenhou o comportamento: *"um aviso com 10 minutos de antecedência e depois um fixo com
+2 minutos de antecedência pra ficar ali até eu clicar nele pra entrar."*
+
+| Momento | Tipo | Fica na tela? |
+|---------|------|---------------|
+| T−10 min | `MeetingHeadsUp` | não — e expira na Central quando a reunião começa |
+| T−2 min | `MeetingStanding` | **sim, até o clique** |
+
+Os dois limiares não foram inventados: `SignalThresholds` já usava exatamente 10 e 2.
+
+Mesma etiqueta nos dois, como a entrada e a escalada do nível 3 já faziam — o fixo **substitui** o
+passageiro em vez de empilhar dois avisos sobre a mesma reunião. E o mesmo engolimento: abrir o app
+a um minuto da reunião emite só o fixo, porque duas interrupções em sequência não são dois avisos,
+são um susto.
+
+### Por que a reunião não pode ler o vencedor da arbitragem
+
+`MeetingUpcoming` é nível 1. Qualquer `TaskOverdue` âmbar o derrota na arbitragem — o aviso da call
+sumiria por causa de uma tarefa vencida, que não tem nada com ela.
+
+Então o caminho de reunião lê o **humor temporal**, e não o sinal vencedor. O slot de tempo mostra
+a próxima reunião independentemente do que mais esteja alarmando, então a propriedade que o D-028
+protegia continua de pé — *o toast nunca fala de algo que a barra não está mostrando* — só que por
+outra superfície da barra.
+
+O link, porém, vem do **evento**, e não de `TimeStatus.CallUrl`, que é `null` em `Approaching` de
+propósito (D-016): lá o silêncio protege contra clicar em "Em breve" e cair numa sala vazia. No
+toast não há essa ambiguidade — ele nomeia a reunião e o botão nomeia a ação.
+
+### `scenario="reminder"` exige botão, e falha calado sem ele
+
+É o que faz o aviso ficar pré-expandido e esperar por um gesto. A regra que morde:
+
+> You must provide at least one button on your app notification... otherwise the notification will
+> be treated as a normal notification.
+
+Sem botão o Windows **não reclama** — ele degrada para os 5 segundos de sempre. Pareceria que a
+decisão foi tomada e ela teria sido ignorada, que é o modo de falhar mais caro que existe aqui.
+Por isso "fixo" e "tem botão" andam juntos, e a amarração é teste, não comentário.
+
+É também por isso que uma reunião presencial, sem link de call, ainda sai com "Dispensar": o botão
+não está lá por conveniência, está lá para sustentar o cenário.
+
+### O nível 3 também passou a ficar na tela
+
+Não era o pedido, mas estava errado desde o D-028: a regra 2 diz que o nível 3 **escala e não
+decai**, e um vermelho que interrompe por cinco segundos e some decai. O toast era raro demais para
+alguém notar a contradição.
+
+### Ativação sem servidor COM
+
+Três tipos de botão, e a diferença entre eles é **de quem dependem**:
+
+| Botão | Ativação | Depende de |
+|-------|----------|------------|
+| `Entrar na call` | `protocol` com a URL crua | ninguém — o shell dá `ShellExecute` |
+| `Dispensar` | `system` / `dismiss` | ninguém — tratado pelo shell |
+| `Eu vi` | `foreground` → evento `Activated` | o processo vivo segurar o objeto |
+
+A escolha de `protocol` para o botão que mais importa é deliberada: **entrar na call funciona mesmo
+que tudo que escrevemos esteja quebrado.**
+
+O `Eu vi` e o clique no corpo dependem de `ToastNotification.Activated` disparar no processo. Para
+app não empacotado esse é o caminho documentado no quickstart do Win32, e não exige CLSID nem
+servidor COM — mas é notório por falhar em silêncio, e havia plano B escolhido (esquema `tempus:`
+em `HKCU` mais named pipe).
+
+**A sonda decidiu antes de eu escrever o resto.** `--toast-probe` passou a emitir um aviso fixo com
+botões e a esperar até 60 s, relatando o que voltou — em `MessageBox` e em arquivo. Devolveu
+`ativacao=OK` com o argumento `ack|probe|sonda`, e o plano B foi descartado sem custo. É a mesma
+jogada do `--dump-tasks` e do `--dump-agenda`: transformar "não funcionou" em resposta.
+
+A contrapartida entrou no código como comentário porque é invisível: soltar a referência ao
+`ToastNotification` é perder o clique sem erro nenhum. Daí o dicionário de toasts vivos.
+
+### Retirada automática
+
+`Withdraw` só chamava `History.Remove`, que tira da Central e **não** tira da tela. Com toast fixo
+isso deixaria um aviso já resolvido pendurado — dado velho com cara de atual, que é o que a regra
+10 proíbe. Agora faz as duas metades, e o aviso sai por três caminhos: o botão, o clique na barra,
+e a situação ter acabado sozinha.
+
+### Fora de escopo, por escolha do usuário
+
+Meio-dia e Offline continuam sendo cor e não interrupção. O `MiddayCheckpoint` estava na tabela do
+§5 desde o começo, mas o usuário tinha reclamado no dia anterior (D-036) de ele gritar sem motivo —
+promovê-lo a interrupção diária, no horário mais previsível do dia, andaria para trás.
+
+Furar o Não Perturbe no nível 3, que o §5 pede, continua pendente: precisa de `scenario="urgent"`,
+que no Windows 11 depende de marcar o Tempus como prioritário nas Configurações. É passo manual,
+não código.
