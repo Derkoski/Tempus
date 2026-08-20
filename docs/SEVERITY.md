@@ -81,6 +81,17 @@ vermelho de alarme preenche o chip e só sai com clique.
 > preenchidos só `Overrun` alcança os 5 minutos — `Imminent` acaba quando a reunião começa e
 > `EndingSoon` quando ela termina — então a regra seleciona o caso certo sem caso especial.
 
+> **Emenda de 2026-08-20 (D-032).** A linha "Forma" da tabela dizia que o slot é texto tingido e o
+> chip é sempre preenchido, e concluía que a forma já separava os dois. **Deixou de ser verdade**
+> quando `EndingSoon`, `Imminent` e `Overrun` passaram a preencher o slot: aí os dois viram
+> pílulas, e como compartilham a paleta, viram pílulas **idênticas**.
+>
+> O usuário encontrou em uso — *"fica tudo na mesma cor, confunde um pouco"*. A forma agora é
+> garantida em vez de suposta, pela **invariante I9**: quando as duas áreas cairiam na mesma
+> família de cor, o chip abre mão do preenchimento e fica com contorno. Quem cede é o chip porque
+> o slot está no ar o dia inteiro, e porque tirar o preenchimento dele apagaria a escalada do
+> `Overrun`.
+
 ## 1.5 Humor temporal — o sinal ambiente
 
 Este é o estado que fica visível o dia inteiro, então a cor tem que informar sem cansar.
@@ -307,6 +318,11 @@ senão:             severidadeEfetiva = max(sinaisAtivos não suprimidos)
 - **I7.** No estado `Offline`, nenhum contador exibe número e nenhum sinal é avaliado.
 - **I8.** A escalada para piscante nunca ocorre antes de 5 min no nível 3, e nunca com período
   menor que 1s.
+- **I9.** *(D-032)* A barra nunca exibe duas áreas coloridas na **mesma família de cor com a mesma
+  forma**. Quando o slot de tempo e o chip cairiam na mesma família, o chip perde o preenchimento
+  e fica com contorno. A comparação é por **família de matiz**, não por igualdade de cor: azul
+  `#8FB8DC` ao lado de azul `#1E4B73` são hexadecimais diferentes que o olho lê como a mesma
+  coisa, e foram eles que motivaram a invariante.
 
 ## 5. Toasts vs. cor
 
@@ -446,6 +462,32 @@ persistida resolve sozinha na próxima abertura.
 
 **Decidir depois de conviver.** Não há dado ainda sobre com que frequência uma escrita chega a
 falhar de verdade — e sem isso, qualquer escolha aqui é chute.
+
+### Q-03 — O chip e o slot frequentemente dizem o mesmo fato
+
+**Aberta em 2026-08-20, junto com o D-032.** Ao investigar a colisão de cor apareceu algo maior: em
+boa parte do ciclo de call as duas áreas **narram o mesmo acontecimento**.
+
+| Slot de tempo | Chip | Mesmo fato? |
+|---|---|---|
+| `Ocupado` | `MeetingStarted` — "Daily começou às 14:00" | sim |
+| `Em breve` | `MeetingUpcoming` — "Daily em 6 min" | sim |
+| `Começando` | `MeetingImminent` — "Daily começa em 1 min" | sim |
+| `Estourou` | `MeetingRanIntoNext` — "Daily acabou — Review já começou" | quase |
+
+A I9 resolve a **confusão visual** — as duas deixam de parecer a mesma coisa. Ela **não** resolve a
+redundância: a barra continua gastando o recurso mais escasso do produto (regra 1) para dizer duas
+vezes o que já estava dito.
+
+A alternativa avaliada era **calar o chip quando ele repete o compromisso que o slot já narra**,
+deixando-o para o que o slot não sabe dizer — tarefas vencidas, fronteiras do dia, uma call
+diferente. Apresentada ao usuário em 2026-08-20 junto com a I9; ele **escolheu** só separar
+visualmente, por ser mudança menor e mais previsível.
+
+Registrado porque a observação é boa e não deve ser redescoberta como bug. **O que mudaria a
+decisão:** conviver com a I9 e perceber que ler a mesma coisa duas vezes incomoda mais que a cor
+repetida incomodava. A supressão seria presentacional — o sinal continuaria vencendo a arbitragem,
+alimentando o toast (§5) e aceitando o reconhecimento (§10).
 
 ---
 

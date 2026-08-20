@@ -1732,3 +1732,82 @@ O outro caminho para o mesmo campo é o **Google Agenda**: a documentação defi
 `--dump-tasks` transformou "não refletiu" em resposta definitiva em duas execuções, separando "o Google não mandou" de "o Tempus não desenhou". Mesma justificativa do `--toast-probe` (D-028): a falha desse caminho é silenciosa. A sonda de escrita que criou a tarefa descartável foi **removida** — respondeu à pergunta e não se repete.
 
 **Sobre escrever na conta real:** a regra do D-024 diz para verificar escrita em demo. Aqui a pergunta só podia ser respondida contra a conta de verdade, então foi **perguntado antes**, feito com uma tarefa descartável em vez de uma real, e limpo em seguida.
+
+---
+
+## D-032 — Duas áreas coloridas nunca podem parecer a mesma coisa
+
+**Status:** Aceita · 2026-08-20 · encontrada em uso · implementa a invariante I9
+
+### O sintoma
+
+*"Quando falta alguns minutos para uma call e estou iniciando uma call, fica tudo na mesma cor,
+confunde um pouco."*
+
+### A premissa que envelheceu
+
+O §0.5 afirmava que a **forma** já separava os dois vocabulários: slot de tempo com texto tingido,
+chip sempre preenchido. Isso era verdade quando foi escrito. Deixou de ser quando `EndingSoon`,
+`Imminent` e `Overrun` passaram a **preencher** o slot — aí os dois viraram pílulas, e como
+compartilham a paleta, viraram pílulas idênticas.
+
+A paleta prova: `AttentionBackground` (`#B4530A`) tem **três** papéis simultâneos — preenchimento
+do slot em `Encerrando`, cor de texto do slot em `Em breve` e `Dia Encerrado`, e preenchimento do
+chip em severidade `Attention`. `CriticalBackground` (`#C02626`) idem entre `Estourou` e `Critical`.
+
+### Família de matiz, não igualdade de cor
+
+`ColorVocabulary.Collide` compara **famílias** (Green, Blue, Amber, Red), não valores. Por
+igualdade, `Ocupado` em `#8FB8DC` ao lado de um chip `#1E4B73` passaria batido — e são justamente
+os dois azuis que motivaram a queixa. O olho não compara hexadecimais.
+
+Função pura, sem tocar em `System.Windows.Media` (regra 8): a decisão é do domínio, a pintura é da
+paleta.
+
+### Quem cede é o chip
+
+Dois motivos. O slot está no ar o **dia inteiro**, e mudar a forma dele o tempo todo seria mais
+perturbador que mudar a de algo que aparece raramente. E tirar o preenchimento do slot apagaria a
+**escalada do `Overrun`** (D-025), que é o alarme mais caro do produto.
+
+O contorno continua lendo como alarme, e o piscar do nível 3 passa a animar a **borda** quando o
+chip está em contorno — animar o fundo transparente não mostraria nada. A I8 continua valendo:
+muda onde o piscar acontece, não se acontece.
+
+### A tinta do contorno é uma cor própria — e isso custou duas tentativas
+
+**Primeira tentativa:** escolher por tema. No escuro a cor saturada, no claro a de texto. Errado —
+o teste de contraste pegou: no tema **escuro** o azul de `Info` (`#1E4B73`) dá **1,81:1** contra a
+barra `#1F1F1F`. Um contorno fantasma. O usuário reclamou disso no mesmo minuto em que o teste
+falhou: *"o tom de azul é muito escuro pra opção com contorno, não dá pra ler direito"*.
+
+**Segunda tentativa:** escolher por contraste, preferindo a saturada quando ela passa. Melhor, mas
+o vermelho (`#C02626`, 2,76:1) também reprovava e caía para o `CriticalForeground` — um rosa
+pálido que **perde a identidade de alarme**.
+
+**O que valeu:** contorno é um **terceiro contexto**, e contexto novo pede cor nova. Entraram
+`InfoInk`, `AttentionInk` e `CriticalInk` na paleta — no escuro claras o bastante para ler (todas
+acima de 5:1) e ainda inconfundivelmente azul, âmbar e vermelha; no claro as escuras que já
+existiam servem.
+
+A lição: quando duas cores existentes não servem para um papel novo, o problema é achar que o papel
+é velho.
+
+### Verificação
+
+`PaletteOutlineTests` mede **contraste WCAG** de cada tinta contra a barra nos dois temas, e o
+matiz pelo canal dominante — um vermelho de alarme não pode virar rosa. O tema claro é o caminho
+que ninguém exercita no dia a dia; quem tem de pegá-lo é o teste.
+
+`ColorVocabularyTests` cobre os **32 pares** de humor × severidade, afirmando que não sobra nenhuma
+combinação de mesma família com mesma forma.
+
+E a prova visual no `--demo`, que alterna os humores sozinho: `Encerrando` preenchido ao lado de
+"Daily começa em 1 min" em contorno, separáveis de relance; azul e vermelho mantendo o
+preenchimento quando não colidem.
+
+### O que ficou de fora
+
+A redundância entre as duas áreas — elas frequentemente dizem o **mesmo fato** — virou **Q-03** no
+`SEVERITY.md` §9. Foi apresentada ao usuário como alternativa mais profunda e ele escolheu só a
+separação visual, por ser mudança menor. Registrada em vez de assumida.

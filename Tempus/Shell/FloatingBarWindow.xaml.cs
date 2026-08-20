@@ -33,6 +33,10 @@ internal partial class FloatingBarWindow : Window
     public static TimeSpan BlinkPeriod => TimeSpan.FromMilliseconds(BlinkHalfPeriodMs * 2);
 
     private readonly SolidColorBrush _chipBrush = new(Colors.Transparent);
+
+    /// <summary>Irmão do <see cref="_chipBrush"/> para o modo contorno da invariante I9.</summary>
+    private readonly SolidColorBrush _chipBorderBrush = new(Colors.Transparent);
+
     private readonly SolidColorBrush _statusBrush = new(Colors.Transparent);
     private bool _isStatusBlinking;
     private readonly DispatcherTimer _timer;
@@ -57,6 +61,7 @@ internal partial class FloatingBarWindow : Window
         InitializeComponent();
 
         ReasonChip.Background = _chipBrush;
+        ReasonChip.BorderBrush = _chipBorderBrush;
         TimeArea.Background = _statusBrush;
 
         // Tamanho inicial em DIP só para o WPF medir o conteúdo; a posição e o tamanho reais
@@ -169,12 +174,32 @@ internal partial class FloatingBarWindow : Window
         var (chipBackground, chipForeground) = _palette.For(state);
         var showChip = state.IsOffline || state.EffectiveSeverity > Severity.Calm;
 
+        // I9: se o chip cairia na mesma família de cor do slot de tempo, ele abre mão do
+        // preenchimento e vira contorno. Sem isto os dois viram pílulas iguais lado a lado e o
+        // olho não separa qual está falando de quê — foi assim que o usuário encontrou o problema.
+        //
+        // Quem cede é o chip, não o slot: o slot está lá o dia inteiro e mudar a forma dele seria
+        // mais perturbador, e tirar o preenchimento dele apagaria a escalada do Overrun (D-025).
+        var outlined = showChip
+            && !state.IsOffline
+            && ColorVocabulary.Collide(state.Time.Mood, state.EffectiveSeverity);
+
+        var ink = _palette.OutlineFor(state.EffectiveSeverity);
+
         StopBlink();
-        _chipBrush.Color = showChip ? chipBackground : Colors.Transparent;
+        _chipBrush.Color = showChip && !outlined ? chipBackground : Colors.Transparent;
+        _chipBorderBrush.Color = outlined ? ink : Colors.Transparent;
+        ReasonChip.BorderThickness = new Thickness(outlined ? 1.2 : 0);
 
         ReasonText.Text = state.Reason;
         ReasonText.Foreground = new SolidColorBrush(
-            showChip ? chipForeground : _palette.BarForeground);
+            (showChip, outlined) switch
+            {
+                (_, true) => ink,
+                (true, _) => chipForeground,
+                _ => _palette.BarForeground,
+            });
+
         ReasonChip.Visibility = string.IsNullOrEmpty(state.Reason)
             ? Visibility.Hidden
             : Visibility.Visible;
@@ -185,7 +210,9 @@ internal partial class FloatingBarWindow : Window
             && state.EffectiveSeverity == Severity.Critical
             && SystemParameters.ClientAreaAnimation)
         {
-            StartBlink(_palette.CriticalBackground, _palette.AttentionBackground);
+            // Em contorno, animar o fundo não mostraria nada: quem carrega a cor é a borda. A I8
+            // continua valendo — muda onde o piscar acontece, não se ele acontece.
+            StartBlink(_palette.CriticalBackground, _palette.AttentionBackground, outlined);
         }
 
         TasksCount.Text = FormatCount(state.OpenTasks);
@@ -431,7 +458,11 @@ internal partial class FloatingBarWindow : Window
         EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
     };
 
-    private void StartBlink(Color from, Color to)
+    /// <param name="onBorder">
+    /// Chip em modo contorno (I9): quem carrega a cor é a borda, então é ela que pisca. Animar o
+    /// fundo transparente não mostraria nada.
+    /// </param>
+    private void StartBlink(Color from, Color to, bool onBorder = false)
     {
         var animation = new ColorAnimation
         {
@@ -443,7 +474,9 @@ internal partial class FloatingBarWindow : Window
             EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
         };
 
-        _chipBrush.BeginAnimation(SolidColorBrush.ColorProperty, animation);
+        (onBorder ? _chipBorderBrush : _chipBrush)
+            .BeginAnimation(SolidColorBrush.ColorProperty, animation);
+
         _isBlinking = true;
     }
 
@@ -451,7 +484,10 @@ internal partial class FloatingBarWindow : Window
     {
         if (!_isBlinking) return;
 
+        // Para os dois sem perguntar qual estava animando: o modo pode ter mudado entre um render
+        // e outro, e uma animação esquecida continuaria pintando por cima do valor novo.
         _chipBrush.BeginAnimation(SolidColorBrush.ColorProperty, null);
+        _chipBorderBrush.BeginAnimation(SolidColorBrush.ColorProperty, null);
         _isBlinking = false;
     }
 

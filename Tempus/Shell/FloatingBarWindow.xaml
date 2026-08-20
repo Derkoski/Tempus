@@ -109,7 +109,9 @@
       </Border>
     </Grid>
 
-    <!-- Motivo do alarme: o único elemento preenchido por padrão, e vazio na maior parte do dia -->
+    <!-- Motivo do alarme: preenchido por padrão, e vazio na maior parte do dia. Vira contorno
+         quando cairia na mesma família de cor do slot de tempo (invariante I9) - por isso a
+         espessura de borda nasce em zero e é definida em tempo de execução. -->
     <Border x:Name="ReasonChip"
             Grid.Column="2"
             CornerRadius="4"
@@ -117,6 +119,7 @@
             Margin="8,0,0,0"
             VerticalAlignment="Center"
             Background="Transparent"
+            BorderThickness="0"
             Cursor="Hand"
             ToolTipService.InitialShowDelay="300">
       <TextBlock x:Name="ReasonText"

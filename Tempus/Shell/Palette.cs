@@ -18,6 +18,13 @@ internal sealed record Palette(
     Color AttentionForeground,
     Color CriticalBackground,
     Color CriticalForeground,
+
+    // A terceira cor de cada severidade: a tinta do chip em contorno (I9). Nenhuma das outras duas
+    // serve — a de preenchimento é escura demais sobre a barra escura, e a de texto sobre ela é
+    // clara demais e perde a identidade do matiz. Ver OutlineFor.
+    Color InfoInk,
+    Color AttentionInk,
+    Color CriticalInk,
     Color OfflineBackground,
     Color OfflineForeground,
     Color PanelBackground,
@@ -57,6 +64,11 @@ internal sealed record Palette(
         AttentionForeground: Hex("#FFFFEBCF"),
         CriticalBackground: Hex("#FFC02626"),
         CriticalForeground: Hex("#FFFFE3E3"),
+        // Tintas de contorno: claras o bastante para ler sobre #1F1F1F (todas acima de 5:1) e
+        // ainda inconfundivelmente azul, âmbar e vermelha.
+        InfoInk: Hex("#FF7CB3E8"),
+        AttentionInk: Hex("#FFE8913C"),
+        CriticalInk: Hex("#FFF26B6B"),
         OfflineBackground: Hex("#FF1A1A1A"),
         OfflineForeground: Hex("#FF6E6E6E"),
         PanelBackground: Hex("#FF262626"),
@@ -77,6 +89,11 @@ internal sealed record Palette(
         AttentionForeground: Hex("#FF6B3A00"),
         CriticalBackground: Hex("#FFF7C9C9"),
         CriticalForeground: Hex("#FF8A1414"),
+        // No tema claro a cor de texto sobre o preenchimento já é escura e serve de tinta: o
+        // problema é o oposto do escuro, sobra contraste em vez de faltar.
+        InfoInk: Hex("#FF0B3B60"),
+        AttentionInk: Hex("#FF6B3A00"),
+        CriticalInk: Hex("#FF8A1414"),
         OfflineBackground: Hex("#FFEDEDED"),
         OfflineForeground: Hex("#FF8A8A8A"),
         PanelBackground: Hex("#FFFBFBFB"),
@@ -190,5 +207,53 @@ internal sealed record Palette(
             Severity.Critical => (CriticalBackground, CriticalForeground),
             _ => (Colors.Transparent, BarForeground),
         };
+    }
+
+    /// <summary>
+    /// A tinta do chip quando ele abre mão do preenchimento para não se confundir com o slot de
+    /// tempo (invariante I9). Vale para borda e texto — os dois na mesma cor, que é o que faz o
+    /// contorno ler como uma pílula vazada em vez de duas decisões separadas.
+    /// <para>
+    /// <b>É uma cor própria, não uma das outras duas.</b> Tentei as duas antes de aceitar isso: a
+    /// de preenchimento é escura demais sobre a barra escura — o azul de <c>Info</c>
+    /// (<c>#1E4B73</c>) dá 1,81:1 contra <c>#1F1F1F</c>, um contorno fantasma, e foi exatamente o
+    /// que o usuário reclamou de não conseguir ler. E a de texto sobre o preenchimento é clara
+    /// demais: o vermelho viraria um rosa pálido e perderia a identidade de alarme.
+    /// </para>
+    /// <para>
+    /// Contorno é um <b>terceiro contexto</b>, e contexto novo pede cor nova. O teste de contraste
+    /// em <c>PaletteOutlineTests</c> é o que impede a próxima escolha de errar de novo.
+    /// </para>
+    /// </summary>
+    public Color OutlineFor(Severity severity) => severity switch
+    {
+        Severity.Info => InfoInk,
+        Severity.Attention => AttentionInk,
+        Severity.Critical => CriticalInk,
+        _ => BarForeground,
+    };
+
+    private static double Contrast(Color a, Color b)
+    {
+        var (x, y) = (Relative(a), Relative(b));
+        var (lighter, darker) = x > y ? (x, y) : (y, x);
+
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    /// <summary>
+    /// Luminância relativa da WCAG, com correção de gama. Diferente da conta do <see cref="IsDark"/>,
+    /// que é a fórmula YIQ e serve para "esta paleta é escura?" — aqui a pergunta é mais fina:
+    /// "dá para ler isto sobre aquilo?".
+    /// </summary>
+    private static double Relative(Color c)
+    {
+        static double Channel(byte v)
+        {
+            var s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Channel(c.R)) + (0.7152 * Channel(c.G)) + (0.0722 * Channel(c.B));
     }
 }
