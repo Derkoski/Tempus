@@ -2174,3 +2174,46 @@ dois humores de "próxima reunião" passam a absorver os dois sinais de aproxima
 
 Os testes do D-033 não pegaram porque testavam a tabela contra ela mesma, e não contra os limiares
 reais de `SignalThresholds` e `TimeThresholds`. Foi uma captura de tela que pegou.
+
+---
+
+## D-038 — Cada área da barra faz uma coisa só
+
+**Status:** Aceita · 2026-08-20 · encontrada em uso
+
+### O sintoma
+
+*"Enquanto estou na call, não consigo abrir a lista de calls subsequentes, aquele grid que aparecem
+todas as calls do dia."*
+
+### A causa
+
+`OnStatusClicked` caía em `OnTimeClicked` quando não havia nada a reconhecer. E `OnTimeClicked`
+entra na call sempre que há `CallUrl`. Durante uma reunião **os dois cliques esquerdos da barra
+faziam a mesma coisa**: entrar na call que já estava aberta.
+
+A agenda do dia ficava sem porta esquerda, sobrando só o menu do botão direito — e o usuário não o
+encontrou, o que é a definição de afordância que não existe.
+
+### A correção
+
+A pílula de estado abre a agenda; o texto do compromisso entra na call. Uma área, um significado —
+que é o que o D-023 pretendia ao dar slots próprios ao estado e ao compromisso, e que o
+encadeamento de `OnStatusClicked` para `OnTimeClicked` desfazia na prática.
+
+O **▶** do D-037 é o que distingue os dois à vista: quem tem o glifo entra na call, quem não tem
+mostra o dia. As duas mudanças se encaixam sem terem sido planejadas juntas — a afordância que eu
+tinha acabado de acrescentar já era a legenda de que esta correção precisava.
+
+Reconhecer continua ganhando de tudo na pílula: a regra 2 não abre exceção.
+
+A dica também mentia — dizia "Clique para entrar na call" na pílula que não entra em call nenhuma.
+
+### Verificação, e um erro no caminho
+
+Testei primeiro na barra real e **silenciei um alarme do usuário sem querer**: o estado era
+`Estourou`, o reconhecimento tem prioridade, e o clique o consumiu em vez de abrir a agenda.
+
+A regra do D-024 — verificar escrita no modo demo, nunca na conta real — vale também para **gesto**:
+um clique de teste na barra real consome estado real. A verificação foi refeita no demo, onde o
+clique na pílula em `Ocupado` abriu a agenda do dia, que é exatamente o caso relatado.

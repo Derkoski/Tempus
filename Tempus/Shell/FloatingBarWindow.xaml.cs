@@ -292,11 +292,11 @@ internal partial class FloatingBarWindow : Window
         if (time.IsEscalated && !state.IsOffline && SystemParameters.ClientAreaAnimation)
             StartStatusBlink(_palette.CriticalBackground, _palette.AttentionBackground);
 
+        // A dica tem de dizer o que este clique faz, e não o que algum clique da barra faz: entrar
+        // na call é do texto ao lado, marcado com ▶ (D-037, D-038).
         var action = state.CanAcknowledge
             ? "Clique para reconhecer — eu vi"
-            : time.CallUrl is { Length: > 0 }
-                ? "Clique para entrar na call"
-                : "Clique para abrir a agenda";
+            : "Clique para ver a agenda do dia";
 
         TimeArea.ToolTip = state.IsOffline
             ? "Sem sincronização — não sei o que vem a seguir"
@@ -823,7 +823,14 @@ internal partial class FloatingBarWindow : Window
             return;
         }
 
-        OnTimeClicked();
+        // Abre a agenda do dia — **não** entra na call. Antes isto caía em OnTimeClicked, e o
+        // resultado é que durante uma reunião os dois cliques esquerdos da barra faziam a mesma
+        // coisa: entrar na call que já estava aberta. A lista do dia ficava sem porta, sobrando só
+        // o menu do botão direito, e o usuário não achou (D-038).
+        //
+        // Agora cada área tem um significado só, e o ▶ do D-037 é o que distingue: quem tem o
+        // glifo entra na call, quem não tem mostra o dia.
+        Raise(AgendaRequested);
     }
 
     private void OnTimeClicked()
