@@ -585,15 +585,39 @@ internal partial class FloatingBarWindow : Window
         // própria, que desapareciam atrás da barra enquanto o usuário os lia (D-021).
         if (OwnsItsPixels()) return;
 
-        // Sair e voltar da faixa topmost. Reafirmar HWND_TOPMOST numa janela que **já é** topmost
-        // costuma ser ignorado pelo Windows — foi por isso que a barra ficava enterrada sob a
-        // taskbar depois do menu Iniciar mesmo com esta chamada rodando a cada segundo. A saída
-        // e o retorno forçam a reinserção no topo da faixa (D-035).
+        // Tentativa barata: sair e voltar da faixa topmost. Reafirmar HWND_TOPMOST numa janela que
+        // **já é** topmost o Windows ignora, então a saída e o retorno forçam a reordenação.
         SetWindowPos(_handle, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
         SetWindowPos(_handle, HWND_TOPMOST, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+        if (OwnsItsPixels()) return;
+
+        // Segunda tentativa: colocação **relativa**, logo acima do próprio Shell_TrayWnd, em vez
+        // de pedir o topo genérico da faixa. Quando o shell ergue a taskbar, pedir HWND_TOPMOST
+        // continua devolvendo uma posição abaixo dela; apontar para ela é explícito.
+        if (NativeMethods.FindWindow("Shell_TrayWnd", null) is { } tray && tray != IntPtr.Zero)
+        {
+            SetWindowPos(_handle, tray, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+            if (OwnsItsPixels()) return;
+        }
+
+        // Não bastou: depois de o menu Iniciar erguer a taskbar, reordenar não devolve a barra
+        // para cima dela. Re-exibir devolve — uma janela recém-mostrada entra no **topo** da faixa
+        // topmost, e não na posição que tinha antes.
+        //
+        // Só acontece com a barra já enterrada, ou seja, invisível: o piscar que isto causaria não
+        // tem como ser visto, e é o preço de um caminho que sem ele não se recupera sozinho.
+        if (_appliedRect is not { } rect) return;
+
+        ShowWindow(_handle, SW_HIDE);
+
+        SetWindowPos(_handle, HWND_TOPMOST, rect.Left, rect.Top, rect.Width, rect.Height,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 
     /// <summary>

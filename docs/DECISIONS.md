@@ -2006,20 +2006,39 @@ pixel no próprio centro?* Se sim, não mexe. Se quem está lá é uma janela **
 
 **2. Reafirmar `HWND_TOPMOST` numa janela que já é topmost é ignorado.** Este era o defeito
 silencioso: mesmo depois de detectar corretamente que estava enterrada, a chamada de `SetWindowPos`
-rodava a cada segundo **sem efeito nenhum**. A saída para `HWND_NOTOPMOST` e o retorno imediato a
-`HWND_TOPMOST` forçam a reinserção no topo da faixa.
+rodava a cada segundo **sem efeito nenhum**.
 
 Detectar sem conseguir corrigir é pior que não detectar: gasta CPU e dá a impressão de que há uma
 rede de segurança onde não há.
 
+### A escada de três degraus, e por que não bastou um
+
+A primeira correção — sair para `HWND_NOTOPMOST` e voltar — **eu dei por boa cedo demais**. O teste
+que a validou fechava o menu clicando no próprio botão Iniciar; o caminho do usuário era clicar em
+**outra janela**, e por ali ela continuava enterrada. Ele voltou dizendo isso, e estava certo.
+
+O que funciona é uma escada, do mais barato ao mais invasivo, parando no primeiro que resolver:
+
+1. **`NOTOPMOST` → `TOPMOST`.** Força reordenação dentro da faixa.
+2. **Colocação relativa ao `Shell_TrayWnd`.** Pedir "logo acima daquela janela" em vez do topo
+   genérico da faixa — explícito onde o genérico devolve uma posição abaixo dela.
+3. **Esconder e re-exibir.** Uma janela recém-mostrada entra no **topo** da faixa, não na posição
+   que tinha. Só roda com a barra já enterrada, ou seja, invisível: o piscar que causaria não tem
+   como ser visto.
+
+Cada degrau só acontece se o anterior falhou, verificado pela mesma pergunta — *de quem é o pixel?*
+
 ### O que ficou, honestamente
 
-**Enquanto o menu Iniciar está aberto, a barra continua coberta.** O explorer reergue a taskbar a
-cada tentativa nossa, e insistir a 16 ms seria uma queda de braço com o shell — CPU à toa, tremor
-na tela, e a regra 9 violada por um ganho que dura o tempo de um menu aberto.
+**Com o menu Iniciar aberto, a barra continua coberta**, e nenhum dos três degraus muda isso.
+Curiosamente o `WindowFromPoint` já devolve a barra nesse estado, mas a tela não a mostra: o que
+cobre ali é uma superfície composta pelo DWM, não uma janela que dispute *hit-test*. Insistir a
+16 ms seria queda de braço com o shell — CPU à toa contra a regra 9, por um ganho que dura o tempo
+de um menu aberto.
 
-O que mudou é o que importa: **fechou o menu, a barra volta em ~1 s**, sozinha. Antes ficava
-enterrada até o usuário clicar em outra janela por acaso.
+O que mudou, verificado com captura de tela no caminho exato do usuário: **clicou em qualquer
+lugar, a barra volta.** Antes ficava enterrada indefinidamente — e sobrevivia até a reinicialização
+do app, porque o estado é da taskbar, não nosso.
 
 É a fragilidade estrutural que o D-002 aceitou ao escolher barra flutuante em vez de `SetParent`.
 A escolha continua certa — `SetParent` em `Shell_TrayWnd` quebraria a cada atualização do Windows —
