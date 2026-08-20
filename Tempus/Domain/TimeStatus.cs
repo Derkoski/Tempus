@@ -125,7 +125,12 @@ internal sealed record TimeStatus
     /// Peso da fonte. Fora do expediente entra em negrito sem preenchimento: o recado é firme
     /// ("pare"), mas não é uma urgência que exija ação imediata.
     /// </summary>
-    public bool IsBold => IsFilled || Mood is TimeMood.OffHours;
+    /// <summary>
+    /// <c>Approaching</c> entrou em D-037: "Em breve" em peso normal e cor de preenchimento lida
+    /// como um bordô apagado, e o usuário — para quem a próxima call é a coisa mais importante do
+    /// dia — não via urgência nenhuma ali.
+    /// </summary>
+    public bool IsBold => IsFilled || Mood is TimeMood.OffHours or TimeMood.Approaching;
 
     /// <summary>
     /// O alarme já dura mais que o limiar de escalada e deve <b>piscar</b> âmbar↔vermelho

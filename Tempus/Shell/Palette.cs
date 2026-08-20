@@ -61,13 +61,13 @@ internal sealed record Palette(
         InfoBackground: Hex("#FF1E4B73"),
         InfoForeground: Hex("#FFD3E9FF"),
         AttentionBackground: Hex("#FFB4530A"),
-        AttentionForeground: Hex("#FFFFEBCF"),
+        AttentionForeground: Hex("#FFFFF4E6"),
         CriticalBackground: Hex("#FFC02626"),
         CriticalForeground: Hex("#FFFFE3E3"),
         // Tintas de contorno: claras o bastante para ler sobre #1F1F1F (todas acima de 5:1) e
         // ainda inconfundivelmente azul, âmbar e vermelha.
         InfoInk: Hex("#FF7CB3E8"),
-        AttentionInk: Hex("#FFE8913C"),
+        AttentionInk: Hex("#FFEFA055"),
         CriticalInk: Hex("#FFF26B6B"),
         OfflineBackground: Hex("#FF1A1A1A"),
         OfflineForeground: Hex("#FF6E6E6E"),
@@ -99,7 +99,7 @@ internal sealed record Palette(
         PanelBackground: Hex("#FFFBFBFB"),
         PanelBorder: Hex("#FFD8D8D8"),
         RowHover: Hex("#FFEFEFEF"),
-        FreeForeground: Hex("#FF2E7D3B"),
+        FreeForeground: Hex("#FF1B5E27"),
         InMeetingForeground: Hex("#FF1F5B87"));
 
     /// <summary>
@@ -150,11 +150,16 @@ internal sealed record Palette(
     public (Color Background, Color Foreground) For(TimeStatus time) => time.Mood switch
     {
         TimeMood.Free => (Colors.Transparent, FreeForeground),
+
         // Laranja no texto, sem preenchimento: firme o bastante para você notar que o dia acabou,
         // discreto o bastante para não competir com um alarme de verdade.
-        TimeMood.OffHours => (Colors.Transparent, AttentionBackground),
+        //
+        // AttentionInk e não AttentionBackground: a cor de preenchimento usada como TEXTO sobre a
+        // barra escura fica num bordô apagado que não comunica nada — o mesmo erro que o D-032
+        // corrigiu no contorno do chip, repetido aqui e encontrado em uso (D-037).
+        TimeMood.OffHours => (Colors.Transparent, AttentionInk),
         TimeMood.InMeeting => (Colors.Transparent, InMeetingForeground),
-        TimeMood.Approaching => (Colors.Transparent, AttentionBackground),
+        TimeMood.Approaching => (Colors.Transparent, AttentionInk),
         TimeMood.EndingSoon => (AttentionBackground, AttentionForeground),
         TimeMood.Imminent => (CriticalBackground, CriticalForeground),
         TimeMood.Overrun => (CriticalBackground, CriticalForeground),

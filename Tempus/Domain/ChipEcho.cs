@@ -26,8 +26,12 @@ internal static class ChipEcho
     /// </summary>
     private static readonly Dictionary<TimeMood, string[]> AlreadyTold = new()
     {
-        [TimeMood.Approaching] = [SignalNames.MeetingUpcoming],
-        [TimeMood.Imminent] = [SignalNames.MeetingImminent],
+        // Os dois humores de "próxima reunião" absorvem os **dois** sinais de aproximação, porque
+        // os limiares não se alinham: o humor vira `Imminent` a 5 min e o sinal só vira
+        // `MeetingImminent` a 2. Entre 5 e 2 minutos sobrava `MeetingUpcoming` sem par, e a barra
+        // mostrava "Começando" ao lado de "Fulano em 3 min" — o mesmo fato duas vezes (D-037).
+        [TimeMood.Approaching] = [SignalNames.MeetingUpcoming, SignalNames.MeetingImminent],
+        [TimeMood.Imminent] = [SignalNames.MeetingImminent, SignalNames.MeetingUpcoming],
         [TimeMood.InMeeting] = [SignalNames.MeetingStarted, SignalNames.MeetingBackToBack],
         [TimeMood.EndingSoon] = [SignalNames.MeetingStarted, SignalNames.MeetingBackToBack],
         [TimeMood.Overrun] = [SignalNames.MeetingRanIntoNext, SignalNames.MeetingEnded],

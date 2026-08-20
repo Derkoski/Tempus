@@ -27,6 +27,8 @@
       <ColumnDefinition Width="*" MinWidth="0" />
       <!-- Motivo: só o necessário, e nada quando não há alarme. -->
       <ColumnDefinition Width="Auto" />
+      <!-- Bloco fixo de indicadores, sempre à direita: pausa, tarefas, e-mail. -->
+      <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="Auto" />
     </Grid.ColumnDefinitions>
@@ -87,26 +89,6 @@
                  Visibility="Collapsed"
                  Cursor="Hand"
                  Text="" />
-
-      <!-- Pausa de descanso. Clicar diz "tirei essa" — o app não tem como saber sozinho (D-006). -->
-      <Border x:Name="BreakArea"
-              Grid.Column="2"
-              CornerRadius="4"
-              Padding="7,2"
-              Margin="8,0,0,0"
-              VerticalAlignment="Center"
-              Visibility="Collapsed"
-              Cursor="Hand">
-        <StackPanel Orientation="Horizontal">
-          <TextBlock x:Name="BreakIcon"
-                     FontFamily="{StaticResource IconFont}"
-                     FontSize="11"
-                     VerticalAlignment="Center"
-                     Margin="0,0,4,0"
-                     Text="&#xEC32;" />
-          <TextBlock x:Name="BreakText" VerticalAlignment="Center" Text="" />
-        </StackPanel>
-      </Border>
     </Grid>
 
     <!-- Motivo do alarme: preenchido por padrão, e vazio na maior parte do dia. Vira contorno
@@ -128,9 +110,31 @@
                  Text="" />
     </Border>
 
+    <!-- Pausa de descanso. Clicar diz "tirei essa" — o app não tem como saber sozinho (D-006).
+         Fica no bloco fixo dos indicadores, à direita, e não no meio: entre o compromisso e o
+         chip ela partia em dois a única região que precisa de largura contínua (D-037). -->
+    <Border x:Name="BreakArea"
+            Grid.Column="3"
+            CornerRadius="4"
+            Padding="7,2"
+            Margin="10,0,0,0"
+            VerticalAlignment="Center"
+            Visibility="Collapsed"
+            Cursor="Hand">
+      <StackPanel Orientation="Horizontal">
+        <TextBlock x:Name="BreakIcon"
+                   FontFamily="{StaticResource IconFont}"
+                   FontSize="11"
+                   VerticalAlignment="Center"
+                   Margin="0,0,4,0"
+                   Text="&#xEC32;" />
+        <TextBlock x:Name="BreakText" VerticalAlignment="Center" Text="" />
+      </StackPanel>
+    </Border>
+
     <!-- Contador de tarefas -->
     <StackPanel x:Name="TasksArea"
-                Grid.Column="3"
+                Grid.Column="4"
                 Orientation="Horizontal"
                 VerticalAlignment="Center"
                 Margin="10,0,0,0"
@@ -151,7 +155,7 @@
 
     <!-- Contador de e-mail -->
     <StackPanel x:Name="MailArea"
-                Grid.Column="4"
+                Grid.Column="5"
                 Orientation="Horizontal"
                 VerticalAlignment="Center"
                 Margin="8,0,0,0"

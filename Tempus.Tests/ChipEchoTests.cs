@@ -31,6 +31,21 @@ public class ChipEchoTests
     }
 
     /// <summary>
+    /// Os limiares do humor e do sinal <b>não se alinham</b>: o humor vira <c>Imminent</c> a 5 min
+    /// e o sinal só vira <c>MeetingImminent</c> a 2. Entre 5 e 2 minutos sobrava
+    /// <c>MeetingUpcoming</c> sem par, e a barra mostrava "Começando" ao lado de "Fulano em 3 min"
+    /// — o mesmo fato duas vezes. Encontrado numa captura de tela, não pelos testes (D-037).
+    /// </summary>
+    [Fact]
+    public void Os_dois_humores_de_proxima_reuniao_absorvem_os_dois_sinais_de_aproximacao()
+    {
+        Assert.True(Repeats(TimeMood.Imminent, SignalNames.MeetingUpcoming));
+        Assert.True(Repeats(TimeMood.Imminent, SignalNames.MeetingImminent));
+        Assert.True(Repeats(TimeMood.Approaching, SignalNames.MeetingUpcoming));
+        Assert.True(Repeats(TimeMood.Approaching, SignalNames.MeetingImminent));
+    }
+
+    /// <summary>
     /// O caso que a regra "toda categoria Call é eco" teria quebrado: aqui o chip está
     /// <b>perguntando</b> em qual reunião você está, e o clique dele abre o seletor do §8. O slot
     /// não tem como fazer essa pergunta.

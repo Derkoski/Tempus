@@ -210,11 +210,16 @@ internal partial class FloatingBarWindow : Window
                 _ => _palette.BarForeground,
             });
 
-        // Some quando não há motivo, e também quando o motivo é o mesmo que o slot já conta
-        // (D-033). Hidden e não Collapsed: o chip guarda o lugar dele na grade, senão o texto do
-        // compromisso ao lado saltaria de largura a cada alarme que vai e vem.
+        // Some quando não há motivo, e também quando o motivo é o mesmo que o slot já conta (D-033).
+        //
+        // Collapsed e não Hidden: o D-033 usou Hidden para o chip guardar o lugar na grade e o
+        // texto ao lado não saltar de largura. **Foi o negócio errado** — Hidden reserva a largura
+        // do último motivo exibido, e o usuário encontrou o resultado: um vão morto do tamanho de
+        // "Metade do dia: 2 tarefas abertas" no meio da barra, enquanto o título da reunião
+        // truncava por falta de espaço. Estabilidade de layout não vale o espaço da informação
+        // que importa (D-037).
         ReasonChip.Visibility = string.IsNullOrEmpty(state.Reason) || state.ChipRepeatsTime
-            ? Visibility.Hidden
+            ? Visibility.Collapsed
             : Visibility.Visible;
 
         // §1.1: nível 3 não reconhecido por 5 min passa a piscar âmbar↔vermelho.
@@ -346,8 +351,17 @@ internal partial class FloatingBarWindow : Window
             // deixou de ser desenhado (D-033).
             : joinable ? $"▶ {detail}" : detail;
 
+        // A cor da urgência mora em **um** lugar só: na pílula quando ela é preenchida, e aqui
+        // quando ela é apenas tingida. Em `Approaching` a pílula não preenche, então é a contagem
+        // que precisa acender — em branco ela não inspirava urgência nenhuma, e a próxima call é a
+        // coisa mais importante do dia (D-037).
+        //
+        // Não é uma terceira área colorida (I1): é a mesma área de tempo, que o §0.5 já define
+        // como um vocabulário só, se estendendo pelo detalhe que a acompanha.
         LookaheadText.Foreground = new SolidColorBrush(
-            state.Time.NamesAnEvent ? _palette.BarForeground : _palette.Muted);
+            !state.Time.NamesAnEvent ? _palette.Muted
+            : state.Time.Mood == TimeMood.Approaching ? _palette.AttentionInk
+            : _palette.BarForeground);
 
         // Dizia "Clique para abrir a agenda" mesmo quando o clique entrava na call — a dica
         // contradizia o que o gesto fazia.

@@ -2105,3 +2105,72 @@ parecer apagada, o problema volta já isolado.
 usavam tarefas **sem data**. Sob o padrão novo elas não contam, e os testes falharam na hora — não
 por estarem errados, mas por codificarem o padrão antigo. Ganharam vencimento de hoje, que é o que
 sempre quiseram dizer.
+
+---
+
+## D-037 — A próxima call é a coisa mais importante do dia, e a barra não dizia isso
+
+**Status:** Aceita · 2026-08-20 · encontrada em uso
+
+### A queixa, que tinha três causas
+
+*"O 'em breve' fica meio apagado, um tom escuro quase apagado de bordô, e o texto branco avisando
+quantos minutos também não me inspira urgência. A próxima call é a coisa mais importante do dia pra
+mim. Notei que nem aparece o título dela direito, fica suprimido e com espaço sobrando na barra."*
+
+Três defeitos independentes, todos meus, e dois deles introduzidos por decisões recentes.
+
+### 1. Cor de preenchimento usada como texto
+
+`Approaching` e `OffHours` pintavam o texto com `AttentionBackground` (`#B4530A`) — a cor de
+**preenchimento**. Sobre a pílula escura ela vira o bordô apagado que o usuário descreveu.
+
+**É o mesmo erro que o D-032 já tinha corrigido no contorno do chip**, repetido noutro lugar. Lá a
+conclusão foi "contorno é um terceiro contexto e pede cor própria"; aqui a lição completa é mais
+simples: **cor de fundo não serve de tinta**. As tintas (`*Ink`) existiam e não estavam sendo usadas
+onde deviam.
+
+Agora há teste medindo o contraste WCAG do texto de **cada humor** sobre o fundo em que ele de fato
+assenta — incluindo a mistura do chip translúcido sobre a barra. Ele pegou de imediato outros três
+casos que ninguém tinha visto: `OffHours` em 4,42:1, `EndingSoon` em 4,31:1, e o verde de `Free` do
+**tema claro** em 3,41:1. O tema claro ninguém exercita; quem tem de pegá-lo é o teste.
+
+`Unknown` é a única isenção, e é nomeada: o cinza apagado do `Offline` é decisão do §0, não defeito.
+
+### 2. `Hidden` reservava o espaço do alarme que não estava lá
+
+O D-033 escondeu o chip repetido com `Visibility.Hidden` em vez de `Collapsed`, justificando que
+assim "o texto do compromisso ao lado não salta de largura a cada alarme que vai e vem".
+
+**Foi o negócio errado.** `Hidden` reserva a largura do último motivo exibido — e o último era
+"Metade do dia: 2 tarefas abertas". O resultado foi um vão morto no meio da barra enquanto o título
+da reunião truncava por falta de espaço. Estabilidade de layout não vale o espaço da informação que
+importa.
+
+### 3. A pausa partia a região do compromisso
+
+O slot de descanso vivia **entre** o compromisso e o chip, cortando em dois a única região que
+precisa de largura contínua. Foi para o bloco fixo de indicadores à direita, ao lado das tarefas e
+do e-mail — sugestão do usuário, e claramente certa: à direita ficam os números que se consulta, no
+meio fica a frase que se lê.
+
+### A urgência mora em um lugar só
+
+Regra nova para o slot de tempo: **a cor da urgência fica na pílula quando ela é preenchida, e no
+texto do compromisso quando ela é apenas tingida.** Em `Approaching` a pílula não preenche, então é
+a contagem regressiva que acende — em branco ela não comunicava nada.
+
+Não é uma terceira área colorida (I1): é a mesma área de tempo, que o §0.5 já trata como um
+vocabulário só, se estendendo pelo detalhe que a acompanha.
+
+### Um quarto defeito, achado na captura de tela
+
+A verificação visual mostrou "Começando" ao lado de um chip "Backlog Pearson em 3 min" — o mesmo
+fato duas vezes, que o D-033 deveria ter evitado.
+
+Causa: **os limiares do humor e do sinal não se alinham.** O humor vira `Imminent` a 5 min; o sinal
+só vira `MeetingImminent` a 2. Entre 5 e 2 minutos sobrava `MeetingUpcoming` sem par na tabela. Os
+dois humores de "próxima reunião" passam a absorver os dois sinais de aproximação.
+
+Os testes do D-033 não pegaram porque testavam a tabela contra ela mesma, e não contra os limiares
+reais de `SignalThresholds` e `TimeThresholds`. Foi uma captura de tela que pegou.
