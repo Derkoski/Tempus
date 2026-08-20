@@ -1897,3 +1897,73 @@ O roteiro ganhou um estado com `ChipRepeatsTime`, e é ele que aparece na tira: 
 motivo preenchido, reconhecível, e nenhum chip desenhado. É a mesma lição do D-025, D-028, D-029 e
 D-032 aparecendo pela quinta vez — **teste de unidade prova a decisão, não a fiação** —, agora com
 um agravante novo: um caminho de verificação pode estar cego sem avisar.
+
+---
+
+## D-034 — Ler todos os calendários, não só o principal
+
+**Status:** Aceita · 2026-08-20 · encontrada em uso
+
+### O buraco
+
+O usuário importou o calendário do Teams para o Google Agenda — um calendário assinado chamado
+"Calendário", nome que a integração não deixa mudar. `_calendar.Events.List("primary")` lia só o
+principal, então **nenhuma** reunião marcada no Teams chegava à barra. Prova concreta: a call
+"Backlog Pearson", das 13:00, invisível.
+
+Isso é pior que funcionalidade faltando. Enquanto a empresa migra de ferramenta (Azure/Teams →
+Google), **parte da agenda vive do outro lado**, e uma barra que responde "algo precisa de mim
+agora?" com metade do calendário dá falsa sensação de cobertura — o mesmo defeito que a regra 10
+combate nos contadores.
+
+### O principal sempre, mais os visíveis
+
+Critério: o principal **sempre**, mais todo calendário com `selected == true` — os que o usuário
+enxerga no próprio Google Agenda. Escondeu lá, some daqui, sem configuração.
+
+**A armadilha do `selected`:** a documentação diz *"Optional. The default is False"*, e o
+calendário principal costuma vir **sem o campo**. Filtrar só por `selected == true` excluiria
+justamente o que não pode faltar — trocaria um bug por outro pior. Daí a ordem: primário primeiro,
+por identidade, e só depois o filtro.
+
+Sem a lista (rede fora, permissão negada) degrada para `"primary"` sozinho, em vez de ficar sem
+agenda. E um calendário secundário que falha não derruba os outros — perder o import do Teams é
+ruim, perder o principal junto seria pior.
+
+### A duplicata que teria virado ruído diário
+
+Uma reunião pode chegar pelos **dois** caminhos. Dois eventos idênticos e sobrepostos fazem
+`ActiveEvent.Candidates` devolver dois, e a barra passa a perguntar *"2 reuniões agora — qual?"*
+(§8) **sobre a mesma call**. O seletor do §8 existe para ambiguidade de verdade; disparar por
+duplicata o transformaria em ruído e ensinaria a ignorá-lo.
+
+`AgendaMerge.Dedupe` compara **título normalizado + início + fim**. O id não serve — é justamente o
+que difere entre as cópias. Vence o primeiro, e o principal entra primeiro na lista porque é dele
+que vêm o RSVP e o `conferenceData`.
+
+Duas reuniões **diferentes** no mesmo horário continuam duas: isso é conflito de agenda de verdade,
+e escondê-lo seria o oposto do que o produto faz.
+
+### A origem no painel — sem gastar cor
+
+O usuário pediu para distinguir Teams de Google, com a ressalva *"se isso for conflitar muito com
+cores, melhor não fazer"*. **Não conflita**, e o D-017 já tinha aberto essa porta: a cor de
+provedor do S3 é identidade e está declarada fora dos dois vocabulários da barra.
+
+Aqui nem cor foi preciso: a origem é **texto apagado** na linha do S3, mais o "Veio de: …" na dica.
+O principal não se anuncia — seria ruído em quase toda linha.
+
+`Google.CalendarLabels` permite apelidar por id ou nome, porque "Calendário" não diz nada. É a
+integração do Google impondo um nome ruim; o app contorna em vez de exibir o problema dela.
+
+### O que já funcionava de graça
+
+A cascata do D-017 leu os links do Teams do corpo dos convites importados sem nenhuma mudança —
+`teams.microsoft.com/meet/...` saiu no despejo já classificado. A decisão de aceitar `location` e
+`description` como fontes, tomada para o Zoom, pagou de novo aqui.
+
+### `--dump-agenda`
+
+Irmã da `--dump-tasks` (D-031). "Não aparece" pode ser calendário não lido, evento filtrado pelo
+§2.1, ou janela de tempo, e a barra não distingue os três. Respondeu de primeira: três calendários,
+"Backlog Pearson" presente, link do Teams extraído.

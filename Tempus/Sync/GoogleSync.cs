@@ -37,9 +37,16 @@ internal sealed class GoogleSync : IDisposable
     /// <summary>O contador de e-mail não precisa do mesmo ritmo da agenda — nada nele é urgente.</summary>
     private static readonly TimeSpan MailInterval = TimeSpan.FromSeconds(60);
 
+    /// <summary>Calendário novo é evento raro; relistar a cada ciclo é requisição jogada fora.</summary>
+    private static readonly TimeSpan CalendarCacheTtl = TimeSpan.FromMinutes(10);
+
     private readonly GoogleAuth _auth;
     private readonly SyncOptions _options;
+    private readonly GoogleOptions _google;
     private readonly string _mailQuery;
+
+    private IReadOnlyList<CalendarSource>? _calendars;
+    private DateTimeOffset _calendarsAt;
 
     /// <summary>Por quantos dias para trás as concluídas continuam alcançáveis (D-030).</summary>
     private readonly int _completedDays;
@@ -56,11 +63,12 @@ internal sealed class GoogleSync : IDisposable
     private int? _unreadMail;
     private DateTimeOffset _unreadAt;
 
-    public GoogleSync(GoogleAuth auth, SyncOptions options, string mailQuery, int completedDays = 7)
+    public GoogleSync(GoogleAuth auth, SyncOptions options, GoogleOptions google, int completedDays = 7)
     {
         _auth = auth;
         _options = options;
-        _mailQuery = mailQuery;
+        _google = google;
+        _mailQuery = google.MailQuery;
         _completedDays = completedDays;
     }
 
@@ -338,9 +346,36 @@ internal sealed class GoogleSync : IDisposable
     private async Task<(IReadOnlyList<AgendaItem> Today, IReadOnlyList<AgendaItem> Upcoming)>
         ReadAgendaAsync(CancellationToken ct)
     {
+        var all = new List<AgendaItem>();
+
+        // O principal primeiro, sempre: na fusão vence quem chega antes, e é dele que vêm o RSVP e
+        // o conferenceData que o calendário assinado não tem (D-034).
+        foreach (var calendar in await GetCalendarsAsync(ct))
+            all.AddRange(await ReadCalendarAsync(calendar, ct));
+
+        var today = new List<AgendaItem>();
+        var upcoming = new List<AgendaItem>();
+        var tomorrow = DateTime.Today.AddDays(1);
+
+        foreach (var item in AgendaMerge.Dedupe(all))
+        {
+            if (item.Start.ToLocalTime().Date < tomorrow) today.Add(item);
+            else upcoming.Add(item);
+        }
+
+        // A ordem por horário vinha do OrderBy da consulta; com vários calendários fundidos ela
+        // precisa ser refeita, senão os eventos do segundo calendário viriam todos depois.
+        today.Sort((a, b) => a.Start.CompareTo(b.Start));
+        upcoming.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+        return (today, upcoming);
+    }
+
+    private async Task<List<AgendaItem>> ReadCalendarAsync(CalendarSource calendar, CancellationToken ct)
+    {
         var dayStart = new DateTimeOffset(DateTime.Today);
 
-        var request = _calendar!.Events.List("primary");
+        var request = _calendar!.Events.List(calendar.Id);
         request.TimeMinDateTimeOffset = dayStart;
         request.TimeMaxDateTimeOffset = dayStart.AddDays(LookaheadDays);
         request.SingleEvents = true; // expande recorrências em ocorrências
@@ -348,22 +383,131 @@ internal sealed class GoogleSync : IDisposable
         request.MaxResults = 250;
         request.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
 
-        var response = await request.ExecuteAsync(ct);
+        var items = new List<AgendaItem>();
 
-        var today = new List<AgendaItem>();
-        var upcoming = new List<AgendaItem>();
-        var tomorrow = DateTime.Today.AddDays(1);
-
-        foreach (var ev in response.Items ?? [])
+        try
         {
-            if (ShouldIgnore(ev)) continue;
-            if (Map(ev) is not { } item) continue;
+            var response = await request.ExecuteAsync(ct);
 
-            if (item.Start.ToLocalTime().Date < tomorrow) today.Add(item);
-            else upcoming.Add(item);
+            foreach (var ev in response.Items ?? [])
+            {
+                if (ShouldIgnore(ev)) continue;
+                if (Map(ev) is not { } item) continue;
+
+                items.Add(item with { Source = calendar.Label });
+            }
+        }
+        catch (Exception) when (!calendar.IsPrimary)
+        {
+            // Um calendário secundário que falha não pode derrubar a agenda inteira: perder o
+            // import do Teams é ruim, perder também o principal seria pior. O principal continua
+            // propagando o erro, porque sem ele não há retrato nenhum.
         }
 
-        return (today, upcoming);
+        return items;
+    }
+
+    /// <summary>
+    /// Quais calendários ler (D-034). Cacheado como as listas de tarefas: calendário novo é evento
+    /// raro, e relistar a cada ciclo seria requisição jogada fora.
+    /// </summary>
+    private async Task<IReadOnlyList<CalendarSource>> GetCalendarsAsync(CancellationToken ct)
+    {
+        if (_calendars is not null && DateTimeOffset.Now - _calendarsAt < CalendarCacheTtl)
+            return _calendars;
+
+        var sources = new List<CalendarSource>();
+
+        try
+        {
+            var response = await _calendar!.CalendarList.List().ExecuteAsync(ct);
+
+            foreach (var entry in response.Items ?? [])
+            {
+                if (entry.Id is null) continue;
+                if (IsIgnored(entry)) continue;
+
+                // O principal SEMPRE, e os demais só se visíveis no Google Agenda. A ordem importa:
+                // `selected` é documentado como "Optional. The default is False", e o principal
+                // costuma vir sem o campo — filtrar só por ele excluiria justamente o calendário
+                // que não pode faltar.
+                var primary = entry.Primary == true;
+                if (!primary && entry.Selected != true) continue;
+
+                sources.Add(new CalendarSource(entry.Id, LabelFor(entry), primary));
+            }
+        }
+        catch (Exception)
+        {
+            // Sem a lista, degrada para o comportamento antigo em vez de ficar sem agenda.
+        }
+
+        // Rede fora ou permissão negada: o principal sozinho ainda responde a maior parte.
+        if (sources.Count == 0) sources.Add(new CalendarSource("primary", null, IsPrimary: true));
+
+        _calendars = [.. sources.OrderByDescending(c => c.IsPrimary)];
+        _calendarsAt = DateTimeOffset.Now;
+
+        return _calendars;
+    }
+
+    private bool IsIgnored(CalendarListEntry entry) =>
+        _google.IgnoredCalendars.Any(ignored =>
+            string.Equals(ignored, entry.Id, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ignored, entry.Summary, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Como a origem aparece no painel. <c>null</c> no principal — é o caso comum, e anunciá-lo
+    /// seria ruído em toda linha.
+    /// </summary>
+    private string? LabelFor(CalendarListEntry entry)
+    {
+        if (entry.Primary == true) return null;
+
+        foreach (var (key, label) in _google.CalendarLabels)
+            if (string.Equals(key, entry.Id, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(key, entry.Summary, StringComparison.OrdinalIgnoreCase))
+                return label;
+
+        return entry.SummaryOverride ?? entry.Summary;
+    }
+
+    private sealed record CalendarSource(string Id, string? Label, bool IsPrimary);
+
+    /// <summary>
+    /// <c>--dump-agenda</c>: escreve num arquivo quais calendários foram lidos e o que veio de
+    /// cada um. Irmã da <c>--dump-tasks</c> (D-031), pelo mesmo motivo: "não aparece" pode ser
+    /// calendário não lido, evento filtrado pelo §2.1, ou janela de tempo — e olhar a barra não
+    /// distingue os três.
+    /// </summary>
+    public async Task<string> DumpAgendaAsync(string path)
+    {
+        var ct = _cts?.Token ?? CancellationToken.None;
+
+        if (_calendar is null && !await ConnectAsync(interactive: false, ct))
+            return "Não conectou ao Google — sem token válido?";
+
+        var lines = new List<string>();
+
+        foreach (var calendar in await GetCalendarsAsync(ct))
+        {
+            lines.Add($"=== '{calendar.Label ?? "(principal)"}'  id={calendar.Id}");
+
+            var items = await ReadCalendarAsync(calendar, ct);
+
+            foreach (var item in items.OrderBy(i => i.Start))
+            {
+                lines.Add(
+                    $"  {item.Start.ToLocalTime():dd/MM HH:mm}–{item.End.ToLocalTime():HH:mm}  " +
+                    $"{item.Title}{(item.IsAllDay ? "  [dia inteiro]" : "")}\n" +
+                    $"      call: {item.Conference?.Url ?? "(nenhuma)"}");
+            }
+
+            if (items.Count == 0) lines.Add("  (nada na janela consultada)");
+        }
+
+        await File.WriteAllTextAsync(path, string.Join("\n", lines), ct);
+        return path;
     }
 
     /// <summary>Regras do <c>SEVERITY.md</c> §2.1 sobre o que não é compromisso de verdade.</summary>

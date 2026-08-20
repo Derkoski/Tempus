@@ -195,6 +195,7 @@ internal partial class AgendaPanel : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // horário
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // resposta ao convite
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // origem
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // selo de estado
 
         // Faixa vertical marcando o evento em curso.
@@ -250,10 +251,28 @@ internal partial class AgendaPanel : Window
             grid.Children.Add(mark);
         }
 
+        // De qual calendário veio, quando não é o principal (D-034). Texto apagado, sem cor: a
+        // origem é identidade, não severidade, e não paga nada do orçamento da regra 1. O
+        // principal não se anuncia — seria ruído em quase toda linha.
+        if (item.Source is { Length: > 0 } source)
+        {
+            var origin = new TextBlock
+            {
+                Text = source,
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0),
+                Foreground = new SolidColorBrush(_palette.Muted),
+            };
+
+            Grid.SetColumn(origin, 4);
+            grid.Children.Add(origin);
+        }
+
         var badge = BuildBadge(isRunning, isNext, isPast);
         if (badge is not null)
         {
-            Grid.SetColumn(badge, 4);
+            Grid.SetColumn(badge, 5);
             grid.Children.Add(badge);
         }
 
@@ -269,7 +288,13 @@ internal partial class AgendaPanel : Window
                 e.Handled = true;
                 MeetingActivated?.Invoke(this, conference.Url);
             };
-            row.ToolTip = $"Clique para entrar no {conference.ProviderName}";
+            row.ToolTip = item.Source is { Length: > 0 } from
+                ? $"Clique para entrar no {conference.ProviderName}{Environment.NewLine}Veio de: {from}"
+                : $"Clique para entrar no {conference.ProviderName}";
+        }
+        else if (item.Source is { Length: > 0 } origin)
+        {
+            row.ToolTip = $"Veio de: {origin}";
         }
 
         return row;

@@ -28,6 +28,26 @@ internal sealed record GoogleOptions
     public string MailQuery { get; init; } = "is:unread in:inbox";
 
     /// <summary>
+    /// Calendários a não ler, por id ou por nome. Vazio por padrão (D-034).
+    /// <para>
+    /// Escotilha de fuga, não configuração de rotina: o critério normal é ler o que o usuário vê
+    /// no próprio Google Agenda. Existe para o dia em que um calendário de aniversários ou de
+    /// feriados virar ruído.
+    /// </para>
+    /// </summary>
+    public string[] IgnoredCalendars { get; init; } = [];
+
+    /// <summary>
+    /// Apelidos para os calendários, por id ou nome — <c>{"Calendário": "Teams"}</c>.
+    /// <para>
+    /// Existe porque a integração que importa o Teams para o Google Agenda cria um calendário
+    /// chamado "Calendário" e <b>não deixa renomear</b>. Sem isto, a origem apareceria no painel
+    /// com um nome que não diz nada.
+    /// </para>
+    /// </summary>
+    public Dictionary<string, string> CalendarLabels { get; init; } = [];
+
+    /// <summary>
     /// Pasta de dados do app. Fora do repositório e fora de <c>bin/</c>, para o token e o
     /// client_secret sobreviverem a rebuild e nunca entrarem no git (regra 5).
     /// </summary>

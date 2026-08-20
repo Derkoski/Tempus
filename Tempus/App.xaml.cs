@@ -95,6 +95,12 @@ public partial class App : Application
             return;
         }
 
+        if (e.Args.Contains("--dump-agenda", StringComparer.OrdinalIgnoreCase))
+        {
+            _ = RunAgendaDumpAsync();
+            return;
+        }
+
         // Duas barras sobrepostas no mesmo pixel são um bug difícil de diagnosticar.
         _singleInstance = new Mutex(initiallyOwned: true, @"Local\Tempus.SingleInstance", out var isFirst);
         if (!isFirst)
@@ -211,7 +217,7 @@ public partial class App : Application
         var auth = new GoogleAuth(
             GoogleOptions.ClientSecretPath, GoogleOptions.TokenDirectory, options.LoginHint);
 
-        var sync = new GoogleSync(auth, cadence, options.MailQuery, cadence.CompletedDays);
+        var sync = new GoogleSync(auth, cadence, options, cadence.CompletedDays);
         _sync = sync;
 
         // A fila é criada aqui porque precisa do executor, que é este sync. O store, não: ele já
@@ -635,6 +641,38 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// <c>--dump-agenda</c>: quais calendários foram lidos e o que veio de cada um (D-034).
+    /// </summary>
+    private async Task RunAgendaDumpAsync()
+    {
+        var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        var user = new UserSettingsStore(GoogleOptions.DataDirectory).Load();
+
+        var auth = new GoogleAuth(
+            GoogleOptions.ClientSecretPath, GoogleOptions.TokenDirectory, user.LoginHint);
+
+        using var sync = new GoogleSync(
+            auth, SyncOptions.Load(settingsPath), GoogleOptions.Load(settingsPath));
+
+        var target = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "tempus-agenda-dump.txt");
+
+        string result;
+
+        try
+        {
+            result = await sync.DumpAgendaAsync(target);
+        }
+        catch (Exception ex)
+        {
+            result = $"{ex.GetType().Name}: {ex.Message}";
+        }
+
+        MessageBox.Show(result, "Tempus — despejo de agenda", MessageBoxButton.OK);
+        Shutdown();
+    }
+
+    /// <summary>
     /// <c>--dump-tasks</c>: despeja o que o Google devolveu num arquivo e sai. Diagnóstico para
     /// separar "o Google não mandou" de "o Tempus não desenhou".
     /// </summary>
@@ -647,7 +685,7 @@ public partial class App : Application
         var auth = new GoogleAuth(
             GoogleOptions.ClientSecretPath, GoogleOptions.TokenDirectory, user.LoginHint);
 
-        using var sync = new GoogleSync(auth, SyncOptions.Load(settingsPath), google.MailQuery);
+        using var sync = new GoogleSync(auth, SyncOptions.Load(settingsPath), google);
         var target = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(), "tempus-tasks-dump.txt");
 

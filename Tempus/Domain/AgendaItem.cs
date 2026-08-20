@@ -31,6 +31,16 @@ internal sealed record AgendaItem
 
     public bool IsAllDay { get; init; }
 
+    /// <summary>
+    /// De qual calendário o compromisso veio, já com o apelido aplicado — "Teams", por exemplo.
+    /// <c>null</c> para o calendário principal, que é o caso comum e não precisa ser anunciado.
+    /// <para>
+    /// Só o painel S3 exibe isto, e como <b>texto</b>, não como cor: origem é identidade, não
+    /// severidade, e a barra não paga nada por ela (D-034).
+    /// </para>
+    /// </summary>
+    public string? Source { get; init; }
+
     public bool IsRunningAt(DateTimeOffset now) => now >= Start && now < End;
     public bool HasEndedBy(DateTimeOffset now) => now >= End;
 }
