@@ -10,7 +10,7 @@ namespace Tempus.Domain;
 /// </summary>
 internal enum DayEndedCountMode
 {
-    /// <summary>Todas as não concluídas, com ou sem vencimento. Padrão do D-007.</summary>
+    /// <summary>Todas as não concluídas, com ou sem vencimento. Era o padrão até o D-036.</summary>
     AllOpen,
 
     /// <summary>Só as que venciam hoje ou antes — backlog distante não segura o fim do dia.</summary>
@@ -19,7 +19,17 @@ internal enum DayEndedCountMode
 
 internal sealed record DayEndedOptions
 {
-    public DayEndedCountMode CountMode { get; init; } = DayEndedCountMode.AllOpen;
+    /// <summary>
+    /// <b>Padrão trocado no D-036</b>, depois de o alarme falso aparecer em uso: com
+    /// <c>AllOpen</c>, duas tarefas que venciam <i>amanhã</i> faziam o meio-dia gritar "2 tarefas
+    /// abertas" enquanto uma reunião a 15 minutos ficava em texto apagado ao lado.
+    /// <para>
+    /// O D-007 tinha previsto esse arrependimento e deixado a chave pronta. A pergunta que o
+    /// checkpoint faz é "você está em dia <b>hoje</b>?", e tarefa de amanhã não é resposta para
+    /// ela.
+    /// </para>
+    /// </summary>
+    public DayEndedCountMode CountMode { get; init; } = DayEndedCountMode.DueTodayOrOverdue;
 
     public static readonly DayEndedOptions Default = new();
 }

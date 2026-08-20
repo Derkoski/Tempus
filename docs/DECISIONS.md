@@ -2043,3 +2043,65 @@ do app, porque o estado é da taskbar, não nosso.
 É a fragilidade estrutural que o D-002 aceitou ao escolher barra flutuante em vez de `SetParent`.
 A escolha continua certa — `SetParent` em `Shell_TrayWnd` quebraria a cada atualização do Windows —
 e este é o preço dela, agora com o limite conhecido e medido em vez de suposto.
+
+---
+
+## D-036 — O checkpoint do meio-dia pergunta sobre HOJE
+
+**Status:** Aceita · 2026-08-20 · encontrada em uso · fecha a chave que o D-007 deixou pronta
+
+### O alarme falso
+
+*"Não gostei do tamanho e da importância que ganhou o texto 'Metade do dia: 2 tarefas abertas'.
+Tenho uma call em 15 minutos e as tarefas são para amanhã ainda... mas as tarefas estão gritando
+enquanto a reunião tá ali apagada, escrita em branco, sem importância."*
+
+O despejo confirmou: as duas tarefas venciam **21/08**, e o dia era **20/08**. O
+`MiddayCheckpoint` as contava assim mesmo, porque o `CountMode` nascia em `AllOpen` — toda tarefa
+não concluída, com ou sem vencimento.
+
+Resultado: âmbar preenchido gritando por trabalho de amanhã, ao lado de uma reunião a 15 minutos em
+texto apagado. **A hierarquia visual estava invertida em relação à urgência real**, e é exatamente
+o que a regra 1 existe para impedir: o âmbar apareceu sem motivo legível, e com isso empurrou para
+segundo plano a única coisa irreversível no tempo que estava na tela.
+
+### A chave já estava pronta
+
+O D-007 escolheu `AllOpen` sabendo que podia se arrepender, e escreveu: *"se o vermelho das 17:00
+incomodar depois de uma semana de convívio, mudar de AllOpen para DueTodayOrOverdue é uma linha de
+configuração, e não uma discussão sobre o modelo"*.
+
+Foi o que aconteceu — só que o incômodo veio primeiro pelo meio-dia, não pelas 17:00. A previsão
+estava certa quanto ao arrependimento e errada quanto a qual dos dois avisos o produziria.
+
+A pergunta que o checkpoint faz é **"estou em dia hoje?"**. Tarefa de amanhã não é resposta para
+ela.
+
+### O que se perde, e foi escolhido de olhos abertos
+
+Com `DueTodayOrOverdue`, **tarefa sem vencimento não conta em nenhuma das duas fronteiras**. Quem
+cria tarefa sem prazo deixa de ser lembrado dela ao meio-dia e às 17:00.
+
+A alternativa avaliada era um terceiro modo — vencidas + de hoje + sem data — e foi recusada pelo
+usuário: uma tarefa antiga sem data que ele nunca vai fazer alimentaria o aviso todo santo dia até
+alguém datar ou concluir, o que reintroduziria o alarme falso por outra porta.
+
+Há teste nomeado para essa contrapartida, para ela não voltar como bug.
+
+### O que NÃO foi feito, de propósito
+
+A outra metade da queixa — "a reunião fica apagada, sem importância" — tinha duas correções
+possíveis: rebaixar as fronteiras do dia quando há call chegando, ou preencher o slot já em
+`Approaching`. **Nenhuma foi feita.**
+
+Corrigido o contador, neste cenário o chip simplesmente não aparece, e a reunião fica sozinha na
+barra. Mudar duas coisas de uma vez deixaria sem saber qual funcionou — e a segunda gasta
+preenchimento numa faixa bem maior do dia, contra o D-012. Se depois de conviver a call ainda
+parecer apagada, o problema volta já isolado.
+
+### Dois testes caíram, e foi a suíte funcionando
+
+`Meio_dia_com_tarefas_e_ambar_nunca_vermelho` e `Fim_de_jornada_com_tarefas_e_critico_e_nasce_as_17h`
+usavam tarefas **sem data**. Sob o padrão novo elas não contam, e os testes falharam na hora — não
+por estarem errados, mas por codificarem o padrão antigo. Ganharam vencimento de hoje, que é o que
+sempre quiseram dizer.

@@ -122,14 +122,51 @@ public class SignalsTests
 
     // ---------------------------------------------------------------- §2.2 fronteiras
 
+    /// <summary>Hoje = 19/08 nos horários deste arquivo.</summary>
+    private static readonly DateOnly Hoje = new(2026, 8, 19);
+
     [Fact]
     public void Meio_dia_com_tarefas_e_ambar_nunca_vermelho()
     {
-        var sinais = Eval([], [Task("t1"), Task("t2")], At(12, 10));
+        var sinais = Eval([], [Task("t1", Hoje), Task("t2", Hoje)], At(12, 10));
         var midday = sinais.Single(s => s.Name == "MiddayCheckpoint");
 
         Assert.Equal(Severity.Attention, midday.Severity);
         Assert.Contains("2 tarefas abertas", midday.Reason);
+    }
+
+    /// <summary>
+    /// O alarme falso que trocou o padrão do <c>CountMode</c> (D-036): duas tarefas que venciam
+    /// <b>amanhã</b> faziam o meio-dia gritar em âmbar enquanto uma reunião a 15 min ficava em
+    /// texto apagado ao lado. A pergunta do checkpoint é "estou em dia <i>hoje</i>?", e tarefa de
+    /// amanhã não é resposta para ela.
+    /// </summary>
+    [Fact]
+    public void Tarefa_que_vence_amanha_nao_faz_o_meio_dia_alarmar()
+    {
+        var amanha = Hoje.AddDays(1);
+        var sinais = Eval([], [Task("t1", amanha), Task("t2", amanha)], At(12, 10));
+
+        var midday = sinais.Single(s => s.Name == "MiddayCheckpoint");
+
+        Assert.Equal(Severity.Info, midday.Severity);
+        Assert.True(midday.SelfClearing);
+    }
+
+    /// <summary>
+    /// A contrapartida da escolha, escrita para ninguém redescobrir como bug: tarefa sem
+    /// vencimento <b>não conta</b> em nenhuma das duas fronteiras do dia.
+    /// </summary>
+    [Fact]
+    public void Tarefa_sem_data_nao_conta_nas_fronteiras_do_dia()
+    {
+        Assert.Equal(
+            Severity.Info,
+            Eval([], [Task("t1"), Task("t2")], At(12, 10)).Single(s => s.Name == "MiddayCheckpoint").Severity);
+
+        Assert.Equal(
+            Severity.Info,
+            Eval([], [Task("t1"), Task("t2")], At(17, 5)).Single(s => s.Name == "DayEnded").Severity);
     }
 
     [Fact]
@@ -146,7 +183,7 @@ public class SignalsTests
     [Fact]
     public void Fim_de_jornada_com_tarefas_e_critico_e_nasce_as_17h()
     {
-        var fim = Eval([], [Task("t1"), Task("t2"), Task("t3")], At(17, 5))
+        var fim = Eval([], [Task("t1", Hoje), Task("t2", Hoje), Task("t3", Hoje)], At(17, 5))
             .Single(s => s.Name == "DayEnded");
 
         Assert.Equal(Severity.Critical, fim.Severity);
