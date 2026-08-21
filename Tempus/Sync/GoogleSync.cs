@@ -608,6 +608,7 @@ internal sealed class GoogleSync : IDisposable
             var open = _tasks!.Tasks.List(list.Id);
             open.ShowCompleted = false;
             open.ShowHidden = false;
+            open.ShowAssigned = true;
             open.MaxResults = 100;
 
             result.AddRange(Read(await open.ExecuteAsync(ct), list.Id));
@@ -621,6 +622,7 @@ internal sealed class GoogleSync : IDisposable
             var done = _tasks.Tasks.List(list.Id);
             done.ShowCompleted = true;
             done.ShowHidden = true; // no Google Tasks, concluir também esconde
+            done.ShowAssigned = true;
             done.CompletedMin = DateTime.UtcNow
                 .AddDays(-Math.Max(1, _completedDays))
                 .ToString("o", System.Globalization.CultureInfo.InvariantCulture);
@@ -678,12 +680,18 @@ internal sealed class GoogleSync : IDisposable
             var request = _tasks!.Tasks.List(list.Id);
             request.ShowCompleted = false;
             request.ShowHidden = false;
+            request.ShowAssigned = true;
             request.MaxResults = 100;
 
             foreach (var task in (await request.ExecuteAsync(ct)).Items ?? [])
             {
+                var origem = task.AssignmentInfo is { } info
+                    ? $"{info.SurfaceType} · {info.LinkToTask}"
+                    : "(própria)";
+
                 lines.Add(
                     $"  título   : {task.Title}\n" +
+                    $"  origem   : {origem}\n" +
                     $"  due lido : {ReadDue(task)?.ToString("yyyy-MM-dd") ?? "(null)"}\n" +
                     $"  JSON cru : {Google.Apis.Json.NewtonsoftJsonSerializer.Instance.Serialize(task)}\n");
             }

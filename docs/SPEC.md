@@ -108,7 +108,7 @@ Notificações nativas do Windows para os eventos definidos em `SEVERITY.md` §4
 | Serviço | Uso | Direção | Escopo OAuth | Status |
 |---------|-----|---------|--------------|--------|
 | **Calendar** | Eventos do dia, horários, links de Meet | Leitura | `calendar.readonly` (sensitive) | Fase 1 |
-| **Tasks** | Tarefas abertas, criar/concluir/editar | **Bidirecional** | `tasks` (sensitive) | Fase 1 (leitura), Fase 4 (escrita) |
+| **Tasks** | Tarefas abertas, criar/concluir/editar. Inclui as **atribuídas a você** em Espaços do Chat e em Docs — `showAssigned=true`, D-040 | **Bidirecional** | `tasks` (sensitive) | Fase 1 (leitura), Fase 4 (escrita) |
 | **Gmail** | Apenas a contagem de não-lidos | Leitura | `gmail.readonly` (restricted) | Fase 5 |
 | Keep | — | — | — | **Fora de escopo** (D-004) |
 | Chat | — | — | — | **Fora de escopo** (D-004) |
@@ -133,7 +133,9 @@ Registrar aqui evita que uma sessão futura "ajude" adicionando isso:
 - Múltiplas contas Google
 - Instalador / distribuição / auto-update
 - Sincronização entre máquinas
-- Google Keep e Google Chat (D-004)
+- Google Keep e Google Chat (D-004). **Cuidado com a fronteira:** tarefa *atribuída* num Espaço do
+  Chat aparece sim, porque ela é uma tarefa do Tasks e chega pela API do Tasks (D-040). O que
+  continua fora é ler mensagens e contar não-lidos do Chat.
 - Ler ou exibir conteúdo de e-mail — **só a contagem**
 - Criar ou editar eventos de calendário (leitura apenas)
 - **Tarefas com horário exato.** A API do Google Tasks descarta a hora e grava só a data, então

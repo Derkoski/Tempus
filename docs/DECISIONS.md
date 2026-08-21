@@ -2333,3 +2333,78 @@ promovê-lo a interrupção diária, no horário mais previsível do dia, andari
 Furar o Não Perturbe no nível 3, que o §5 pede, continua pendente: precisa de `scenario="urgent"`,
 que no Windows 11 depende de marcar o Tempus como prioritário nas Configurações. É passo manual,
 não código.
+
+---
+
+## D-040 — `showAssigned` nasce falso, e tarefa atribuída era invisível
+
+**Status:** Aceita · 2026-08-21 · encontrada em uso
+
+### O sintoma
+
+*"estou fazendo uma automação de tarefas pós daily no Espaços do Google Chat, e fui testar lá,
+criei uma tarefa chamada Teste e atribuí pra mim e não apareceu no Tempus"*
+
+### A medição, antes do palpite
+
+`--dump-tasks` respondeu em uma execução: a API devolvia **uma lista só** (`Minhas tarefas`) e a
+tarefa `Teste` não estava nela. Isso descartou de saída a hipótese mais fácil — "existe uma lista
+de tarefas do Espaço que não estamos lendo" —, porque nenhuma lista nova aparecia em
+`tasklists.list`.
+
+### A causa
+
+O `tasks.list` tem um parâmetro que a documentação descreve assim:
+
+> **showAssigned** — Flag indicating whether tasks assigned to the current user are returned in the
+> result. **Default: False.**
+
+Ele governa exatamente as tarefas atribuídas a você a partir de **outra superfície**: Espaços do
+Chat, Documentos e Gmail. Não é limite da API nem escopo OAuth faltando — é um parâmetro opcional
+cujo padrão exclui essas tarefas, e nós nunca o tínhamos mandado.
+
+O padrão é infeliz na mesma direção do D-031: silencioso, plausível, e do lado errado. Nada falha,
+nada avisa; a tarefa simplesmente não vem.
+
+### A correção
+
+`ShowAssigned = true` nas três consultas — a de abertas, a de concluídas e a da sonda. A
+verificação foi imediata: `Teste` passou a vir, com
+`origem: SPACE · https://mail.google.com/chat/#chat/space/AAQAqqZBFag`.
+
+A sonda passou a imprimir a `origem` de cada tarefa a partir do `assignmentInfo`
+(`surfaceType` + `linkToTask`), porque "de onde veio esta tarefa" agora é uma pergunta legítima e
+antes não era.
+
+A biblioteca instalada (`Google.Apis.Tasks.v1` 1.74.0.3958) já expõe `showAssigned` e
+`assignmentInfo` — conferido no binário antes de mexer, para não trocar de pacote à toa.
+
+### Isto não contradiz o D-004
+
+O D-004 tirou o **Chat** do escopo por não haver contagem de não-lidos sem um N+1 caro. Continua
+valendo: o Tempus não lê mensagem nem conta não-lida.
+
+Uma tarefa atribuída num Espaço é outra coisa — ela é uma tarefa do **Tasks**, chega pela API do
+Tasks, com o escopo que já temos, numa consulta que já fazíamos. O Espaço é só onde ela nasceu.
+
+A distinção está anotada no `SPEC.md` porque é fácil de errar nos dois sentidos: uma sessão futura
+poderia "consertar" removendo isto em nome do D-004, ou "completar" a integração lendo o Chat.
+
+### O que muda no contador
+
+Tarefa atribuída passa a contar como tarefa aberta, que é o comportamento certo — ela é sua. Sem
+vencimento, ela **não** aciona o vermelho das 17:00 nem o checkpoint do meio-dia, porque o D-036 já
+trocou o padrão para `DueTodayOrOverdue`. As duas decisões se encaixam sem terem sido pensadas
+juntas: se o `CountMode` ainda fosse `AllOpen`, esta correção teria ligado um alarme falso por
+tarefa que a automação criasse.
+
+Nenhuma chave de configuração por ora. Não é preferência, é tarefa que estava sumindo — e se um dia
+o volume da automação incomodar, aí sim vale um interruptor.
+
+### Em aberto
+
+Se **escrever** numa tarefa atribuída funciona — concluir pelo Tempus e refletir no Espaço — não
+foi verificado. A documentação marca `parent` e `deleted` como somente-leitura para elas e não diz
+nada sobre `status`, o que sugere que concluir passa. Verificar exige escrever na conta real, e o
+D-024 diz que isso é do usuário, não meu. Se falhar, a `WriteQueue` do D-029 já mostra "não salvou"
+em vez de engolir — o pior caso é visível, não silencioso.
