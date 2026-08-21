@@ -2401,10 +2401,18 @@ tarefa que a automação criasse.
 Nenhuma chave de configuração por ora. Não é preferência, é tarefa que estava sumindo — e se um dia
 o volume da automação incomodar, aí sim vale um interruptor.
 
-### Em aberto
+### A escrita funciona — verificado, não inferido
 
-Se **escrever** numa tarefa atribuída funciona — concluir pelo Tempus e refletir no Espaço — não
-foi verificado. A documentação marca `parent` e `deleted` como somente-leitura para elas e não diz
-nada sobre `status`, o que sugere que concluir passa. Verificar exige escrever na conta real, e o
-D-024 diz que isso é do usuário, não meu. Se falhar, a `WriteQueue` do D-029 já mostra "não salvou"
-em vez de engolir — o pior caso é visível, não silencioso.
+Concluir uma tarefa atribuída **funciona nos dois sentidos**: marcada no Tempus, some do Espaço;
+marcada no Espaço, some do Tempus. Verificado pelo usuário na tarefa `Teste`, no mesmo dia.
+
+A leitura da documentação tinha apontado para cá — `parent` e `deleted` aparecem como
+somente-leitura para tarefas atribuídas e `status` não —, mas isso era inferência de ausência, que
+é o tipo de raciocínio que já errou neste projeto (D-031). Agora é observação.
+
+Consequência prática: uma tarefa nascida na automação do Espaço é, para o Tempus, uma tarefa como
+qualquer outra — conta no contador, aceita o clique de concluir, passa pela `WriteQueue` do D-029 e
+volta atrás sozinha se a escrita falhar. Nenhum caso especial no código.
+
+Isto **não** fecha o critério de aceite 7, que fala de **criar** tarefa nos dois sentidos. O que
+está verificado é conclusão.
