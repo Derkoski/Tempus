@@ -1,6 +1,6 @@
 namespace Tempus.Domain;
 
-/// <summary>O que o usuário mandou fazer. Novos verbos entram aqui — editar chega na fatia seguinte.</summary>
+/// <summary>O que o usuário mandou fazer. Editar título chega na fatia seguinte.</summary>
 internal enum WriteKind
 {
     Create,
@@ -13,6 +13,13 @@ internal enum WriteKind
     /// (D-030).
     /// </summary>
     Reopen,
+
+    /// <summary>
+    /// Define ou apaga o vencimento (D-042). <see cref="PendingWrite.Due"/> nulo significa
+    /// <b>apagar</b>, e não "não mexer" — a distinção importa, porque no caminho da API as duas
+    /// coisas se parecem perigosamente.
+    /// </summary>
+    Reschedule,
 }
 
 internal enum WriteState
@@ -47,6 +54,17 @@ internal sealed record PendingWrite
 
     /// <summary>Título de uma criação. É o único conteúdo que <b>só</b> existe aqui.</summary>
     public string? Title { get; init; }
+
+    /// <summary>
+    /// O vencimento pretendido, em <see cref="WriteKind.Reschedule"/>. <c>null</c> quer dizer
+    /// <b>apagar a data</b> — só é lido quando o verbo é esse, então não há ambiguidade com
+    /// "campo não preenchido".
+    /// <para>
+    /// Data, e não instante: a API descarta a hora e grava só o dia, e o próprio contrato diz
+    /// que não é possível ler nem escrever horário de tarefa (D-031).
+    /// </para>
+    /// </summary>
+    public DateOnly? Due { get; init; }
 
     public required DateTimeOffset CreatedAt { get; init; }
 

@@ -2505,3 +2505,86 @@ Domínio coberto por 15 testes, sendo o principal o que justifica a mudança: Da
 
 O gesto em si foi exercitado no **demo**, que ganhou a mesma filtragem e responde ao clique de
 verdade — D-024 e D-038 dizem que gesto se verifica ali, e não na barra real.
+
+---
+
+## D-042 — Datar tarefa pela barra, e o `null` que não limpa
+
+**Status:** Aceita · 2026-08-24
+
+### O pedido
+
+*"preciso colocar se a tarefa é pra hoje, ou amanhã, sem ter que entrar no tasks do google"*
+
+O Tempus **lia** vencimento e não **escrevia** — assimetria que sobrou desde o D-031. Era o último
+item de código da Fase 4.
+
+### Primeiro, a pergunta que veio junto
+
+*"nem a data dos 3 pontinhos aparece na api pra mandarmos ela?"*
+
+Não. Conferido no **discovery document**, revisão `20260818`: o recurso `Task` tem 17 campos e
+nenhum é prazo, e a descrição do `due` continua dizendo *"It doesn't represent the deadline of the
+task"*. O D-031 se sustenta nove meses depois — desta vez contra o contrato legível por máquina, e
+não contra a minha lembrança dele.
+
+Isso torna a funcionalidade **mais** valiosa: uma data posta pelo Tempus escreve `due`, que é o
+campo que o Tempus lê. O caminho errado deixa de estar ao alcance, e a pegadinha do D-031 some por
+construção — não por o usuário lembrar de qual botão usar.
+
+### O rótulo de data virou o controle dele
+
+A coluna de status da linha já mostrava `hoje`, `dd/MM` ou vazio. Torná-la clicável não custou
+layout nenhum: o controle nasceu onde a informação estava. Uma coluna nova gastaria largura
+permanente num painel estreito por uma ação ocasional.
+
+Três atalhos — **Hoje · Amanhã · Sem data** —, que é exatamente o que foi pedido. Sem calendário e
+sem hora: a API descarta a hora e grava só o dia.
+
+Duas bordas que o padrão do ✕ já tinha resolvido e foram reusadas: tarefa sem data ganha um
+`+ data` que só aparece no hover, e o clique na data é `Handled` para não subir até a linha e
+concluir a tarefa em vez de datá-la. **Hidden e não Collapsed**, para título e ✕ não pularem de
+lugar a cada passagem do ponteiro.
+
+"Sem data" só aparece quando há data para apagar — oferecê-lo a quem já está sem data seria um
+gesto que não faz nada e ainda custa duas requisições. Concluída não se reagenda: a data dela já
+não governa nada.
+
+### ⚠️ O buraco: `null` não limpa, ele desaparece
+
+O serializador do cliente Google usa `NullValueHandling.Ignore`. Então:
+
+```csharp
+_tasks.Tasks.Patch(new GTask { Due = null }, listId, id)   // não limpa: o campo nem é enviado
+```
+
+Um `PATCH` com `due` nulo é **indistinguível de "não mexa no due"**. A chamada voltaria sucesso e a
+data continuaria lá. Terceira aparição da mesma família de armadilha, depois do `due` que não é
+prazo (D-031) e do `showAssigned` que nasce falso (D-040): o padrão silencioso, plausível, e do
+lado errado.
+
+Limpar exige `PUT`, que substitui o recurso — **e aí mora o perigo de verdade**. Montar o `GTask` à
+mão com o que temos apagaria as **notas** da tarefa, porque `TaskItem` não as carrega: perda de
+dado causada por um gesto de limpar data. Por isso o caminho de apagar é `get` → zerar o `due` no
+objeto devolvido → `update`. O objeto vem completo do servidor, então o PUT é sem perda.
+
+Uma requisição a mais, só ao limpar. Definir data continua sendo um `Patch` simples.
+
+### O resto veio de graça
+
+O D-029 tinha construído o encanamento difícil, e esta fatia só acrescentou um verbo:
+
+- a **reversão não tem código** — o efeito otimista só vale enquanto pendente;
+- a fila, o backoff, o "não salvou" clicável e a sobrevivência a restart já existiam;
+- `IsConfirmed` segue a forma do `Complete`, inclusive na ausência: tarefa que saiu do retrato não
+  tem mais o que reagendar.
+
+E o gesto conversa com o D-036 sem ter sido pensado para isso: datar como hoje muda o balde na
+hora, e o balde é o que o checkpoint do meio-dia e o vermelho das 17:00 contam. Para as tarefas que
+a automação do Espaço cria sem data (D-040), carimbar "hoje" pela barra é o que as faz entrar na
+conta.
+
+### Fora desta fatia
+
+**Editar título**, a outra metade da linha do roadmap: pede um editor inline, que é outra conversa.
+O roadmap passou a separar as duas.

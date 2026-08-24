@@ -147,6 +147,10 @@ internal sealed class GoogleSync : IDisposable
                 case WriteKind.Delete:
                     await _tasks.Tasks.Delete(listId, write.TaskId).ExecuteAsync(ct);
                     break;
+
+                case WriteKind.Reschedule:
+                    await RescheduleAsync(listId, write, ct);
+                    break;
             }
 
             return WriteOutcome.Ok;
@@ -754,6 +758,45 @@ internal sealed class GoogleSync : IDisposable
         }
 
         return _unreadMail;
+    }
+
+    /// <summary>
+    /// Define ou apaga o vencimento (D-042). Os dois caminhos são <b>diferentes</b>, e é aí que
+    /// mora a armadilha desta operação.
+    /// <para>
+    /// <b>Apagar não pode ser um <c>Patch</c> com <c>Due = null</c>.</b> O serializador do cliente
+    /// Google usa <c>NullValueHandling.Ignore</c>, então o campo nulo simplesmente não é enviado —
+    /// e um PATCH sem <c>due</c> quer dizer "não mexa no due". A chamada voltaria sucesso e a data
+    /// continuaria lá: falha silenciosa, da mesma família do D-031 e do D-040.
+    /// </para>
+    /// <para>
+    /// Apagar exige PUT, que substitui o recurso. E aí mora o perigo de verdade: montar o
+    /// <c>GTask</c> à mão a partir do que temos apagaria as <b>notas</b> da tarefa, porque
+    /// <c>TaskItem</c> não as carrega — perda de dado causada por um gesto de limpar data. Daí o
+    /// <c>get</c> antes: o objeto vem completo do servidor, e o PUT devolve tudo menos o
+    /// vencimento.
+    /// </para>
+    /// </summary>
+    private async Task RescheduleAsync(string listId, PendingWrite write, CancellationToken ct)
+    {
+        if (write.Due is { } due)
+        {
+            // Meia-noite UTC, no formato que a medição 3 do D-031 provou funcionar nos dois
+            // sentidos. Espelha o ReadDue: lá se extrai a data do UTC, aqui se escreve nele.
+            var stamp = due.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
+                .ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+
+            await _tasks!.Tasks
+                .Patch(new GTask { Due = stamp }, listId, write.TaskId)
+                .ExecuteAsync(ct);
+
+            return;
+        }
+
+        var atual = await _tasks!.Tasks.Get(listId, write.TaskId).ExecuteAsync(ct);
+        atual.Due = null;
+
+        await _tasks.Tasks.Update(atual, listId, write.TaskId).ExecuteAsync(ct);
     }
 
     /// <summary>

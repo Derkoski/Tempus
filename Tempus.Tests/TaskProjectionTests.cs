@@ -201,4 +201,96 @@ public class TaskProjectionTests
         Assert.Single(rows);
         Assert.Null(rows.Single().Write);
     }
+
+    // ================================================================ vencimento (D-042)
+
+    private static readonly DateOnly Hoje = new(2026, 8, 24);
+    private static readonly DateOnly Amanha = new(2026, 8, 25);
+
+    private static TaskItem Dated(string id, DateOnly? due) =>
+        new() { Id = id, ListId = "L", Title = "tarefa", Due = due };
+
+    private static PendingWrite Reschedule(string taskId, DateOnly? due) =>
+        Write(WriteKind.Reschedule, taskId) with { Due = due };
+
+    [Fact]
+    public void Datar_aparece_na_hora()
+    {
+        var rows = TaskProjection.Apply([Dated("t1", null)], [Reschedule("t1", Hoje)]);
+
+        Assert.Equal(Hoje, rows.Single().Item.Due);
+        Assert.True(rows.Single().IsPending);
+    }
+
+    [Fact]
+    public void Apagar_a_data_tambem_aparece_na_hora()
+    {
+        var rows = TaskProjection.Apply([Dated("t1", Hoje)], [Reschedule("t1", null)]);
+
+        Assert.Null(rows.Single().Item.Due);
+        Assert.True(rows.Single().IsPending);
+    }
+
+    /// <summary>
+    /// A reversão não tem código próprio (D-029): o efeito otimista só vale enquanto pendente.
+    /// Falhada, a linha volta à data do servidor e passa a cobrar decisão.
+    /// </summary>
+    [Fact]
+    public void Datar_que_falhou_volta_a_data_do_servidor()
+    {
+        var rows = TaskProjection.Apply(
+            [Dated("t1", Hoje)], [Failed(Reschedule("t1", Amanha))]);
+
+        Assert.Equal(Hoje, rows.Single().Item.Due);
+        Assert.True(rows.Single().HasFailed);
+    }
+
+    /// <summary>
+    /// Metade do motivo desta fatia: uma tarefa sem data não conta no checkpoint do meio-dia nem
+    /// no vermelho das 17:00, porque o `CountMode` padrão só olha `DueTodayOrOverdue` (D-036).
+    /// Datar como hoje precisa mudar o balde <b>na hora</b>, senão o gesto pareceria não fazer nada.
+    /// </summary>
+    [Fact]
+    public void Datar_como_hoje_muda_o_balde_na_hora()
+    {
+        var rows = TaskProjection.Apply([Dated("t1", null)], [Reschedule("t1", Hoje)]);
+
+        Assert.Equal(TaskBucket.NoDate, Dated("t1", null).Bucket(Hoje));
+        Assert.Equal(TaskBucket.Today, rows.Single().Item.Bucket(Hoje));
+    }
+
+    // ---------------------------------------------------------------- confirmação
+
+    [Fact]
+    public void Datar_confirma_quando_o_servidor_mostra_a_data_nova()
+    {
+        var write = Reschedule("t1", Hoje);
+
+        Assert.False(TaskProjection.IsConfirmed(write, [Dated("t1", null)]));
+        Assert.True(TaskProjection.IsConfirmed(write, [Dated("t1", Hoje)]));
+    }
+
+    /// <summary>
+    /// Apagar precisa ser distinguível de "não mexer" também na confirmação: se ausência de data
+    /// no servidor não confirmasse, a intenção de limpar ficaria pendurada para sempre.
+    /// </summary>
+    [Fact]
+    public void Apagar_confirma_quando_o_servidor_esta_sem_data()
+    {
+        var write = Reschedule("t1", null);
+
+        Assert.False(TaskProjection.IsConfirmed(write, [Dated("t1", Hoje)]));
+        Assert.True(TaskProjection.IsConfirmed(write, [Dated("t1", null)]));
+    }
+
+    /// <summary>
+    /// Tarefa que saiu do retrato não tem mais o que reagendar. Sem isto o selo de "subindo"
+    /// ficaria pendurado numa linha que nem existe mais.
+    /// </summary>
+    [Fact]
+    public void Tarefa_ausente_nao_deixa_a_intencao_pendurada()
+    {
+        Assert.True(TaskProjection.IsConfirmed(Reschedule("sumida", Hoje), [Dated("t1", Hoje)]));
+        Assert.True(TaskProjection.IsConfirmed(Reschedule("sumida", null), []));
+    }
 }

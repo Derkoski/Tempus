@@ -56,6 +56,12 @@ internal partial class TasksPanel : Window
     /// <summary>Usuário marcou/desmarcou uma tarefa. Carrega o id.</summary>
     public event EventHandler<string>? TaskToggled;
 
+    /// <summary>
+    /// Novo vencimento de uma tarefa (D-042). Data nula quer dizer <b>apagar</b> — quem recebe
+    /// precisa dessa distinção, porque no caminho da API apagar e "não mexer" se parecem.
+    /// </summary>
+    public event EventHandler<(string Id, DateOnly? Due)>? TaskRescheduled;
+
     /// <summary>Usuário criou uma tarefa. Carrega o título.</summary>
     public event EventHandler<string>? TaskCreated;
 
@@ -357,17 +363,7 @@ internal partial class TasksPanel : Window
 
         // No lugar do vencimento, quando algo não subiu: naquele instante o que importa é o que
         // falhou, não para quando a tarefa era.
-        var status = entry.HasFailed
-            ? BuildRetryAction(entry)
-            : new TextBlock
-            {
-                Text = DueLabel(task, bucket),
-                FontSize = 11,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(8, 0, 0, 0),
-                Foreground = new SolidColorBrush(
-                    bucket == TaskBucket.Overdue ? _palette.CriticalBackground : _palette.Muted),
-            };
+        var status = entry.HasFailed ? BuildRetryAction(entry) : BuildDueAction(entry, bucket);
         Grid.SetColumn(status, 2);
 
         var delete = BuildDeleteAction(entry, row);
@@ -390,6 +386,10 @@ internal partial class TasksPanel : Window
             // O ✕ só existe sob o ponteiro. Treze tarefas com um ✕ permanente cada viram uma
             // coluna de ruído ao lado do que importa, e a ação principal aqui é concluir.
             if (delete.Tag is null) delete.Visibility = Visibility.Visible;
+
+            // Mesmo motivo para o "+ data" de quem não tem vencimento: convite quando a mão já
+            // está ali, e nada no caminho do olho quando não está.
+            if (status.Tag is true) status.Visibility = Visibility.Visible;
         };
         row.MouseLeave += (_, _) =>
         {
@@ -397,6 +397,10 @@ internal partial class TasksPanel : Window
 
             // Tag marcada = confirmação aberta; some só depois de resolvida.
             if (delete.Tag is null) delete.Visibility = Visibility.Collapsed;
+
+            // Hidden, e não Collapsed: a coluna já reservou o espaço dela, e recolher faria
+            // título e ✕ pularem de lugar a cada passagem do ponteiro.
+            if (status.Tag is true) status.Visibility = Visibility.Hidden;
         };
         row.MouseLeftButtonUp += (_, e) =>
         {
@@ -540,6 +544,105 @@ internal partial class TasksPanel : Window
         };
 
         return host;
+    }
+
+    /// <summary>
+    /// O vencimento, que agora também é o <b>controle</b> dele (D-042).
+    /// <para>
+    /// O rótulo já morava nesta coluna, então torná-lo clicável não custa layout nenhum — o
+    /// controle nasce onde a informação estava. A alternativa, uma coluna nova, gastaria largura
+    /// permanente num painel estreito para uma ação ocasional.
+    /// </para>
+    /// <para>
+    /// Tarefa <b>sem</b> data tem rótulo vazio, e alvo de clique invisível não existe: ela recebe
+    /// um <c>+ data</c> apagado que aparece no hover, o mesmo padrão do ✕ de excluir.
+    /// </para>
+    /// </summary>
+    private FrameworkElement BuildDueAction(TaskRow entry, TaskBucket bucket)
+    {
+        var task = entry.Item;
+        var vazio = bucket == TaskBucket.NoDate;
+
+        var text = new TextBlock
+        {
+            Text = vazio ? "+ data" : DueLabel(task, bucket),
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(
+                bucket == TaskBucket.Overdue ? _palette.CriticalBackground : _palette.Muted),
+        };
+
+        var host = new Border
+        {
+            Child = text,
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(2, 0, 0, 0),
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = entry.IsPending ? Cursors.Arrow : Cursors.Hand,
+
+            // O "+ data" só sob o ponteiro; a data de verdade fica sempre à vista, porque ela é
+            // informação antes de ser botão.
+            Visibility = vazio ? Visibility.Hidden : Visibility.Visible,
+        };
+
+        // Concluída não se reagenda: a data dela já não governa nada, e o gesto da linha é
+        // desfazer a conclusão (D-030).
+        if (entry.IsPending || task.IsCompleted) return host;
+
+        // Marca para a linha saber que este alvo aparece no hover. Só depois da saída acima:
+        // numa linha que não aceita o gesto, revelar o "+ data" prometeria o que não cumpre.
+        host.Tag = vazio;
+
+        host.MouseEnter += (_, _) => host.Background = new SolidColorBrush(_palette.PanelBorder);
+        host.MouseLeave += (_, _) => host.Background = Brushes.Transparent;
+
+        // Handled, senão o clique sobe para a linha e conclui a tarefa em vez de datá-la.
+        host.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            ShowDueMenu(host, task);
+        };
+
+        return host;
+    }
+
+    /// <summary>
+    /// Os três atalhos que resolvem o caso relatado: "é pra hoje, ou amanhã". Sem calendário e sem
+    /// hora — a API descarta a hora e grava só o dia (D-031), então oferecer relógio seria prometer
+    /// o que o outro lado não guarda.
+    /// </summary>
+    private void ShowDueMenu(FrameworkElement anchor, TaskItem task)
+    {
+        var hoje = DateOnly.FromDateTime(DateTime.Today);
+
+        var menu = new ContextMenu { PlacementTarget = anchor };
+
+        void Add(string header, DateOnly? due, bool current)
+        {
+            var item = new MenuItem
+            {
+                Header = header,
+                FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal,
+            };
+
+            item.Click += (_, _) => TaskRescheduled?.Invoke(this, (task.Id, due));
+            menu.Items.Add(item);
+        }
+
+        Add("Hoje", hoje, task.Due == hoje);
+        Add("Amanhã", hoje.AddDays(1), task.Due == hoje.AddDays(1));
+
+        // Só quando há o que apagar: oferecer "sem data" para quem já está sem data seria oferecer
+        // um gesto que não faz nada — e, pior, ele custa uma ida extra à API (get + update).
+        if (task.Due is not null)
+        {
+            menu.Items.Add(new Separator());
+            Add("Sem data", null, false);
+        }
+
+        menu.IsOpen = true;
     }
 
     private static string DueLabel(TaskItem task, TaskBucket bucket) => bucket switch

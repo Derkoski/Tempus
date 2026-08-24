@@ -71,6 +71,16 @@ internal static class TaskProjection
                 case WriteKind.Delete:
                     rows.RemoveAll(r => r.Item.Id == write.TaskId);
                     break;
+
+                // Datar muda de balde (hoje/depois/vencida) na hora, e por isso muda também o
+                // contador que o meio-dia e as 17:00 olham — que é metade do motivo do D-042.
+                case WriteKind.Reschedule:
+                    Replace(rows, write.TaskId, row => row with
+                    {
+                        Item = row.Item with { Due = write.Due },
+                        Write = write,
+                    });
+                    break;
             }
         }
 
@@ -102,6 +112,13 @@ internal static class TaskProjection
         WriteKind.Reopen => server.Any(t => t.Id == write.TaskId && !t.IsCompleted),
 
         WriteKind.Delete => server.All(t => t.Id != write.TaskId),
+
+        // Ausente conta, como no Complete: tarefa que saiu do retrato não tem mais o que reagendar,
+        // e manter a intenção viva deixaria o selo de "subindo" pendurado para sempre numa linha
+        // que nem existe. Presente, confirma quando a data do servidor é a pretendida — inclusive
+        // quando a pretendida é nenhuma, que é o caso de apagar.
+        WriteKind.Reschedule =>
+            server.FirstOrDefault(t => t.Id == write.TaskId) is not { } found || found.Due == write.Due,
 
         _ => false,
     };

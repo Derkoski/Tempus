@@ -300,6 +300,9 @@ public partial class App : Application
         surface.TaskDeleted += (_, id) => EnqueueFor(surface, WriteKind.Delete, id);
         surface.TaskReopened += (_, id) => EnqueueFor(surface, WriteKind.Reopen, id);
 
+        surface.TaskRescheduled += (_, e) =>
+            EnqueueFor(surface, WriteKind.Reschedule, e.Id, w => w with { Due = e.Due });
+
         surface.TaskWriteRetried += (_, id) => writes.Retry(id);
         surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);
 
@@ -318,16 +321,22 @@ public partial class App : Application
     private IReadOnlyList<TaskRow> CurrentTasks() =>
         TaskProjection.Apply(_snapshot.Tasks, _writes?.Pending ?? []);
 
-    private void EnqueueFor(FloatingBarSurface surface, WriteKind kind, string id)
+    private void EnqueueFor(
+        FloatingBarSurface surface,
+        WriteKind kind,
+        string id,
+        Func<PendingWrite, PendingWrite>? detail = null)
     {
         var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id);
         if (task is null) return;
 
-        Enqueue(surface, PendingWrite.For(kind, DateTimeOffset.Now) with
+        var write = PendingWrite.For(kind, DateTimeOffset.Now) with
         {
             TaskId = task.Id,
             ListId = task.ListId,
-        });
+        };
+
+        Enqueue(surface, detail is null ? write : detail(write));
     }
 
     private void Enqueue(FloatingBarSurface surface, PendingWrite write)
@@ -948,6 +957,9 @@ public partial class App : Application
 
         surface.TaskReopened += (_, id) => EnqueueDemo(surface, demo, PendingWrite.For(
             WriteKind.Reopen, DateTimeOffset.Now) with { TaskId = id });
+
+        surface.TaskRescheduled += (_, e) => EnqueueDemo(surface, demo, PendingWrite.For(
+            WriteKind.Reschedule, DateTimeOffset.Now) with { TaskId = e.Id, Due = e.Due });
 
         surface.TaskWriteRetried += (_, id) => writes.Retry(id);
         surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);

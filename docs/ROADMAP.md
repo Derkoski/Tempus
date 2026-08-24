@@ -295,9 +295,11 @@ mentiria.*
       janela de 7 dias; clicar numa concluída desmarca, simétrico a clicar numa aberta para
       marcar. Encontrado em uso: concluir tinha um clique só sob a premissa de ser reversível, e
       não era. Custou um `WriteKind` a mais porque o D-029 já tinha feito o caminho
-- [ ] Editar título e vencimento — **próxima fatia.** Fica barata: dois valores a mais no
-      `WriteKind` e a UI de edição. Confiabilidade veio antes de propósito, para não empilhar
-      escrita nova sobre um mecanismo que perde escrita
+- [x] **Editar vencimento** (D-042) — o rótulo de data da linha virou o controle dele, com
+      Hoje · Amanhã · Sem data. Saiu barata como previsto, porque o D-029 já tinha feito o
+      encanamento. A armadilha não estava na UI: `Patch` com `due = null` **não limpa**, porque o
+      serializador omite nulos — e limpar por `PUT` montado à mão apagaria as notas da tarefa
+- [ ] Editar título — a outra metade. Pede editor inline na linha, que é outra conversa
 - [ ] Critério de aceite **7** do `SPEC.md` verificado nos dois sentidos — *o roadmap dizia 6, que
       é o do meio-dia/17:00 entregue na Fase 3; o de tarefas é o 7*
 
@@ -367,8 +369,14 @@ conversa trafegam; nenhum assunto, remetente ou corpo é lido.
   **O que mudaria a decisão:** o usuário passar a trabalhar longe da tela com frequência, ou
   aparecer uma necessidade de notificação que o Calendar não cubra. Aí o desenho começa da pergunta
   certa, não de portar este.
+- **Ver a agenda de outros dias** — pedido em 2026-08-24. Hoje o painel S3 mostra só o dia
+  corrente, e a pergunta que aparece na prática é de outra pessoa: *"você tem horário livre
+  quinta?"*. Sem isso, responder exige abrir o Google Agenda, que é exatamente a ida que a barra
+  existe para evitar. Duas coisas a decidir antes: **navegar por dia ou mostrar a semana**, e o que
+  fazer com o `GoogleSync`, que hoje consulta uma janela curta e teria de buscar sob demanda sem
+  virar polling largo (regra 9). Provavelmente merece fatia própria, não um remendo no S3
 - Reposicionar/redimensionar a barra por arrastar, com posição persistida
-- Ações rápidas no toast ("entrar na call", "concluir tarefa")
+- ~~Ações rápidas no toast~~ — feito no D-039
 - Registro de foco: quanto tempo em reunião vs. livre por dia
 - Feriados municipais/estaduais e emendas da TOTVS por lista manual (`SEVERITY.md` §7)
 - Reconsiderar Chat se o Google publicar contagem de não-lidos (D-004)

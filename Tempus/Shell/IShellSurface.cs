@@ -83,6 +83,9 @@ internal interface IShellSurface : IDisposable
     /// <summary>Tarefa marcada ou desmarcada no painel S2. Carrega o id.</summary>
     event EventHandler<string>? TaskToggled;
 
+    /// <summary>Novo vencimento de uma tarefa; data nula apaga (D-042).</summary>
+    event EventHandler<(string Id, DateOnly? Due)>? TaskRescheduled;
+
     /// <summary>Tarefa criada no painel S2. Carrega o título.</summary>
     event EventHandler<string>? TaskCreated;
 
