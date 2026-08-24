@@ -296,7 +296,7 @@ mentiria.*
       marcar. Encontrado em uso: concluir tinha um clique só sob a premissa de ser reversível, e
       não era. Custou um `WriteKind` a mais porque o D-029 já tinha feito o caminho
 - [x] **Editar vencimento** (D-042) — o rótulo de data da linha virou o controle dele, com
-      Hoje · Amanhã · Sem data. Saiu barata como previsto, porque o D-029 já tinha feito o
+      Hoje · Amanhã · Outro dia (calendário no próprio menu) · Sem data. Saiu barata como previsto, porque o D-029 já tinha feito o
       encanamento. A armadilha não estava na UI: `Patch` com `due = null` **não limpa**, porque o
       serializador omite nulos — e limpar por `PUT` montado à mão apagaria as notas da tarefa
 - [ ] Editar título — a outra metade. Pede editor inline na linha, que é outra conversa

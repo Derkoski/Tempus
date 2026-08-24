@@ -609,40 +609,104 @@ internal partial class TasksPanel : Window
     }
 
     /// <summary>
-    /// Os três atalhos que resolvem o caso relatado: "é pra hoje, ou amanhã". Sem calendário e sem
-    /// hora — a API descarta a hora e grava só o dia (D-031), então oferecer relógio seria prometer
-    /// o que o outro lado não guarda.
+    /// Hoje e amanhã em cima, porque são o caso comum; qualquer outro dia no calendário, dentro do
+    /// próprio menu.
+    /// <para>
+    /// A primeira versão tinha <b>só</b> hoje e amanhã, que era o pedido literal — e a primeira
+    /// pergunta em uso foi "como coloco pra sexta?". Atalho resolve o frequente; calendário resolve
+    /// o resto, e os dois juntos não deixam nenhum dia inalcançável.
+    /// </para>
+    /// <para>
+    /// Sem hora, e isso não é omissão: a API descarta a hora e grava só o dia (D-031). Oferecer
+    /// relógio seria prometer o que o outro lado não guarda.
+    /// </para>
     /// </summary>
     private void ShowDueMenu(FrameworkElement anchor, TaskItem task)
     {
         var hoje = DateOnly.FromDateTime(DateTime.Today);
-
         var menu = new ContextMenu { PlacementTarget = anchor };
 
-        void Add(string header, DateOnly? due, bool current)
+        MenuItem Build(string header, DateOnly? due)
         {
             var item = new MenuItem
             {
                 Header = header,
-                FontWeight = current ? FontWeights.SemiBold : FontWeights.Normal,
+
+                // Negrito no que já está valendo: o menu mostra onde a tarefa está antes de
+                // perguntar para onde vai.
+                FontWeight = task.Due == due ? FontWeights.SemiBold : FontWeights.Normal,
             };
 
             item.Click += (_, _) => TaskRescheduled?.Invoke(this, (task.Id, due));
-            menu.Items.Add(item);
+            return item;
         }
 
-        Add("Hoje", hoje, task.Due == hoje);
-        Add("Amanhã", hoje.AddDays(1), task.Due == hoje.AddDays(1));
+        menu.Items.Add(Build("Hoje", hoje));
+        menu.Items.Add(Build("Amanhã", hoje.AddDays(1)));
+        menu.Items.Add(BuildCalendarItem(menu, task, hoje));
 
-        // Só quando há o que apagar: oferecer "sem data" para quem já está sem data seria oferecer
-        // um gesto que não faz nada — e, pior, ele custa uma ida extra à API (get + update).
+        // Só quando há o que apagar: oferecer "sem data" para quem já está sem data seria um gesto
+        // que não faz nada — e ainda custaria uma ida extra à API (get + update).
         if (task.Due is not null)
         {
             menu.Items.Add(new Separator());
-            Add("Sem data", null, false);
+            menu.Items.Add(Build("Sem data", null));
         }
 
         menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// "Outro dia", com o calendário abrindo como submenu — dentro do mesmo menu, sem uma segunda
+    /// janela para posicionar e fechar.
+    /// <para>
+    /// <c>StaysOpenOnClick</c> no item que hospeda o calendário é o que impede o menu de fechar no
+    /// primeiro clique dentro dele, antes de o dia ser escolhido.
+    /// </para>
+    /// </summary>
+    private MenuItem BuildCalendarItem(ContextMenu menu, TaskItem task, DateOnly hoje)
+    {
+        var calendar = new Calendar
+        {
+            SelectionMode = CalendarSelectionMode.SingleDate,
+            Background = new SolidColorBrush(_palette.PanelBackground),
+            Foreground = new SolidColorBrush(_palette.BarForeground),
+            BorderBrush = new SolidColorBrush(_palette.PanelBorder),
+
+            // Abre no mês da data atual da tarefa, e não sempre em hoje: reagendar costuma ser um
+            // ajuste perto de onde ela já estava.
+            DisplayDate = (task.Due ?? hoje).ToDateTime(TimeOnly.MinValue),
+            SelectedDate = task.Due?.ToDateTime(TimeOnly.MinValue),
+        };
+
+        // O estilo padrão do Calendar assume fundo claro. Sem isto, no tema escuro os números do
+        // mês somem — só a moldura acompanharia a paleta.
+        Tint<System.Windows.Controls.Primitives.CalendarDayButton>(calendar);
+        Tint<System.Windows.Controls.Primitives.CalendarButton>(calendar);
+
+        // Depois de definir SelectedDate, senão a atribuição acima dispararia o gesto sozinha e a
+        // tarefa seria "reagendada" para a data que ela já tem, no instante em que o menu abre.
+        calendar.SelectedDatesChanged += (_, _) =>
+        {
+            if (calendar.SelectedDate is not { } escolhido) return;
+
+            menu.IsOpen = false;
+            TaskRescheduled?.Invoke(this, (task.Id, DateOnly.FromDateTime(escolhido)));
+        };
+
+        var item = new MenuItem { Header = "Outro dia" };
+        item.Items.Add(new MenuItem { Header = calendar, StaysOpenOnClick = true });
+
+        return item;
+    }
+
+    /// <summary>Pinta um tipo interno do <c>Calendar</c> com a cor de texto da paleta.</summary>
+    private void Tint<T>(Calendar calendar)
+    {
+        var style = new Style(typeof(T));
+        style.Setters.Add(new Setter(ForegroundProperty, new SolidColorBrush(_palette.BarForeground)));
+
+        calendar.Resources.Add(typeof(T), style);
     }
 
     private static string DueLabel(TaskItem task, TaskBucket bucket) => bucket switch

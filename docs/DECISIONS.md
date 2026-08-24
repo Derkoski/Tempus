@@ -2538,8 +2538,20 @@ A coluna de status da linha já mostrava `hoje`, `dd/MM` ou vazio. Torná-la cli
 layout nenhum: o controle nasceu onde a informação estava. Uma coluna nova gastaria largura
 permanente num painel estreito por uma ação ocasional.
 
-Três atalhos — **Hoje · Amanhã · Sem data** —, que é exatamente o que foi pedido. Sem calendário e
-sem hora: a API descarta a hora e grava só o dia.
+**Hoje · Amanhã · Outro dia · Sem data.** Sem hora: a API descarta a hora e grava só o dia.
+
+A primeira versão tinha só hoje e amanhã, que era o pedido ao pé da letra — e a primeira pergunta
+em uso foi *"como faço pra colocar pra sexta? só tenho 2 opções"*. O pedido literal era mais
+estreito que a necessidade, e eu não tinha esticado.
+
+"Outro dia" abre um `Calendar` **como submenu**, dentro do próprio menu — não uma segunda janela
+para posicionar e fechar. `StaysOpenOnClick` no item que o hospeda é o que impede o menu de fechar
+no primeiro clique, antes de o dia ser escolhido. O calendário abre no mês da data **atual** da
+tarefa, e não sempre em hoje: reagendar costuma ser ajuste perto de onde ela já estava.
+
+O estilo padrão do `Calendar` assume fundo claro, então os botões de dia e de mês recebem a cor da
+paleta por `Style` injetado nos recursos do controle. Sem isso, no tema escuro só a moldura
+acompanharia o tema e os números do mês sumiriam.
 
 Duas bordas que o padrão do ✕ já tinha resolvido e foram reusadas: tarefa sem data ganha um
 `+ data` que só aparece no hover, e o clique na data é `Handled` para não subir até a linha e
