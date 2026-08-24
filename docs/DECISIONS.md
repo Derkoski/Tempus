@@ -2416,3 +2416,92 @@ volta atrás sozinha se a escrita falhar. Nenhum caso especial no código.
 
 Isto **não** fecha o critério de aceite 7, que fala de **criar** tarefa nos dois sentidos. O que
 está verificado é conclusão.
+
+---
+
+## D-041 — "Já saí desta reunião": o gesto que faltava para a call que acaba cedo
+
+**Status:** Aceita · 2026-08-21 · encontrada em uso
+
+### O sintoma
+
+*"as calls que terminam antes do tempo e eu não tenho como cancelar o aviso e contagem de tempo
+antes de terminar a contagem no Tempus... terminei a call antecipadamente, preciso ter uma forma
+de cancelar essa contagem"*
+
+### Não é desconforto, é alarme falso
+
+A call acabou 14:38; a agenda diz 15:00. Encadeado, isso produzia:
+
+1. `Ocupado · faltam 22 min` — cronograma exibido como se fosse realidade;
+2. âmbar em `Encerrando` às 14:55;
+3. e, se a seguinte começasse às 15:00, **`MeetingRanIntoNext`** — nível 3, que escala, pisca e
+   cobra clique — por uma reunião deixada vinte minutos antes.
+
+A regra 1 diz que vermelho à toa é modelo errado, não tolerância do usuário. E a contagem
+regressiva de uma reunião encerrada é a regra 10 sendo violada pelo humor temporal.
+
+Nenhum gesto resolvia. Em `InMeeting` o humor não tem ocorrência, então `CanAcknowledge` é falso e
+o clique não faz nada. Reconhecer `Encerrando` só devolvia `Ocupado`, com a contagem intacta.
+
+### A decisão
+
+Um gesto no menu do botão direito — **"Encerrei esta reunião"** —, e a partir dele a reunião sai
+do humor, do evento ativo e do ciclo de call.
+
+É a forma do **D-006**, que este projeto já escolheu uma vez: o Tempus não infere presença, o
+usuário declara. Detectar sozinho que a call acabou exigiria microfone ou janela, e continua fora.
+
+**Remove, não trunca.** Encurtar o fim para "agora" faria nascer um `MeetingEnded` — âmbar por três
+minutos. Responder a um "já terminei" explícito com um alerta é a resposta errada; a pergunta que o
+produto faz é "algo precisa de mim agora?", e a resposta verdadeira depois do gesto é silêncio.
+
+**Alterna**, como o gesto da pausa: um clique só, que grava em disco e vale o resto do dia, precisa
+de caminho de volta. O item vira "Reabrir «Daily KA»" enquanto a reunião ainda estaria em curso, e
+some do menu depois disso — passado o horário, reabrir não teria efeito nenhum.
+
+### Onde a ocorrência mora
+
+No `AcknowledgementStore` que já existe. Ele já é um conjunto de ocorrências por dia, persistido,
+carregado na subida e limpo na virada; e já guarda strings heterogêneas (`Overrun|…`,
+`DayEnded|2026-08-21`). `MeetingLeft|…` é mais uma ocorrência com nome próprio, não um conceito
+novo enfiado num lugar alheio. O §7 ganhou uma seção separando as duas espécies de supressão,
+porque "eu vi" suprime o **alarme** e "já saí" suprime o **fato**.
+
+Nada disto sobe para o Google: a reunião continua no calendário para todo mundo. O que muda é só o
+que o Tempus cobra. Por isso o gesto não passa pela `WriteQueue` e a regra 12 não se aplica — não
+há escrita que possa falhar em silêncio.
+
+### Filtrar uma vez, na entrada do domínio
+
+`BuildState` calcula a agenda filtrada e passa a mesma lista ao humor, ao `ActiveEvent.Candidates`
+e aos sinais. Filtrar em três lugares convidaria os três a discordarem.
+
+Duas coisas caíram de graça: a escolha do §8 se limpa sozinha, porque o evento deixa de ser
+candidato; e o toast fixo da reunião é retirado da tela pelo `Retire` do D-039, que já tira o que o
+humor não nomeia mais.
+
+O **painel do dia continua com a agenda inteira**. A reunião aconteceu; o gesto para de cobrar
+atenção, não reescreve o dia.
+
+### O bug que os testes pegaram antes do usuário
+
+A primeira versão de `Leavable` devolvia "a primeira reunião em curso". Com duas reuniões coladas
+às 15:05, a barra mostra **duas coisas sobre reuniões diferentes** (§0.5): o humor diz `Ocupado`
+pela Review, e o chip acende vermelho pela Daily que estourou. Aquela versão teria encerrado a
+reunião errada em alguns estados.
+
+A correção foi amarrar o gesto ao que o humor nomeia, e exigir que ela esteja de fato correndo.
+Efeito colateral bom: em `Estourou` o item some do menu, e sobra o "reconhecer alerta", que é o
+gesto certo para aquele estado — lá o problema não é a contagem, é o alarme.
+
+Escrever o teste também corrigiu uma crença minha: `Estourou` só existe quando **nada** está em
+curso, porque reunião correndo sempre ganha no resolvedor. Eu tinha suposto o contrário.
+
+### Verificação
+
+Domínio coberto por 15 testes, sendo o principal o que justifica a mudança: Daily encerrada às
+14:38, Review começando às 15:00, e **`MeetingRanIntoNext` não dispara**.
+
+O gesto em si foi exercitado no **demo**, que ganhou a mesma filtragem e responde ao clique de
+verdade — D-024 e D-038 dizem que gesto se verifica ali, e não na barra real.

@@ -24,6 +24,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         _window.BreakPostponed += (_, e) => BreakPostponed?.Invoke(this, e);
         _window.BreakStartedNow += (_, e) => BreakStartedNow?.Invoke(this, e);
         _window.ActiveEventChosen += (_, id) => ActiveEventChosen?.Invoke(this, id);
+        _window.MeetingLeftToggled += (_, occurrence) => MeetingLeftToggled?.Invoke(this, occurrence);
         _window.ReauthRequested += (_, e) => ReauthRequested?.Invoke(this, e);
         _window.TasksRequested += (_, e) => TasksRequested?.Invoke(this, e);
         _window.AgendaRequested += (_, e) => AgendaRequested?.Invoke(this, e);
@@ -40,6 +41,9 @@ internal sealed class FloatingBarSurface : IShellSurface
     public event EventHandler? BreakPostponed;
     public event EventHandler? BreakStartedNow;
     public event EventHandler<string>? ActiveEventChosen;
+
+    /// <summary>"Já saí desta reunião", ou o desfazer disso (D-041).</summary>
+    public event EventHandler<string>? MeetingLeftToggled;
     public event EventHandler? ReauthRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;

@@ -34,7 +34,7 @@ passageiro aos 10 min e fixo aos 2 até o clique (D-039).
 com repetição e resolução de conflito (D-029). Falta **editar título e vencimento**, mais os
 critérios de aceite 7 (tarefas, nos dois sentidos) e 8 (contador de e-mail).
 
-`Tempus.Tests` (xUnit) tem 199 testes e roda em ~250 ms. As oito invariantes I1–I8 têm teste e
+`Tempus.Tests` (xUnit) tem 214 testes e roda em ~230 ms. As oito invariantes I1–I8 têm teste e
 nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execução trava o build.
 
 ## Regras deste projeto

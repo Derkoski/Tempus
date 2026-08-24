@@ -234,6 +234,10 @@ Notas de design:
 - **`MeetingRanIntoNext` é o vermelho principal do produto** e **não** auto-limpa: fica vermelho,
   começa a piscar em 5 min, e só sai com clique. É o caso "estou invadindo outra call segurando
   a atual", que era um requisito explícito. Sem detecção de mic, o clique é o que diz "já saí".
+- **O ciclo pode ser encerrado pelo usuário.** Call que acaba antes da hora marcada sai do ciclo
+  com "Encerrei esta reunião", no menu do botão direito (D-041, §7). Sem isso a barra contava o
+  tempo de uma reunião que já tinha acabado e chegava a acender `MeetingRanIntoNext` por ela. É a
+  mesma forma do D-006: o Tempus não infere presença, o usuário declara.
 - Reuniões **de dia inteiro** são ignoradas por completo neste ciclo — são marcadores, não calls.
 - Eventos com `transparency=transparent` (Livre), recusados (`responseStatus=declined`), ou com
   `eventType` = `outOfOffice` / `focusTime` **não geram sinal algum**.
@@ -432,6 +436,29 @@ prorrogar é uma mudança material, e o reconhecimento anterior se referia a out
 
 Para sinais não ligados a evento, a identidade é `(nomeDoSinal, dataLocal)`:
 `DayEnded` reconhecido vale até a virada do dia; `MiddayCheckpoint`, o mesmo.
+
+### Duas espécies de supressão — "eu vi" e "já saí" (D-041)
+
+Elas dividem o mesmo conjunto persistido e **não** significam a mesma coisa:
+
+| Gesto | Ocorrência | O que suprime |
+|---|---|---|
+| **Eu vi** | `{sinal}\|{evento}\|{início}\|{fim}` | o **alarme**. O fato continua: a reunião segue em curso, a barra volta ao que os outros sinais ditarem |
+| **Já saí** | `MeetingLeft\|{evento}\|{início}\|{fim}` | o **fato**. A reunião para de existir para o humor, o evento ativo e o ciclo de call |
+
+O segundo existe porque o primeiro não resolvia o caso: uma call que acaba às 14:38 mas está
+marcada até 15:00 deixava a barra contando `faltam 22 min`, virava âmbar em `Encerrando`, e
+acendia **vermelho de estouro** quando a seguinte começava — nível 3 falso, por uma reunião já
+deixada. Reconhecer apagaria o vermelho *depois* dele aparecer; encerrar impede que ele nasça.
+
+Encerrar **remove** a reunião do dia para o domínio, e não encurta o fim dela para "agora":
+encurtar faria nascer um `MeetingEnded` âmbar, e responder a um "já terminei" explícito com um
+alerta é a resposta errada.
+
+O painel do dia continua mostrando a reunião. O gesto para de cobrar atenção; ele não reescreve
+o que aconteceu.
+
+Vale a mesma regra de identidade acima — prorrogar a reunião no calendário a traz de volta.
 
 ## 8. Reuniões sobrepostas — o evento ativo
 

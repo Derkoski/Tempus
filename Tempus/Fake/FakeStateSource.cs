@@ -28,6 +28,10 @@ internal sealed class FakeStateSource
     private readonly ShellState[] _script;
     private readonly object _gate = new();
 
+    /// <summary>As reuniões que o usuário declarou encerradas (D-041), no espelho do que o
+    /// caminho real guarda no <c>AcknowledgementStore</c>.</summary>
+    private readonly HashSet<string> _left;
+
     private IReadOnlyList<PendingWrite> _pending = [];
     private int _index;
     private int _nextId = 100;
@@ -70,6 +74,7 @@ internal sealed class FakeStateSource
             },
         ];
 
+        _left = [];
         _agenda = BuildAgenda();
         _script = BuildScript();
         Current = Stamp(_script[0]);
@@ -100,6 +105,21 @@ internal sealed class FakeStateSource
 
     /// <summary>Simula o re-consent semanal bem-sucedido (<c>SEVERITY.md</c> §6).</summary>
     public ShellState Reconnect() => Acknowledge();
+
+    /// <summary>
+    /// "Já saí desta reunião", e o desfazer (D-041).
+    /// <para>
+    /// O demo <b>precisa</b> deste gesto de verdade, e não só do item no menu: é o único lugar
+    /// onde ele pode ser exercitado sem esperar uma call acabar cedo na conta real — e o D-038
+    /// aprendeu, à custa de um alarme do usuário, que gesto se verifica no demo.
+    /// </para>
+    /// </summary>
+    public ShellState ToggleLeft(string occurrence)
+    {
+        if (!_left.Remove(occurrence)) _left.Add(occurrence);
+
+        return Current = Stamp(_script[_index]);
+    }
 
     /// <summary>Redesenha a barra levando em conta o que ainda não subiu.</summary>
     public ShellState WithPending(IReadOnlyList<PendingWrite> pending)
@@ -152,24 +172,43 @@ internal sealed class FakeStateSource
     /// uma tarefa refletir na barra. Offline apaga os contadores em vez de mostrar o último valor
     /// conhecido (<c>SEVERITY.md</c> §0, invariante I7).
     /// </summary>
-    private ShellState Stamp(ShellState state) => state.IsOffline
-        ? state with
+    private ShellState Stamp(ShellState state)
+    {
+        if (state.IsOffline)
         {
-            OpenTasks = null,
-            UnreadMail = null,
-            LastSyncAt = null,
-            Time = TimeStatus.Unknown,
+            return state with
+            {
+                OpenTasks = null,
+                UnreadMail = null,
+                LastSyncAt = null,
+                Time = TimeStatus.Unknown,
+            };
         }
-        : state with
+
+        // A mesma conta que o BuildState faz no caminho real, incluindo a filtragem do D-041.
+        // Repetir a fórmula aqui faria o demo mentir justamente sobre o que ele existe para
+        // exercitar — e é no demo que os gestos se verificam (D-024, D-038).
+        var now = DateTimeOffset.Now;
+        var visivel = MeetingLeft.Apply(_agenda, _left);
+        var time = TimeStatusResolver.Resolve(
+            visivel, now, TimeThresholds.Default, WorkDayOptions.Default);
+
+        var encerravel = MeetingLeft.Leavable(visivel, time, now);
+        var reabrivel = MeetingLeft.Reopenable(_agenda, _left, now);
+
+        return state with
         {
             // Pela projeção, não pela lista crua: senão o contador da barra discordaria do painel
             // enquanto uma escrita estivesse a caminho.
             OpenTasks = TaskProjection.Apply(Tasks, _pending).Count(r => !r.Item.IsCompleted),
             UnreadMail = Mail,
-            LastSyncAt = DateTimeOffset.Now,
-            Time = TimeStatusResolver.Resolve(
-                _agenda, DateTimeOffset.Now, TimeThresholds.Default, WorkDayOptions.Default),
+            LastSyncAt = now,
+            Time = time,
+            LeavableOccurrence = encerravel is null ? null : MeetingLeft.OccurrenceFor(encerravel),
+            ReopenableOccurrence = reabrivel is null ? null : MeetingLeft.OccurrenceFor(reabrivel),
+            ReopenableTitle = reabrivel?.Title,
         };
+    }
 
     /// <summary>
     /// Agenda ancorada em <c>agora</c> arredondado, para que sempre exista um evento em curso e um

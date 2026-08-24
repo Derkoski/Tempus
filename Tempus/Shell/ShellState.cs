@@ -123,6 +123,23 @@ internal sealed record ShellState
     /// </summary>
     public bool CanAcknowledge { get; init; }
 
+    /// <summary>
+    /// A ocorrência da reunião em curso que o gesto "encerrei esta reunião" marcaria (D-041), ou
+    /// <c>null</c> quando não há reunião correndo. É o irmão do <see cref="CanAcknowledge"/>: um
+    /// diz "eu vi", o outro diz "já saí", e são coisas diferentes.
+    /// </summary>
+    public string? LeavableOccurrence { get; init; }
+
+    /// <summary>
+    /// O título da reunião encerrada que ainda estaria em curso, para o menu oferecer o desfazer.
+    /// <c>null</c> quando não há o que reabrir — inclusive depois que o horário dela passa, quando
+    /// reabrir já não teria efeito nenhum.
+    /// </summary>
+    public string? ReopenableTitle { get; init; }
+
+    /// <summary>A ocorrência que o desfazer removeria. Anda junto do <see cref="ReopenableTitle"/>.</summary>
+    public string? ReopenableOccurrence { get; init; }
+
     /// <summary><c>null</c> renderiza <c>—</c>. Nunca cair para o último valor conhecido: mostrar
     /// contador velho como se fosse atual é o pior modo de falha do produto (§0).</summary>
     public int? OpenTasks { get; init; }

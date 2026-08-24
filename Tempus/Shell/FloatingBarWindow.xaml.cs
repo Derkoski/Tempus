@@ -127,6 +127,13 @@ internal partial class FloatingBarWindow : Window
     /// <summary>Clique no slot da pausa: "tirei essa". O app não tem como saber sozinho (D-006).</summary>
     public event EventHandler? BreakTaken;
 
+    /// <summary>
+    /// "Já saí desta reunião", ou o desfazer disso (D-041). Carrega a ocorrência, e não o evento,
+    /// porque quem alterna precisa dizer <b>qual</b> — e no instante do desfazer a reunião já não
+    /// está na agenda que o humor enxerga.
+    /// </summary>
+    public event EventHandler<string>? MeetingLeftToggled;
+
     /// <summary>"Agora não": empurra a pausa 30 min para frente. Repetível.</summary>
     public event EventHandler? BreakPostponed;
 
@@ -942,6 +949,28 @@ internal partial class FloatingBarWindow : Window
         {
             menu.Items.Add(new Separator());
             menu.Items.Add(MenuItemFor("Reconhecer alerta", Acknowledged));
+        }
+
+        // "Já saí" é irmão do "eu vi", e não sinônimo: um apaga o alarme, o outro diz que a
+        // reunião acabou antes da hora. Sem ele a barra seguia contando o tempo de uma call
+        // encerrada e chegava a acender o vermelho de "estourou" por ela (D-041).
+        // Alterna, como o gesto da pausa: um clique sem querer se desfaz com outro. Um gesto que
+        // grava em disco e vale o resto do dia precisa de volta.
+        if (_state.LeavableOccurrence is { } corrente)
+        {
+            menu.Items.Add(new Separator());
+
+            var sair = new MenuItem { Header = "Encerrei esta reunião" };
+            sair.Click += (_, _) => MeetingLeftToggled?.Invoke(this, corrente);
+            menu.Items.Add(sair);
+        }
+        else if (_state.ReopenableOccurrence is { } encerrada)
+        {
+            menu.Items.Add(new Separator());
+
+            var voltar = new MenuItem { Header = $"Reabrir “{_state.ReopenableTitle}”" };
+            voltar.Click += (_, _) => MeetingLeftToggled?.Invoke(this, encerrada);
+            menu.Items.Add(voltar);
         }
 
         // Só o gesto do dia aparece aqui. Ligar e desligar a funcionalidade é decisão de

@@ -199,6 +199,10 @@ public partial class App : Application
                 : state with { Taken = [.. state.Taken, pause.Period] };
         });
 
+        // "Já saí desta reunião" (D-041). Fiado aqui, e não no StartGoogle, porque o gesto é local
+        // — não escreve nada no Google — e porque o demo também mostra o item no menu.
+        surface.MeetingLeftToggled += (_, occurrence) => ToggleMeetingLeft(occurrence);
+
         surface.SettingsRequested += (_, _) => ShowSettings(isFirstRun: false);
 
         // O modo demo fica de fora: ele percorre os estados a cada 4 s, e um demo que dispara
@@ -399,12 +403,18 @@ public partial class App : Application
             _toastsSent.Clear();
         }
 
+        // Uma filtragem só, na entrada do domínio: as reuniões que o usuário encerrou saem do
+        // humor, do evento ativo e dos sinais de uma vez (D-041). Filtrar em três lugares
+        // convidaria os três a discordarem. O painel do dia segue com `snapshot.Agenda` inteira —
+        // a reunião aconteceu, e o gesto não reescreve o dia.
+        var agenda = MeetingLeft.Apply(snapshot.Agenda, _acknowledged);
+
         var time = TimeStatusResolver.Resolve(
-            snapshot.Agenda, now, _thresholds, _workDay, _acknowledged);
+            agenda, now, _thresholds, _workDay, _acknowledged);
 
         // §2 → §4 → I4/I5: avaliar os sinais, escolher um, e suavizar a descida. Três etapas
         // separadas de propósito — cada uma testável sozinha.
-        var candidates = ActiveEvent.Candidates(snapshot.Agenda, now);
+        var candidates = ActiveEvent.Candidates(agenda, now);
 
         // A escolha expira sozinha quando o evento escolhido deixa de ser candidato (SEVERITY 8:
         // "quando o evento ativo termina, reavaliar"). Sem isto, uma escolha velha calaria a
@@ -415,11 +425,15 @@ public partial class App : Application
         var tasks = CurrentTasks().Select(r => r.Item).ToList();
 
         var signals = Domain.Signals.Evaluate(
-            snapshot.Agenda, tasks, now, _workDay, SignalThresholds.Default, _acknowledged,
+            agenda, tasks, now, _workDay, SignalThresholds.Default, _acknowledged,
             _dayEnded, _activeEventId);
 
         var winner = _gate.Apply(Arbiter.Winner(signals), now);
         _shownSignal = winner;
+
+        // Contra a agenda inteira, e não a filtrada: é justamente a reunião que saiu dali que o
+        // menu precisa poder trazer de volta.
+        var encerrada = MeetingLeft.Reopenable(snapshot.Agenda, _acknowledged, now);
 
         return new ShellState
         {
@@ -446,6 +460,15 @@ public partial class App : Application
             // que se limpam sozinhos ficam de fora: oferecer gesto para algo que já vai passar
             // gasta a atenção do usuário sem lhe dar poder nenhum.
             CanAcknowledge = time.Occurrence is not null || winner is { SelfClearing: false },
+
+            // "Já saí" é irmão do "eu vi", não sinônimo (D-041). O encerrável sai da agenda
+            // filtrada, porque encerrar duas vezes a mesma reunião não é gesto; o reabrível sai da
+            // agenda inteira, que é onde ela continua existindo.
+            LeavableOccurrence = MeetingLeft.Leavable(agenda, time, now) is { } corrente
+                ? MeetingLeft.OccurrenceFor(corrente)
+                : null,
+            ReopenableTitle = encerrada?.Title,
+            ReopenableOccurrence = encerrada is null ? null : MeetingLeft.OccurrenceFor(encerrada),
             Boundary = WorkDayResolver.Resolve(now, _workDay),
             Lookahead = Domain.Lookahead.Describe(snapshot.Upcoming, now),
             Breaks = breaks,
@@ -636,6 +659,36 @@ public partial class App : Application
         _acks!.Save(_acksDay, _acknowledged);
 
         // I4 não se aplica ao reconhecimento: a descida é imediata.
+        _gate.Reset(DateTimeOffset.Now);
+        Rerender();
+    }
+
+    /// <summary>
+    /// "Já saí desta reunião" e o desfazer, no mesmo gesto (D-041).
+    /// <para>
+    /// Alterna pelo mesmo motivo do gesto da pausa: um clique só, que grava em disco e vale o
+    /// resto do dia, precisa de caminho de volta — senão o erro dura até amanhã.
+    /// </para>
+    /// <para>
+    /// Não passa pela <c>WriteQueue</c>, e não deveria: nada disto sobe para o Google. A reunião
+    /// continua no calendário para todo mundo; o que mudou é só o que o <b>Tempus</b> cobra de
+    /// você. Por isso também não há o que falhar em silêncio, e a regra 12 não se aplica.
+    /// </para>
+    /// </summary>
+    private void ToggleMeetingLeft(string occurrence)
+    {
+        // O demo tem agenda e estado próprios, e não passa pelo BuildState.
+        if (_demo is not null)
+        {
+            _surface?.Render(_demo.ToggleLeft(occurrence));
+            return;
+        }
+
+        if (!_acknowledged.Remove(occurrence)) _acknowledged.Add(occurrence);
+
+        _acks?.Save(_acksDay, _acknowledged);
+
+        // A descida é imediata, como no reconhecimento: I4 suaviza oscilação de dado, não gesto.
         _gate.Reset(DateTimeOffset.Now);
         Rerender();
     }
