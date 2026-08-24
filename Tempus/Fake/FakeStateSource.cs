@@ -161,6 +161,24 @@ internal sealed class FakeStateSource
                 case WriteKind.Delete:
                     _tasks.RemoveAll(t => t.Id == write.TaskId);
                     break;
+
+                case WriteKind.Reschedule:
+                    var k = _tasks.FindIndex(t => t.Id == write.TaskId);
+                    if (k >= 0) _tasks[k] = _tasks[k] with { Due = write.Due };
+                    break;
+
+                // Verbo que o demo não conhece falha em voz alta, e não em silêncio.
+                //
+                // Encontrado em uso, e o modo de falhar é traiçoeiro: sem este ramo, um WriteKind
+                // novo "sucedia" sem fazer nada, saía da fila, o efeito otimista sumia junto e a
+                // linha voltava atrás. Parecia bug da funcionalidade nova, quando era o demo que
+                // não a implementava — foi exatamente o que aconteceu com o Reschedule do D-042.
+                //
+                // Pior que perder tempo: o demo é onde as escritas se verificam (D-024), então um
+                // no-op silencioso aqui pode aprovar como "verificado" algo que nunca rodou.
+                default:
+                    return Task.FromResult(WriteOutcome.Failed(
+                        null, $"O modo demo não implementa {write.Kind}"));
             }
         }
 

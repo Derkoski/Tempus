@@ -2596,7 +2596,56 @@ hora, e o balde é o que o checkpoint do meio-dia e o vermelho das 17:00 contam.
 a automação do Espaço cria sem data (D-040), carimbar "hoje" pela barra é o que as faz entrar na
 conta.
 
+### O seletor de mês foi desenhado à mão, depois de duas tentativas
+
+O pedido cresceu em uso: *"como faço pra colocar pra sexta? só tenho 2 opções"* e, em seguida,
+*"poderia colocar uma opção outro que abre o calendário ali mesmo, como parte do menu"*.
+
+**Tentativa 1 — o `Calendar` do WPF dentro do menu.** O template padrão dele assume fundo claro e é
+feito de peças com cor própria. Pintar `CalendarDayButton` e `CalendarButton` não alcançou o
+cabeçalho: *"o nome do mês só aparece se colocar o mouse sobre o lugar onde fica"*. E os estados
+visuais dos dias ignoravam o `Foreground`, deixando um trecho arbitrário do grid legível e o resto
+apagado.
+
+**Tentativa 2 — grade desenhada por nós, ainda hospedada no menu.** Melhor, e ainda errada:
+*"não consigo mudar de mês e a cor ficou branca"*. Duas causas, uma raiz.
+
+**A raiz: dentro de um `ContextMenu` não mandamos nem na cor nem no clique.** O menu do WPF **não
+segue o tema do sistema** — é sempre claro —, então o texto quase branco da paleta escura sumia no
+branco da chrome. E a captura de mouse do menu comia os cliques nas setas de mês.
+
+**Tentativa 3 — `Popup` próprio, ancorado no mesmo lugar.** Os dois problemas somem juntos: o fundo
+é `PanelBackground`, como o resto do painel, e clique é clique. Os atalhos de texto continuam no
+menu de contexto, onde sempre funcionaram.
+
+A lição não é sobre calendário: **eu culpei o componente duas vezes quando o problema era a
+superfície**. Na primeira tentativa o diagnóstico ("o template do Calendar é hostil") era verdadeiro
+e parcial, e parcial bastou para eu repetir o erro.
+
+### O demo aprovava escrita que nunca rodava
+
+Com tudo pronto, escolher a data não colava: *"o click não atualiza a tarefa"*.
+
+`FakeStateSource.ApplyAsync` tem um `switch` sobre os verbos, e `Reschedule` não estava nele. Sem
+`default`, o verbo desconhecido caía fora do `switch` e a escrita **retornava sucesso**. A fila
+removia a intenção; o efeito otimista, que só vale enquanto pendente (D-029), sumia junto; e a
+linha voltava à data antiga.
+
+O incômodo foi barato — pareceu bug da funcionalidade nova. **O risco não era.** O demo é onde as
+escritas se verificam (D-024), então um `switch` sem `default` ali significa que um verbo novo pode
+ser dado como "verificado em demo" sem nunca ter rodado. Desta vez o silêncio produziu um falso
+negativo; da próxima produziria um falso positivo.
+
+Agora há um `default` que falha em voz alta — `"O modo demo não implementa {Kind}"` —, e o próximo
+verbo aparece como "não salvou" na linha em vez de se esconder. É a regra 12 aplicada ao próprio
+instrumento de verificação.
+
 ### Fora desta fatia
 
 **Editar título**, a outra metade da linha do roadmap: pede um editor inline, que é outra conversa.
 O roadmap passou a separar as duas.
+
+**Não verificado:** apagar a data contra a conta real. O caminho `get` + `update` está escrito e a
+preservação das notas depende do comportamento da API, que o demo não alcança. Verificar exige
+escrever na conta do usuário, e pelo D-024 isso é dele — numa tarefa descartável, com nota, no
+protocolo do D-031.

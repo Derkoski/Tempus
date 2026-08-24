@@ -609,8 +609,7 @@ internal partial class TasksPanel : Window
     }
 
     /// <summary>
-    /// Hoje e amanhã em cima, porque são o caso comum; qualquer outro dia no calendário, dentro do
-    /// próprio menu.
+    /// Hoje e amanhã em cima, porque são o caso comum; qualquer outro dia no seletor de mês.
     /// <para>
     /// A primeira versão tinha <b>só</b> hoje e amanhã, que era o pedido literal — e a primeira
     /// pergunta em uso foi "como coloco pra sexta?". Atalho resolve o frequente; calendário resolve
@@ -643,7 +642,12 @@ internal partial class TasksPanel : Window
 
         menu.Items.Add(Build("Hoje", hoje));
         menu.Items.Add(Build("Amanhã", hoje.AddDays(1)));
-        menu.Items.Add(BuildCalendarItem(menu, task, hoje));
+
+        // Reticências porque abre outra coisa, em vez de agir na hora — a mesma convenção do
+        // "Configurações…" no menu da barra.
+        var outro = new MenuItem { Header = "Outro dia…" };
+        outro.Click += (_, _) => ShowMonthPicker(anchor, task, hoje);
+        menu.Items.Add(outro);
 
         // Só quando há o que apagar: oferecer "sem data" para quem já está sem data seria um gesto
         // que não faz nada — e ainda custaria uma ida extra à API (get + update).
@@ -656,57 +660,202 @@ internal partial class TasksPanel : Window
         menu.IsOpen = true;
     }
 
+    /// <summary>Rótulos em português, como o resto da barra — sem depender do locale da máquina.</summary>
+    private static readonly System.Globalization.CultureInfo Brasil = new("pt-BR");
+
     /// <summary>
-    /// "Outro dia", com o calendário abrindo como submenu — dentro do mesmo menu, sem uma segunda
-    /// janela para posicionar e fechar.
+    /// O seletor de mês, desenhado <b>por nós</b>, numa superfície <b>nossa</b>.
     /// <para>
-    /// <c>StaysOpenOnClick</c> no item que hospeda o calendário é o que impede o menu de fechar no
-    /// primeiro clique dentro dele, antes de o dia ser escolhido.
+    /// <b>Duas tentativas foram descartadas antes desta, e as duas pelo mesmo motivo de fundo:
+    /// dentro de um <c>ContextMenu</c> não mandamos nem na cor nem no clique.</b>
+    /// </para>
+    /// <para>
+    /// Primeiro o <c>Calendar</c> do WPF: o template padrão assume fundo claro e é feito de peças
+    /// com cor própria — pintar <c>CalendarDayButton</c> e <c>CalendarButton</c> não alcançava o
+    /// cabeçalho, e o nome do mês só aparecia sob o ponteiro. Depois a grade desenhada, mas ainda
+    /// hospedada no menu: o menu do WPF <b>não segue o tema do sistema</b> e é sempre claro, então
+    /// o texto quase branco da paleta escura sumia no branco da chrome; e a captura de mouse do
+    /// menu comia os cliques nas setas de mês.
+    /// </para>
+    /// <para>
+    /// Num <c>Popup</c> próprio os dois problemas somem juntos: o fundo é o da paleta, como o resto
+    /// do painel, e o clique é clique. É a mesma escolha da caixa de seleção da linha, desenhada em
+    /// vez de vir de fonte de ícones — não depender de como um componente alheio decidiu se pintar.
     /// </para>
     /// </summary>
-    private MenuItem BuildCalendarItem(ContextMenu menu, TaskItem task, DateOnly hoje)
+    private void ShowMonthPicker(FrameworkElement anchor, TaskItem task, DateOnly hoje)
     {
-        var calendar = new Calendar
+        var popup = new System.Windows.Controls.Primitives.Popup
         {
-            SelectionMode = CalendarSelectionMode.SingleDate,
-            Background = new SolidColorBrush(_palette.PanelBackground),
+            PlacementTarget = anchor,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            StaysOpen = false,
+            AllowsTransparency = true,
+        };
+
+        // Abre no mês da data atual da tarefa, e não sempre em hoje: reagendar costuma ser um
+        // ajuste perto de onde ela já estava.
+        var alvo = task.Due ?? hoje;
+        var mes = new DateOnly(alvo.Year, alvo.Month, 1);
+
+        var titulo = new TextBlock
+        {
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Foreground = new SolidColorBrush(_palette.BarForeground),
-            BorderBrush = new SolidColorBrush(_palette.PanelBorder),
-
-            // Abre no mês da data atual da tarefa, e não sempre em hoje: reagendar costuma ser um
-            // ajuste perto de onde ela já estava.
-            DisplayDate = (task.Due ?? hoje).ToDateTime(TimeOnly.MinValue),
-            SelectedDate = task.Due?.ToDateTime(TimeOnly.MinValue),
         };
 
-        // O estilo padrão do Calendar assume fundo claro. Sem isto, no tema escuro os números do
-        // mês somem — só a moldura acompanharia a paleta.
-        Tint<System.Windows.Controls.Primitives.CalendarDayButton>(calendar);
-        Tint<System.Windows.Controls.Primitives.CalendarButton>(calendar);
+        var dias = new System.Windows.Controls.Primitives.UniformGrid { Columns = 7, Rows = 6 };
 
-        // Depois de definir SelectedDate, senão a atribuição acima dispararia o gesto sozinha e a
-        // tarefa seria "reagendada" para a data que ela já tem, no instante em que o menu abre.
-        calendar.SelectedDatesChanged += (_, _) =>
+        void Render()
         {
-            if (calendar.SelectedDate is not { } escolhido) return;
+            titulo.Text = Brasil.TextInfo.ToTitleCase(mes.ToString("MMMM yyyy", Brasil));
+            dias.Children.Clear();
 
-            menu.IsOpen = false;
-            TaskRescheduled?.Invoke(this, (task.Id, DateOnly.FromDateTime(escolhido)));
+            // A grade começa no domingo da semana em que o mês cai, para as colunas baterem com
+            // os nomes dos dias da semana.
+            var primeiro = mes.AddDays(-(int)mes.DayOfWeek);
+
+            for (var i = 0; i < 42; i++)
+            {
+                var dia = primeiro.AddDays(i);
+                dias.Children.Add(BuildDayCell(popup, task, dia, mes, hoje));
+            }
+        }
+
+        var voltar = BuildMonthStep("‹", () => { mes = mes.AddMonths(-1); Render(); });
+        var avancar = BuildMonthStep("›", () => { mes = mes.AddMonths(1); Render(); });
+
+        var cabecalho = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        DockPanel.SetDock(voltar, Dock.Left);
+        DockPanel.SetDock(avancar, Dock.Right);
+        cabecalho.Children.Add(voltar);
+        cabecalho.Children.Add(avancar);
+        cabecalho.Children.Add(titulo);
+
+        var semana = new System.Windows.Controls.Primitives.UniformGrid
+        {
+            Columns = 7,
+            Margin = new Thickness(0, 0, 0, 2),
         };
 
-        var item = new MenuItem { Header = "Outro dia" };
-        item.Items.Add(new MenuItem { Header = calendar, StaysOpenOnClick = true });
+        foreach (var nome in Brasil.DateTimeFormat.ShortestDayNames)
+        {
+            semana.Children.Add(new TextBlock
+            {
+                Text = nome.ToUpper(Brasil),
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Foreground = new SolidColorBrush(_palette.Muted),
+            });
+        }
 
-        return item;
+        var corpo = new StackPanel { Width = 224 };
+        corpo.Children.Add(cabecalho);
+        corpo.Children.Add(semana);
+        corpo.Children.Add(dias);
+
+        Render();
+
+        // O fundo é nosso, e é aqui que a legibilidade se resolve: sobre PanelBackground, o texto
+        // da paleta lê nos dois temas. Era exatamente isto que faltava enquanto a grade morava
+        // dentro do menu, que é sempre claro.
+        popup.Child = new Border
+        {
+            Child = corpo,
+            Padding = new Thickness(8, 6, 8, 8),
+            Background = new SolidColorBrush(_palette.PanelBackground),
+            BorderBrush = new SolidColorBrush(_palette.PanelBorder),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+        };
+
+        popup.IsOpen = true;
+
+        // Sem foco o StaysOpen=false não fecha ao clicar fora: o popup precisa perder algo para
+        // saber que saiu de cena.
+        corpo.Focusable = true;
+        corpo.Focus();
     }
 
-    /// <summary>Pinta um tipo interno do <c>Calendar</c> com a cor de texto da paleta.</summary>
-    private void Tint<T>(Calendar calendar)
+    /// <summary>Um dia da grade. Fora do mês exibido, fica apagado mas continua clicável.</summary>
+    private UIElement BuildDayCell(
+        System.Windows.Controls.Primitives.Popup popup,
+        TaskItem task,
+        DateOnly dia,
+        DateOnly mes,
+        DateOnly hoje)
     {
-        var style = new Style(typeof(T));
-        style.Setters.Add(new Setter(ForegroundProperty, new SolidColorBrush(_palette.BarForeground)));
+        var doMes = dia.Month == mes.Month && dia.Year == mes.Year;
+        var selecionado = task.Due == dia;
 
-        calendar.Resources.Add(typeof(T), style);
+        var cell = new Border
+        {
+            Height = 26,
+            Margin = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Cursor = Cursors.Hand,
+            Background = selecionado
+                ? new SolidColorBrush(_palette.InfoBackground)
+                : Brushes.Transparent,
+
+            // Hoje ganha contorno em vez de preenchimento: preenchimento é do dia escolhido, e as
+            // duas coisas precisam coexistir sem se confundir.
+            BorderThickness = new Thickness(dia == hoje ? 1 : 0),
+            BorderBrush = new SolidColorBrush(_palette.OutlineFor(Severity.Info)),
+            Child = new TextBlock
+            {
+                Text = dia.Day.ToString(Brasil),
+                FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(
+                    doMes ? _palette.BarForeground : _palette.Muted),
+            },
+        };
+
+        var hover = new SolidColorBrush(_palette.RowHover);
+        cell.MouseEnter += (_, _) => { if (!selecionado) cell.Background = hover; };
+        cell.MouseLeave += (_, _) => { if (!selecionado) cell.Background = Brushes.Transparent; };
+
+        cell.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            popup.IsOpen = false;
+            TaskRescheduled?.Invoke(this, (task.Id, dia));
+        };
+
+        return cell;
+    }
+
+    /// <summary>As setas de mês.</summary>
+    private UIElement BuildMonthStep(string glifo, Action step)
+    {
+        var alvo = new Border
+        {
+            Width = 24,
+            Height = 22,
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            Child = new TextBlock
+            {
+                Text = glifo,
+                FontSize = 14,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(_palette.BarForeground),
+            },
+        };
+
+        var hover = new SolidColorBrush(_palette.RowHover);
+        alvo.MouseEnter += (_, _) => alvo.Background = hover;
+        alvo.MouseLeave += (_, _) => alvo.Background = Brushes.Transparent;
+
+        alvo.MouseLeftButtonUp += (_, e) => { e.Handled = true; step(); };
+
+        return alvo;
     }
 
     private static string DueLabel(TaskItem task, TaskBucket bucket) => bucket switch
