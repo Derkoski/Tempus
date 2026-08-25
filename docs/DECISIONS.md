@@ -2715,3 +2715,57 @@ em branco) e um vazio.
 
 É a mesma lição do `default` que o D-042 pôs no `ApplyAsync`: um demo que não representa o caso não
 verifica nada, e o silêncio dele parece aprovação.
+
+---
+
+## D-044 — Escrever no calendário fica fora, e agora com motivo
+
+**Status:** Aceita · 2026-08-25 · considerada e recusada em uso
+
+### O que se cogitou
+
+Logo depois do D-043, com os próximos dias visíveis na barra, veio o passo seguinte natural:
+*"o próximo passo poderia ser um botão de cancelar no evento ali, pra marcar um novo no lugar"*.
+
+Faz sentido no fluxo — você vê o conflito no painel e quer resolvê-lo ali.
+
+### Por que não
+
+O `SPEC.md` já listava "criar ou editar eventos de calendário" como fora de escopo, mas sem razão
+escrita. Agora tem três, e a primeira é de natureza diferente de tudo que o Tempus escreve hoje:
+
+1. **Cancelar sai da máquina e chega em outras pessoas.** Evento próprio cancelado **dispara e-mail
+   para todos os convidados**, e o Google Calendar não tem desfazer. Todo o mecanismo do D-029 —
+   otimista, reversão, repetição, "não salvou" — protege contra escrita **perdida**. Nenhuma parte
+   dele protege contra escrita **certa e indesejada**, que é o risco aqui. Concluir uma tarefa por
+   engano custa um clique para desfazer (D-030); cancelar uma reunião por engano custa uma
+   explicação para cada convidado.
+2. **Exigiria escopo novo** — `calendar.events` no lugar de `calendar.readonly`. Custo prático
+   baixo, porque o re-consent já é semanal (D-003) e o menu tem "Reconectar ao Google" para
+   exatamente isso. Mas é escopo sensível a mais em troca de uma funcionalidade que tem substituto.
+3. **"Marcar um novo no lugar" é outro produto.** Pede título, horário, convidados, link de call e
+   — o principal — a disponibilidade **das outras pessoas**. Um painel de 440 px faria isso pior
+   que a ferramenta que já existe, e o usuário fecharia o Tempus para terminar no Google Agenda.
+
+### A decisão do usuário
+
+> *"o google agenda já é completo pra fazer isso e vamos fazer tudo por lá... cancelamento e
+> agendamento"*
+
+O Tempus responde **"algo precisa de mim agora?"** e, desde o D-043, **"quando eu tenho horário?"**.
+Agir sobre o calendário é outra pergunta, e ela já tem uma ferramenta boa.
+
+### O que ficou disponível e não foi feito
+
+Um clique na linha expandida do D-043 abrindo o evento no Google Agenda — o `htmlLink` já vem da
+API, não precisa de escopo novo, e é a ponte entre "vi o conflito aqui" e "resolvo lá". Não foi
+pedido; fica registrado como o próximo passo barato, se a ida manual ao calendário incomodar.
+
+Se algum dia isso entrar, o cuidado é o do D-038: hoje clicar num evento significa **entrar na
+call**, e um segundo significado para o mesmo gesto precisa de alvo próprio, não da linha inteira.
+
+### O que reabriria a discussão
+
+Recusar convite — que é diferente de cancelar: afeta só você e não manda cancelamento em seu nome.
+Se um dia a recusa em massa virar rotina, ela é a única parte desta conversa que vale reconsiderar,
+e ainda assim com a confirmação de dois cliques do D-024.

@@ -145,7 +145,10 @@ Registrar aqui evita que uma sessão futura "ajude" adicionando isso:
   Chat aparece sim, porque ela é uma tarefa do Tasks e chega pela API do Tasks (D-040). O que
   continua fora é ler mensagens e contar não-lidos do Chat.
 - Ler ou exibir conteúdo de e-mail — **só a contagem**
-- Criar ou editar eventos de calendário (leitura apenas)
+- **Criar, editar ou cancelar eventos de calendário** — leitura apenas (D-044). Considerado e
+  recusado em uso: cancelar dispara e-mail para os convidados e não tem desfazer, e a `WriteQueue`
+  protege contra escrita perdida, não contra escrita indesejada. Agendar exige a disponibilidade
+  das outras pessoas, que é onde o Google Agenda é bom e um painel de 440 px não seria
 - **Tarefas com horário exato.** A API do Google Tasks descarta a hora e grava só a data, então
   uma "tarefa das 14:30" não existe do outro lado. O slot de "o que vem a seguir" é alimentado
   somente pela agenda (D-011). Não tentar contornar com hora no título nem com armazenamento local.
