@@ -24,17 +24,22 @@ Ferramenta pessoal de um único usuário — não é produto para distribuir.
 
 ## Estado atual
 
-**Fases 0 a 3 e 5 concluídas** (2026-08-19). A barra roda em uso real com dados do Google: onze
+**Todas as fases concluídas** (2026-08-25). A barra roda em uso real com dados do Google: onze
 sinais do §2 avaliados como funções puras, arbitragem com desempate por categoria, histerese de
 20 s na descida, nível 3 que escala e sai com um clique, `Offline` que anula a escala, pausas de
 descanso, tela de configuração e toasts com botão — nível 3 mais o aviso de reunião em dois tempos,
 passageiro aos 10 min e fixo aos 2 até o clique (D-039).
 
-**Fase 4 em andamento.** A primeira fatia entregou escrita otimista com reversão, fila persistida
-com repetição e resolução de conflito (D-029). Falta **editar título e vencimento**, mais os
-critérios de aceite 7 (tarefas, nos dois sentidos) e 8 (contador de e-mail).
+Tasks é **bidirecional**: criar, concluir, reabrir, excluir, datar e renomear, tudo pela
+`WriteQueue` com escrita otimista, reversão e "não salvou" visível (D-029, D-042, D-045). O painel
+de agenda mostra **os próximos 15 dias** com as janelas livres de cada um (D-043).
 
-`Tempus.Tests` (xUnit) tem 236 testes e roda em ~120 ms. As oito invariantes I1–I8 têm teste e
+**Não sobra código de fase nenhuma.** O que resta está em `ROADMAP.md`, e é de três tipos:
+verificação de ambiente que nunca rodou (`TaskbarCreated` com restart do explorer), decisões
+adiadas de propósito à espera de convívio (Q-02 do `SEVERITY.md`, toast de `Offline`, nível 3 furar
+o Não Perturbe) e o backlog sem compromisso.
+
+`Tempus.Tests` (xUnit) tem 241 testes e roda em ~350 ms. As oito invariantes I1–I8 têm teste e
 nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execução trava o build.
 
 ## Regras deste projeto

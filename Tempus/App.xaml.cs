@@ -305,6 +305,9 @@ public partial class App : Application
         surface.TaskRescheduled += (_, e) =>
             EnqueueFor(surface, WriteKind.Reschedule, e.Id, w => w with { Due = e.Due });
 
+        surface.TaskRenamed += (_, e) =>
+            EnqueueFor(surface, WriteKind.Rename, e.Id, w => w with { Title = e.Title });
+
         surface.TaskWriteRetried += (_, id) => writes.Retry(id);
         surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);
 
@@ -974,6 +977,9 @@ public partial class App : Application
 
         surface.TaskRescheduled += (_, e) => EnqueueDemo(surface, demo, PendingWrite.For(
             WriteKind.Reschedule, DateTimeOffset.Now) with { TaskId = e.Id, Due = e.Due });
+
+        surface.TaskRenamed += (_, e) => EnqueueDemo(surface, demo, PendingWrite.For(
+            WriteKind.Rename, DateTimeOffset.Now) with { TaskId = e.Id, Title = e.Title });
 
         surface.TaskWriteRetried += (_, id) => writes.Retry(id);
         surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);

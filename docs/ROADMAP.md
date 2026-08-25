@@ -299,9 +299,15 @@ mentiria.*
       Hoje · Amanhã · Outro dia (calendário no próprio menu) · Sem data. Saiu barata como previsto, porque o D-029 já tinha feito o
       encanamento. A armadilha não estava na UI: `Patch` com `due = null` **não limpa**, porque o
       serializador omite nulos — e limpar por `PUT` montado à mão apagaria as notas da tarefa
-- [ ] Editar título — a outra metade. Pede editor inline na linha, que é outra conversa
-- [ ] Critério de aceite **7** do `SPEC.md` verificado nos dois sentidos — *o roadmap dizia 6, que
-      é o do meio-dia/17:00 entregue na Fase 3; o de tarefas é o 7*
+- [x] **Editar título** (D-045) — lápis no hover, ao lado do ✕, abrindo o campo no lugar do título.
+      Alvo próprio porque o clique na linha já conclui, e duplo clique não serviria: o primeiro
+      clique dele já teria enfileirado uma conclusão. **A Fase 4 fecha aqui**
+- [x] Critério de aceite **7** do `SPEC.md` verificado nos dois sentidos pelo usuário em
+      2026-08-25 — *o roadmap dizia 6, que é o do meio-dia/17:00 entregue na Fase 3; o de tarefas
+      é o 7*
+- [x] **Apagar vencimento verificado na conta real** (D-042), pelo usuário em 2026-08-25. Era a
+      pendência que sobrava do `get` + `update`: o caminho existe justamente porque um `PUT`
+      montado à mão apagaria as notas da tarefa
 
 **Regra aprendida em D-024:** verificação de escrita usa o **modo demo**, nunca a conta real. Um
 clique de teste 15 pixels fora do alvo concluiu uma tarefa de verdade do usuário. `FakeStateSource`
@@ -325,8 +331,8 @@ existia na barra sem dado por trás.*
 - [x] `gmail.readonly` no consent (restricted, permitido em Testing mode para test users)
 - [x] Contagem de não-lidos, polling de 60s, sem tocar em conteúdo
 - [x] Contador sempre neutro, nunca colorindo a barra (`SEVERITY.md` §2.4)
-- [ ] Critério de aceite **8** do `SPEC.md` verificado formalmente — *o roadmap dizia 7, que é o
-      de tarefas, da Fase 4; o do contador de e-mail é o 8*
+- [x] Critério de aceite **8** do `SPEC.md` verificado pelo usuário em 2026-08-25 — *o roadmap
+      dizia 7, que é o de tarefas, da Fase 4; o do contador de e-mail é o 8*
 - [ ] **Toast de `Offline`** — o único dos toasts cortados no D-028 que vale reabrir. Uma vez por
       semana, quando o *refresh token* expira (D-003): é a hora em que a barra deixa de ser
       confiável e o usuário não tem como saber sem olhar. Nasce aqui, e não na Fase 3, porque

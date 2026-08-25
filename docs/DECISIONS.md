@@ -2645,10 +2645,12 @@ instrumento de verificação.
 **Editar título**, a outra metade da linha do roadmap: pede um editor inline, que é outra conversa.
 O roadmap passou a separar as duas.
 
-**Não verificado:** apagar a data contra a conta real. O caminho `get` + `update` está escrito e a
-preservação das notas depende do comportamento da API, que o demo não alcança. Verificar exige
-escrever na conta do usuário, e pelo D-024 isso é dele — numa tarefa descartável, com nota, no
-protocolo do D-031.
+**Apagar a data foi verificado na conta real** pelo usuário em 2026-08-25, junto dos critérios de
+aceite 7 e 8. Era a última incógnita desta fatia: o caminho `get` + `update` existe porque um `PUT`
+montado à mão apagaria as notas da tarefa, e isso só podia ser provado contra a API — o demo não
+alcança.
+
+Com isso a Fase 4 fica com **editar título** como único item de código.
 
 ---
 
@@ -2769,3 +2771,68 @@ call**, e um segundo significado para o mesmo gesto precisa de alvo próprio, n�
 Recusar convite — que é diferente de cancelar: afeta só você e não manda cancelamento em seu nome.
 Se um dia a recusa em massa virar rotina, ela é a única parte desta conversa que vale reconsiderar,
 e ainda assim com a confirmação de dois cliques do D-024.
+
+---
+
+## D-045 — Renomear tarefa, e a guarda que trancou o painel
+
+**Status:** Aceita · 2026-08-25
+
+### O que entrou
+
+Último item de código da Fase 4. Lápis no hover, ao lado do ✕, abrindo o campo **no lugar do
+título**. `Enter` grava, `Esc` desiste, sair do campo grava — a convenção do Explorer do Windows,
+que é onde o usuário aprendeu a renomear.
+
+Título vazio nunca é gravado: o Google aceitaria, e a tarefa viraria uma linha em branco impossível
+de achar depois. Vazio equivale a desistir.
+
+Reusa `PendingWrite.Title`, o mesmo campo da criação — é o mesmo dado, e um segundo campo para
+dizer a mesma coisa só criaria a dúvida de qual vale. O resto veio do D-029: a reversão não tem
+código próprio, e `IsConfirmed` usa a comparação frouxa de título que a criação já usava, porque o
+Google apara espaços e igualdade byte a byte deixaria a intenção pendurada por um espaço no fim.
+
+### Por que lápis, e não clique no título
+
+O clique na linha **já conclui a tarefa**. Duplo clique no título não resolveria: o primeiro clique
+dele já teria enfileirado uma conclusão. Alvo próprio é a única saída limpa — é a lição do D-038,
+um gesto por significado.
+
+### A armadilha de verdade: o editor morre sozinho
+
+As linhas são reconstruídas a cada desenho, e o painel redesenha a cada rodada de sync. Sem
+cuidado, **a cada 15 segundos o campo seria destruído no meio da digitação** — sem erro, sem aviso,
+e pareceria que "às vezes não funciona".
+
+A saída foi represar atualização vinda de fora enquanto há edição aberta. Ficar 15 s com a lista
+velha durante uma renomeação não custa nada; perder o texto custa a confiança no gesto.
+
+### E a armadilha que a saída criou
+
+A primeira versão pôs a guarda dentro do `Render` e usou **o mesmo `Render`** para abrir o editor:
+
+```
+clicar no ✎  →  _editing = id  →  Render()  →  "há edição aberta, não desenha"  →  desiste
+```
+
+O editor nunca aparecia. E como só o editor limpa `_editing`, ele ficava preso para sempre — a
+partir dali **todo** redesenho era engolido. Concluir tarefa continuava enfileirando a escrita
+corretamente; a tela é que nunca mais mudava. O usuário relatou como *"não funciona mais o click,
+nem pra clicar no lápis e nem onde funcionava pra concluir a task"*, e é uma descrição exata: o
+painel inteiro parecia morto.
+
+A guarda existia para proteger a edição de ser destruída, e foi ela que impediu a edição de nascer.
+
+**A correção é separar quem represa de quem desenha:** `Render(tasks)` recebe dado de fora e
+represa; `Draw()` desenha a partir do último retrato, sempre, e é o que os gestos internos do
+painel chamam. Está escrito no código, porque a próxima pessoa a mexer ali vai ser tentada a
+reunificar os dois.
+
+**Nenhum dos 241 testes pegaria isso.** O domínio decide certo, a escrita enfileira certo, e é a
+tela que não redesenha. Terceira vez que a lição aparece — o roadmap já a registra desde o D-029:
+teste de unidade prova a decisão, não a fiação.
+
+### A Fase 4 fecha aqui
+
+Com isto não sobra código de fase nenhuma. O que resta no roadmap é verificação de ambiente,
+decisão adiada à espera de convívio, e backlog sem compromisso.

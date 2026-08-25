@@ -62,6 +62,9 @@ internal partial class TasksPanel : Window
     /// </summary>
     public event EventHandler<(string Id, DateOnly? Due)>? TaskRescheduled;
 
+    /// <summary>Novo título de uma tarefa (D-045). Nunca vazio — vazio equivale a desistir.</summary>
+    public event EventHandler<(string Id, string Title)>? TaskRenamed;
+
     /// <summary>Usuário criou uma tarefa. Carrega o título.</summary>
     public event EventHandler<string>? TaskCreated;
 
@@ -82,10 +85,41 @@ internal partial class TasksPanel : Window
 
     public void ShowAt(NativeMethods.RECT anchor) => _host.ShowAt(anchor);
 
+    /// <summary>
+    /// A tarefa cujo título está sendo editado, ou <c>null</c> (D-045).
+    /// <para>
+    /// Enquanto vale, atualização <b>vinda de fora</b> é represada. Sem isso o editor seria
+    /// destruído no meio da digitação: as linhas são reconstruídas a cada desenho, e o painel
+    /// redesenha a cada rodada de sync — a cada 15 s o usuário perderia o que escreveu. Ficar 15 s
+    /// com a lista velha durante uma renomeação não custa nada; perder o texto custa a confiança
+    /// no gesto.
+    /// </para>
+    /// </summary>
+    private string? _editing;
+
+    /// <summary>
+    /// Dado novo chegou de fora — sync, escrita confirmada, painel reaberto.
+    /// <para>
+    /// <b>Separado do <see cref="Draw"/> de propósito.</b> A primeira versão pôs a guarda de
+    /// edição aqui e chamava este mesmo método para <i>abrir</i> o editor: ele desistia na
+    /// guarda, o editor nunca aparecia, e <c>_editing</c> ficava preso — a partir dali todo
+    /// redesenho era engolido, inclusive o de concluir tarefa, e o painel inteiro parecia morto.
+    /// Quem represa e quem desenha não podem ser a mesma porta.
+    /// </para>
+    /// </summary>
     public void Render(IReadOnlyList<TaskRow> tasks)
     {
         _last = tasks;
 
+        if (_editing is not null) return;
+
+        Draw();
+    }
+
+    /// <summary>Redesenha a partir do último retrato conhecido, sempre. Uso interno.</summary>
+    private void Draw()
+    {
+        var tasks = _last;
         var open = tasks.Where(t => !t.Item.IsCompleted).ToList();
         var today = DateOnly.FromDateTime(DateTime.Today);
         var failed = open.Count(r => r.HasFailed);
@@ -183,7 +217,7 @@ internal partial class TasksPanel : Window
         {
             e.Handled = true;
             _showCompleted = !_showCompleted;
-            Render(_last);
+            Draw();
         };
 
         return header;
@@ -336,6 +370,7 @@ internal partial class TasksPanel : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // renomear
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // excluir
 
         // Caixa desenhada em vez de glifo de fonte: nenhuma dependência de qual versão do
@@ -352,13 +387,15 @@ internal partial class TasksPanel : Window
         };
         Grid.SetColumn(box, 0);
 
-        var title = new TextBlock
-        {
-            Text = task.Title,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-            Foreground = new SolidColorBrush(_palette.BarForeground),
-        };
+        FrameworkElement title = _editing == task.Id
+            ? BuildTitleEditor(task)
+            : new TextBlock
+            {
+                Text = task.Title,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(_palette.BarForeground),
+            };
         Grid.SetColumn(title, 1);
 
         // No lugar do vencimento, quando algo não subiu: naquele instante o que importa é o que
@@ -366,12 +403,16 @@ internal partial class TasksPanel : Window
         var status = entry.HasFailed ? BuildRetryAction(entry) : BuildDueAction(entry, bucket);
         Grid.SetColumn(status, 2);
 
+        var rename = BuildRenameAction(entry);
+        Grid.SetColumn(rename, 3);
+
         var delete = BuildDeleteAction(entry, row);
-        Grid.SetColumn(delete, 3);
+        Grid.SetColumn(delete, 4);
 
         grid.Children.Add(box);
         grid.Children.Add(title);
         grid.Children.Add(status);
+        grid.Children.Add(rename);
         grid.Children.Add(delete);
         row.Child = grid;
 
@@ -390,6 +431,8 @@ internal partial class TasksPanel : Window
             // Mesmo motivo para o "+ data" de quem não tem vencimento: convite quando a mão já
             // está ali, e nada no caminho do olho quando não está.
             if (status.Tag is true) status.Visibility = Visibility.Visible;
+
+            rename.Visibility = Visibility.Visible;
         };
         row.MouseLeave += (_, _) =>
         {
@@ -401,6 +444,8 @@ internal partial class TasksPanel : Window
             // Hidden, e não Collapsed: a coluna já reservou o espaço dela, e recolher faria
             // título e ✕ pularem de lugar a cada passagem do ponteiro.
             if (status.Tag is true) status.Visibility = Visibility.Hidden;
+
+            rename.Visibility = Visibility.Collapsed;
         };
         row.MouseLeftButtonUp += (_, e) =>
         {
@@ -544,6 +589,120 @@ internal partial class TasksPanel : Window
         };
 
         return host;
+    }
+
+    /// <summary>
+    /// O lápis de renomear (D-045).
+    /// <para>
+    /// Alvo próprio, e não clique no título, porque o clique na linha já concluí a tarefa — e
+    /// duplo clique não serve: o primeiro clique dele já teria enfileirado uma conclusão. É a
+    /// mesma lição do D-038, um gesto por significado.
+    /// </para>
+    /// <para>
+    /// Só sob o ponteiro, como o ✕: renomear é raro, e um lápis permanente em cada linha viraria
+    /// uma coluna de ruído ao lado do que importa.
+    /// </para>
+    /// </summary>
+    private FrameworkElement BuildRenameAction(TaskRow entry)
+    {
+        var alvo = new Border
+        {
+            Padding = new Thickness(7, 2, 7, 2),
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = Cursors.Hand,
+            Visibility = Visibility.Collapsed,
+            ToolTip = "Renomear tarefa",
+            Child = new TextBlock
+            {
+                Text = "✎",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(_palette.Muted),
+            },
+        };
+
+        // Concluída não se renomeia: o gesto dela é desfazer a conclusão (D-030), e o que já
+        // acabou não merece cobrar edição.
+        if (entry.IsPending || entry.HasFailed || entry.Item.IsCompleted)
+        {
+            alvo.Visibility = Visibility.Collapsed;
+            return alvo;
+        }
+
+        var hover = new SolidColorBrush(_palette.PanelBorder);
+        alvo.MouseEnter += (_, _) => alvo.Background = hover;
+        alvo.MouseLeave += (_, _) => alvo.Background = Brushes.Transparent;
+
+        var id = entry.Item.Id;
+        alvo.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            _editing = id;
+            Draw();
+        };
+
+        return alvo;
+    }
+
+    /// <summary>
+    /// O editor no lugar do título. <c>Enter</c> grava, <c>Esc</c> desiste, e sair do campo grava
+    /// — a convenção do Explorer do Windows, que é onde o usuário aprendeu a renomear.
+    /// <para>
+    /// Título vazio nunca é gravado: o Google aceitaria e a tarefa viraria uma linha em branco,
+    /// impossível de encontrar depois. Vazio equivale a desistir.
+    /// </para>
+    /// </summary>
+    private FrameworkElement BuildTitleEditor(TaskItem task)
+    {
+        var editor = new TextBox
+        {
+            Text = task.Title,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0),
+            Padding = new Thickness(4, 2, 4, 2),
+            Background = new SolidColorBrush(_palette.PanelBackground),
+            Foreground = new SolidColorBrush(_palette.BarForeground),
+            BorderBrush = new SolidColorBrush(_palette.OutlineFor(Severity.Info)),
+            BorderThickness = new Thickness(1),
+            CaretBrush = new SolidColorBrush(_palette.BarForeground),
+        };
+
+        var resolvido = false;
+
+        void Finish(bool commit)
+        {
+            if (resolvido) return;
+            resolvido = true;
+
+            var titulo = editor.Text.Trim();
+            var mudou = commit && titulo.Length > 0 && titulo != task.Title;
+
+            _editing = null;
+
+            if (mudou) TaskRenamed?.Invoke(this, (task.Id, titulo));
+
+            // Sempre redesenha, mesmo desistindo: o painel ficou congelado durante a edição, então
+            // pode haver rodada de sync represada esperando para aparecer.
+            Draw();
+        }
+
+        editor.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter) { e.Handled = true; Finish(commit: true); }
+            else if (e.Key == Key.Escape) { e.Handled = true; Finish(commit: false); }
+        };
+
+        editor.LostKeyboardFocus += (_, _) => Finish(commit: true);
+
+        // Depois do layout, senão o foco vai para um elemento que ainda não está na árvore visual.
+        editor.Loaded += (_, _) =>
+        {
+            editor.Focus();
+            editor.SelectAll();
+        };
+
+        return editor;
     }
 
     /// <summary>

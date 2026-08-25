@@ -167,6 +167,11 @@ internal sealed class FakeStateSource
                     if (k >= 0) _tasks[k] = _tasks[k] with { Due = write.Due };
                     break;
 
+                case WriteKind.Rename:
+                    var r = _tasks.FindIndex(t => t.Id == write.TaskId);
+                    if (r >= 0) _tasks[r] = _tasks[r] with { Title = write.Title ?? _tasks[r].Title };
+                    break;
+
                 // Verbo que o demo não conhece falha em voz alta, e não em silêncio.
                 //
                 // Encontrado em uso, e o modo de falhar é traiçoeiro: sem este ramo, um WriteKind

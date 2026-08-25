@@ -72,6 +72,14 @@ internal static class TaskProjection
                     rows.RemoveAll(r => r.Item.Id == write.TaskId);
                     break;
 
+                case WriteKind.Rename:
+                    Replace(rows, write.TaskId, row => row with
+                    {
+                        Item = row.Item with { Title = write.Title ?? row.Item.Title },
+                        Write = write,
+                    });
+                    break;
+
                 // Datar muda de balde (hoje/depois/vencida) na hora, e por isso muda também o
                 // contador que o meio-dia e as 17:00 olham — que é metade do motivo do D-042.
                 case WriteKind.Reschedule:
@@ -119,6 +127,12 @@ internal static class TaskProjection
         // quando a pretendida é nenhuma, que é o caso de apagar.
         WriteKind.Reschedule =>
             server.FirstOrDefault(t => t.Id == write.TaskId) is not { } found || found.Due == write.Due,
+
+        // Pela mesma comparação frouxa da criação: o Google apara espaços, então exigir igualdade
+        // byte a byte deixaria a intenção pendurada por causa de um espaço no fim.
+        WriteKind.Rename =>
+            server.FirstOrDefault(t => t.Id == write.TaskId) is not { } renamed
+            || SameTitle(renamed.Title, write.Title),
 
         _ => false,
     };

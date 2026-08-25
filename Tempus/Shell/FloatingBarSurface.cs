@@ -55,6 +55,9 @@ internal sealed class FloatingBarSurface : IShellSurface
 
     /// <summary>Novo vencimento de uma tarefa; data nula apaga (D-042).</summary>
     public event EventHandler<(string Id, DateOnly? Due)>? TaskRescheduled;
+
+    /// <summary>Novo título de uma tarefa (D-045).</summary>
+    public event EventHandler<(string Id, string Title)>? TaskRenamed;
     public event EventHandler<string>? TaskCreated;
     public event EventHandler<string>? TaskDeleted;
 
@@ -90,6 +93,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         var panel = new TasksPanel(_window.CurrentPalette, anchor);
         panel.TaskToggled += (_, id) => TaskToggled?.Invoke(this, id);
         panel.TaskRescheduled += (_, e) => TaskRescheduled?.Invoke(this, e);
+        panel.TaskRenamed += (_, e) => TaskRenamed?.Invoke(this, e);
         panel.TaskCreated += (_, title) => TaskCreated?.Invoke(this, title);
         panel.TaskDeleted += (_, id) => TaskDeleted?.Invoke(this, id);
         panel.WriteRetried += (_, id) => TaskWriteRetried?.Invoke(this, id);

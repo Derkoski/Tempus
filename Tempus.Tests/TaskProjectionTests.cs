@@ -293,4 +293,68 @@ public class TaskProjectionTests
         Assert.True(TaskProjection.IsConfirmed(Reschedule("sumida", Hoje), [Dated("t1", Hoje)]));
         Assert.True(TaskProjection.IsConfirmed(Reschedule("sumida", null), []));
     }
+
+    // ================================================================ título (D-045)
+
+    private static PendingWrite Rename(string taskId, string title) =>
+        Write(WriteKind.Rename, taskId, title);
+
+    [Fact]
+    public void Renomear_aparece_na_hora()
+    {
+        var rows = TaskProjection.Apply(
+            [Task("t1", "Titulo antigo")], [Rename("t1", "Titulo novo")]);
+
+        Assert.Equal("Titulo novo", rows.Single().Item.Title);
+        Assert.True(rows.Single().IsPending);
+    }
+
+    [Fact]
+    public void Renomear_que_falhou_volta_ao_titulo_do_servidor()
+    {
+        var rows = TaskProjection.Apply(
+            [Task("t1", "Titulo antigo")], [Failed(Rename("t1", "Titulo novo"))]);
+
+        Assert.Equal("Titulo antigo", rows.Single().Item.Title);
+        Assert.True(rows.Single().HasFailed);
+    }
+
+    /// <summary>
+    /// Só o título muda. Renomear não pode mexer em conclusão nem em vencimento — e como a
+    /// projeção reconstrói a linha por <c>with</c>, um campo esquecido aqui viraria perda de dado
+    /// na tela.
+    /// </summary>
+    [Fact]
+    public void Renomear_nao_mexe_em_mais_nada()
+    {
+        var original = new TaskItem
+        {
+            Id = "t1", ListId = "L", Title = "antes", Due = Hoje, IsCompleted = false,
+        };
+
+        var linha = TaskProjection.Apply([original], [Rename("t1", "depois")]).Single().Item;
+
+        Assert.Equal("depois", linha.Title);
+        Assert.Equal(Hoje, linha.Due);
+        Assert.False(linha.IsCompleted);
+    }
+
+    [Fact]
+    public void Renomear_confirma_quando_o_servidor_mostra_o_titulo_novo()
+    {
+        var write = Rename("t1", "depois");
+
+        Assert.False(TaskProjection.IsConfirmed(write, [Task("t1", "antes")]));
+        Assert.True(TaskProjection.IsConfirmed(write, [Task("t1", "depois")]));
+    }
+
+    /// <summary>
+    /// O Google apara espaços. Exigir igualdade byte a byte deixaria a intenção pendurada por
+    /// causa de um espaço no fim — é a mesma comparação frouxa que a criação já usa.
+    /// </summary>
+    [Fact]
+    public void Espaco_nas_pontas_nao_impede_a_confirmacao()
+    {
+        Assert.True(TaskProjection.IsConfirmed(Rename("t1", "  depois  "), [Task("t1", "depois")]));
+    }
 }

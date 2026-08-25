@@ -20,6 +20,12 @@ internal enum WriteKind
     /// coisas se parecem perigosamente.
     /// </summary>
     Reschedule,
+
+    /// <summary>
+    /// Troca o título (D-045). Usa o mesmo <see cref="PendingWrite.Title"/> da criação: é o mesmo
+    /// dado, e um segundo campo para dizer a mesma coisa só criaria a dúvida de qual vale.
+    /// </summary>
+    Rename,
 }
 
 internal enum WriteState
@@ -52,7 +58,10 @@ internal sealed record PendingWrite
     /// <summary>A API endereça tarefa por (lista, id) — sem a lista não dá para escrever.</summary>
     public string? ListId { get; init; }
 
-    /// <summary>Título de uma criação. É o único conteúdo que <b>só</b> existe aqui.</summary>
+    /// <summary>
+    /// Título, na criação e no <see cref="WriteKind.Rename"/>. Na criação é o único conteúdo que
+    /// <b>só</b> existe aqui — não há tarefa no servidor para compará-lo.
+    /// </summary>
     public string? Title { get; init; }
 
     /// <summary>

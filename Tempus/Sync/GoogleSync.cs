@@ -151,6 +151,14 @@ internal sealed class GoogleSync : IDisposable
                 case WriteKind.Reschedule:
                     await RescheduleAsync(listId, write, ct);
                     break;
+
+                // Título é campo de texto: um Patch simples basta, e o alerta do Reschedule não se
+                // aplica — a UI nunca envia vazio, então nunca há nada a "limpar" aqui.
+                case WriteKind.Rename:
+                    await _tasks.Tasks
+                        .Patch(new GTask { Title = write.Title }, listId, write.TaskId)
+                        .ExecuteAsync(ct);
+                    break;
             }
 
             return WriteOutcome.Ok;
