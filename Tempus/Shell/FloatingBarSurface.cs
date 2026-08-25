@@ -102,7 +102,8 @@ internal sealed class FloatingBarSurface : IShellSurface
         panel.ShowAt(anchor);
     }
 
-    public void ToggleAgenda(IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks)
+    public void ToggleAgenda(
+        IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks, WorkDayOptions work)
     {
         if (_agenda is not null)
         {
@@ -119,17 +120,18 @@ internal sealed class FloatingBarSurface : IShellSurface
         panel.Dismissed += (_, _) => CloseAgenda();
 
         _agenda = panel;
-        panel.Render(agenda, breaks, DateTimeOffset.Now);
+        panel.Render(agenda, breaks, DateTimeOffset.Now, work);
         panel.ShowAt(anchor);
     }
 
     public void RefreshOpenPanel(
         IReadOnlyList<TaskRow> tasks,
         IReadOnlyList<AgendaItem> agenda,
-        IReadOnlyList<BreakSlot> breaks)
+        IReadOnlyList<BreakSlot> breaks,
+        WorkDayOptions work)
     {
         _tasks?.Render(tasks);
-        _agenda?.Render(agenda, breaks, DateTimeOffset.Now);
+        _agenda?.Render(agenda, breaks, DateTimeOffset.Now, work);
     }
 
     private void CloseTasks()

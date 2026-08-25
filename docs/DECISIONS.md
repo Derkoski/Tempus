@@ -2649,3 +2649,69 @@ O roadmap passou a separar as duas.
 preservação das notas depende do comportamento da API, que o demo não alcança. Verificar exige
 escrever na conta do usuário, e pelo D-024 isso é dele — numa tarefa descartável, com nota, no
 protocolo do D-031.
+
+---
+
+## D-043 — A agenda deixa de ser só hoje
+
+**Status:** Aceita · 2026-08-25
+
+### O pedido
+
+*"se alguém pede se tenho agenda livre para os próximos dias, eu tenho que entrar no google agenda
+pra ver"*
+
+Repare de quem é a pergunta: **de outra pessoa**. Os outros painéis respondem ao usuário sobre ele
+mesmo; este responde a um terceiro, e por isso a informação útil não é a lista de compromissos — é
+onde há **buraco**.
+
+### O plano encolheu antes de começar
+
+`LookaheadDays = 8`: o sync **já buscava oito dias** de todos os calendários a cada ciclo, e
+`SyncSnapshot.Upcoming` já guardava de amanhã em diante. O dado estava em memória sendo jogado fora
+pela UI.
+
+Isso derrubou a questão que parecia difícil — como buscar sob demanda sem virar polling largo
+(regra 9). **Não precisa buscar nada.** Alargar a janela de 8 para 15 dias não acrescenta requisição
+alguma: continua uma por calendário por ciclo, só com um intervalo maior, e `MaxResults = 250` cobre
+com folga.
+
+A alternativa, busca sob demanda, traria estado de carregamento, erro por dia e cache a invalidar —
+três modos de falha novos por um alcance que raramente se usa.
+
+### `DayAvailability` — onde mora a resposta
+
+Função pura de (agenda, dia, expediente, agora) → resumo. As regras estavam implícitas espalhadas
+pelo produto e ficaram explícitas num lugar só:
+
+- A janela livre é **dentro do expediente e fora do almoço**. Livre às 3 da manhã não é resposta.
+- Reuniões sobrepostas são **fundidas** antes de subtrair — sobreposição é rotina nesta agenda (§8),
+  e sem fundir a segunda call abriria entre elas um buraco inexistente.
+- Vão menor que **30 min** não é horário disponível. Listá-lo viraria ruído.
+- **Hoje começa em `agora`.** Um resumo que às 16h diga "livre 09:00–12:00" responde sobre um dia
+  que já não existe.
+- Dia não útil (fim de semana, feriado, emenda) aparece **sem** janelas e com o motivo. Sábado
+  dizendo "livre o dia todo" seria uma resposta errada com cara de certa — e é justamente a que
+  faria o usuário prometer um horário que não quer dar.
+
+### O padrão não mudou
+
+Abrir o painel continua caindo na **timeline de hoje**. Essa é a ação frequente; trocá-la pelo
+resumo custaria um clique a mais no caso comum para servir o ocasional. "Próximos dias" fica no
+cabeçalho, e clicar num dia da lista abre a timeline dele.
+
+Pausas de descanso aparecem **só em hoje**: são planejamento do dia corrente, e projetá-las no
+futuro inventaria compromisso que não existe.
+
+A seleção de dia é estado do **painel**, não do `App` — ela morre quando o painel fecha, que é o
+comportamento certo para uma consulta.
+
+### O demo ganhou futuro junto
+
+`FakeStateSource` só tinha agenda de hoje, então o resumo apareceria com catorze linhas vazias e
+não exercitaria nada. Os dias acrescentados cobrem as três leituras que o painel precisa acertar:
+um dia com buraco no meio, um tomado de ponta a ponta (que tem de dizer "Agenda cheia", e não ficar
+em branco) e um vazio.
+
+É a mesma lição do `default` que o D-042 pôs no `ApplyAsync`: um demo que não representa o caso não
+verifica nada, e o silêncio dele parece aprovação.

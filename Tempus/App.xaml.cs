@@ -257,7 +257,8 @@ public partial class App : Application
 
             Rerender();
             surface.RefreshOpenPanel(
-                CurrentTasks(), snapshot.Agenda, PlanBreaks(snapshot.Agenda, DateTimeOffset.Now));
+                CurrentTasks(), AllDays(snapshot),
+                PlanBreaks(snapshot.Agenda, DateTimeOffset.Now), _workDay);
         });
 
         // "Eu vi." Suprime a ocorrência e volta ao normal na hora (regra 2, invariante I3).
@@ -282,7 +283,8 @@ public partial class App : Application
         };
         surface.AgendaRequested += (_, _) =>
         {
-            surface.ToggleAgenda(_snapshot.Agenda, PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now));
+            surface.ToggleAgenda(
+                AllDays(_snapshot), PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay);
             _ = sync.RefreshAsync();
         };
 
@@ -350,7 +352,8 @@ public partial class App : Application
     {
         Rerender();
         surface.RefreshOpenPanel(
-            CurrentTasks(), _snapshot.Agenda, PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now));
+            CurrentTasks(), AllDays(_snapshot),
+            PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay);
     }
 
     /// <summary>
@@ -703,6 +706,16 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// A agenda inteira que o retrato carrega — hoje <b>e</b> os próximos dias (D-043).
+    /// <para>
+    /// O retrato separa os dois porque o humor temporal só olha hoje e o lookahead só olha o
+    /// resto. O painel S3 precisa dos dois juntos, e juntar aqui evita que ele saiba dessa divisão.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<AgendaItem> AllDays(SyncSnapshot snapshot) =>
+        [.. snapshot.Agenda, .. snapshot.Upcoming];
+
+    /// <summary>
     /// O evento de que o humor temporal está falando. O <see cref="TimeStatus"/> guarda o id
     /// explícito justamente para esta busca não precisar fatiar a ocorrência.
     /// </summary>
@@ -760,7 +773,7 @@ public partial class App : Application
         if (_surface is FloatingBarSurface surface)
         {
             surface.ToggleAgenda(
-                _snapshot.Agenda, PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now));
+                AllDays(_snapshot), PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay);
         }
     });
 
@@ -944,7 +957,8 @@ public partial class App : Application
         surface.SyncRequested += (_, _) => surface.Render(demo.Advance());
         surface.TasksRequested += (_, _) => surface.ToggleTasks(DemoRows(demo));
         surface.AgendaRequested += (_, _) =>
-            surface.ToggleAgenda(demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
+            surface.ToggleAgenda(
+                demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now), _workDay);
 
         surface.TaskCreated += (_, title) => EnqueueDemo(surface, demo, PendingWrite.For(
             WriteKind.Create, DateTimeOffset.Now) with { Title = title });
@@ -988,7 +1002,7 @@ public partial class App : Application
     {
         surface.Render(demo.WithPending(_writes?.Pending ?? []));
         surface.RefreshOpenPanel(
-            DemoRows(demo), demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now));
+            DemoRows(demo), demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now), _workDay);
     }
 
     // ---------------------------------------------------------------- utilidades

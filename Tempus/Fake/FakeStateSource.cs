@@ -289,7 +289,58 @@ internal sealed class FakeStateSource
                 Id = "e6", Title = "Retrospectiva",
                 Start = b.AddMinutes(220), End = b.AddMinutes(250),
             },
+
+            // --- Os próximos dias (D-043) ---
+            //
+            // Sem isto o resumo apareceria com catorze linhas vazias e não exercitaria nada. Os
+            // dias escolhidos cobrem as três leituras que o painel precisa acertar: um dia com
+            // buraco no meio, um dia tomado de ponta a ponta, e um dia sem nada.
+            new AgendaItem
+            {
+                Id = "f1", Title = "Planning do time",
+                Start = Amanha(9), End = Amanha(11),
+                Conference = meet, Rsvp = Rsvp.Accepted,
+            },
+            new AgendaItem
+            {
+                Id = "f2", Title = "Comitê de arquitetura",
+                Start = Amanha(14), End = Amanha(15, 30),
+                Conference = zoom, Rsvp = Rsvp.Accepted,
+            },
+
+            // Depois de amanhã sem folga nenhuma: o resumo tem de dizer "Agenda cheia" em vez de
+            // uma linha vazia, que é o caso em que o usuário responderia errado.
+            new AgendaItem
+            {
+                Id = "f3", Title = "Imersão com o cliente",
+                Start = EmDias(2, 8), End = EmDias(2, 12),
+                Conference = meet, Rsvp = Rsvp.Accepted,
+            },
+            new AgendaItem
+            {
+                Id = "f4", Title = "Imersão com o cliente (tarde)",
+                Start = EmDias(2, 13), End = EmDias(2, 17),
+                Conference = meet, Rsvp = Rsvp.Accepted,
+            },
+
+            // Daqui a três dias, uma call só de manhã — o caso comum.
+            new AgendaItem
+            {
+                Id = "f5", Title = "Week Review",
+                Start = EmDias(3, 10), End = EmDias(3, 11),
+                Conference = meet, Rsvp = Rsvp.Accepted,
+            },
         ];
+    }
+
+    private static DateTimeOffset Amanha(int hour, int minute = 0) => EmDias(1, hour, minute);
+
+    private static DateTimeOffset EmDias(int days, int hour, int minute = 0)
+    {
+        var day = DateTime.Today.AddDays(days);
+
+        return new DateTimeOffset(
+            day.Year, day.Month, day.Day, hour, minute, 0, DateTimeOffset.Now.Offset);
     }
 
     private static ShellState[] BuildScript() =>

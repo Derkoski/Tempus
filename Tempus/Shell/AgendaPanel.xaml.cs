@@ -39,11 +39,82 @@ internal partial class AgendaPanel : Window
 
     public void ShowAt(NativeMethods.RECT anchor) => _host.ShowAt(anchor);
 
+    /// <summary>
+    /// Quantos dias o resumo cobre, contando hoje. Casa com a janela que o <c>GoogleSync</c>
+    /// carrega — pedir mais mostraria dias vazios por falta de dado, não por falta de compromisso,
+    /// que é a regra 10 aplicada a uma agenda.
+    /// </summary>
+    private const int DiasNoResumo = 15;
+
+    private static readonly System.Globalization.CultureInfo Brasil = new("pt-BR");
+
+    private IReadOnlyList<AgendaItem> _todosOsDias = [];
+    private IReadOnlyList<BreakSlot> _breaks = [];
+    private WorkDayOptions _work = WorkDayOptions.Default;
+    private DateTimeOffset _now;
+
+    /// <summary>
+    /// O dia que a timeline mostra, ou <c>null</c> quando o painel está no resumo dos próximos
+    /// dias.
+    /// <para>
+    /// Estado do <b>painel</b>, e não do <c>App</c>: a seleção morre quando o painel fecha, que é
+    /// o comportamento certo para uma consulta. Reabrir cai em hoje.
+    /// </para>
+    /// </summary>
+    private DateOnly? _selected;
+
+    /// <summary>
+    /// O dia aberto no resumo, ou <c>null</c>. Um por vez: as janelas livres — que é o que se
+    /// compara — já aparecem em todas as linhas, e manter vários abertos só alongaria a lista.
+    /// </summary>
+    private DateOnly? _expanded;
+
     public void Render(
         IReadOnlyList<AgendaItem> agenda,
         IReadOnlyList<BreakSlot> breaks,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        WorkDayOptions work)
     {
+        _todosOsDias = agenda;
+        _breaks = breaks;
+        _work = work;
+        _now = now;
+
+        // Primeira renderização cai em hoje. Abrir o painel é, na esmagadora maioria das vezes,
+        // perguntar sobre agora — trocar o padrão pelo resumo custaria um clique no caso comum
+        // para servir o ocasional.
+        _selected ??= DateOnly.FromDateTime(now.Date);
+
+        Draw();
+    }
+
+    private void Draw()
+    {
+        if (_selected is { } dia) DrawDay(dia);
+        else DrawWeek();
+
+        RepositionAfterLayout();
+    }
+
+    private void DrawDay(DateOnly day)
+    {
+        var hoje = DateOnly.FromDateTime(_now.Date);
+        var now = _now;
+
+        HeaderText.Text = day == hoje
+            ? "Agenda de hoje"
+            : Brasil.TextInfo.ToTitleCase(day.ToString("dddd, dd/MM", Brasil));
+
+        ShowLink("Próximos dias  ›", () => { _selected = null; Draw(); });
+
+        // Pausas de descanso são planejamento do dia corrente. Projetá-las num dia futuro
+        // inventaria compromisso que não existe.
+        var breaks = day == hoje ? _breaks : [];
+
+        var agenda = _todosOsDias
+            .Where(e => DateOnly.FromDateTime(e.Start.ToLocalTime().Date) == day)
+            .ToList();
+
         var events = agenda
             .Where(e => !e.IsAllDay) // dia inteiro é marcador, não compromisso (SEVERITY.md §2.1)
             .OrderBy(e => e.Start)
@@ -64,11 +135,10 @@ internal partial class AgendaPanel : Window
         {
             Timeline.Children.Add(new TextBlock
             {
-                Text = "Nenhuma reunião hoje.",
+                Text = day == hoje ? "Nenhuma reunião hoje." : "Nenhuma reunião neste dia.",
                 Margin = new Thickness(6, 14, 6, 18),
                 Foreground = new SolidColorBrush(_palette.Muted),
             });
-            RepositionAfterLayout();
             return;
         }
 
@@ -97,8 +167,227 @@ internal partial class AgendaPanel : Window
             if (i + 1 < blocks.Count)
                 Timeline.Children.Add(BuildGapRow(new AgendaGap(blocks[i + 1].Start - current.End)));
         }
+    }
 
-        RepositionAfterLayout();
+    /// <summary>
+    /// O resumo dos próximos dias — a resposta para "você tem horário livre quinta?", que é a
+    /// pergunta que vem de outra pessoa e obrigava a abrir o Google Agenda (D-043).
+    /// <para>
+    /// Cada linha diz duas coisas e só: <b>quanto</b> o dia está cheio e <b>onde</b> ele está
+    /// livre. O detalhe de qual reunião é fica a um clique, na timeline do dia.
+    /// </para>
+    /// </summary>
+    private void DrawWeek()
+    {
+        var hoje = DateOnly.FromDateTime(_now.Date);
+
+        HeaderText.Text = "Próximos dias";
+        HeaderCount.Text = "";
+        ShowLink("‹  Voltar", () => { _selected = hoje; Draw(); });
+
+        Timeline.Children.Clear();
+
+        var dias = DayAvailability.Summarize(_todosOsDias, hoje, DiasNoResumo, _work, _now);
+
+        foreach (var dia in dias)
+        {
+            Timeline.Children.Add(BuildDaySummaryRow(dia, hoje));
+
+            if (_expanded == dia.Day) Timeline.Children.Add(BuildDayDetail(dia.Day));
+        }
+    }
+
+    /// <summary>
+    /// Os compromissos do dia, abertos <b>no lugar</b>.
+    /// <para>
+    /// Expandir em vez de navegar não é preferência de estilo: quem pergunta "dá pra remarcar
+    /// alguma coisa?" está <b>comparando</b>, e trocar a tela pela timeline de um dia esconde
+    /// justamente os outros dias contra os quais ele está decidindo. As janelas livres continuam
+    /// visíveis acima e abaixo enquanto ele lê o que há aqui dentro.
+    /// </para>
+    /// <para>
+    /// Deliberadamente quieto: hora e título, sem o fundo tingido por serviço nem o clique de
+    /// entrar na call. Esta lista serve para <b>decidir</b>, e entrar numa reunião de quinta-feira
+    /// não é uma decisão que se toma hoje — a timeline do dia continua sendo o lugar disso.
+    /// </para>
+    /// </summary>
+    private UIElement BuildDayDetail(DateOnly day)
+    {
+        var itens = _todosOsDias
+            .Where(e => !e.IsAllDay && DateOnly.FromDateTime(e.Start.ToLocalTime().Date) == day)
+            .OrderBy(e => e.Start)
+            .ToList();
+
+        var lista = new StackPanel { Margin = new Thickness(18, 0, 6, 8) };
+
+        foreach (var item in itens)
+        {
+            var linha = new DockPanel { Margin = new Thickness(0, 3, 0, 0) };
+
+            var hora = new TextBlock
+            {
+                Text = $"{item.Start.ToLocalTime():HH:mm}–{item.End.ToLocalTime():HH:mm}",
+                FontSize = 12,
+                Width = 92,
+                Foreground = new SolidColorBrush(_palette.Muted),
+            };
+
+            DockPanel.SetDock(hora, Dock.Left);
+            linha.Children.Add(hora);
+
+            linha.Children.Add(new TextBlock
+            {
+                Text = item.Title,
+                FontSize = 12,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = new SolidColorBrush(_palette.BarForeground),
+            });
+
+            lista.Children.Add(linha);
+        }
+
+        // A porta para o detalhe completo — gaps, marca do serviço e o clique de entrar. Fica
+        // aqui dentro, e não na linha do dia, para o gesto principal da lista continuar sendo um só.
+        var abrir = new TextBlock
+        {
+            Text = "ver o dia todo  ›",
+            FontSize = 11,
+            Margin = new Thickness(0, 6, 0, 0),
+            Cursor = Cursors.Hand,
+            Foreground = new SolidColorBrush(_palette.OutlineFor(Severity.Info)),
+        };
+
+        abrir.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            _selected = day;
+            Draw();
+        };
+
+        lista.Children.Add(abrir);
+        return lista;
+    }
+
+    private UIElement BuildDaySummaryRow(DaySummary dia, DateOnly hoje)
+    {
+        var nome = dia.Day == hoje
+            ? "hoje"
+            : dia.Day == hoje.AddDays(1)
+                ? "amanhã"
+                : dia.Day.ToString("ddd dd/MM", Brasil);
+
+        var titulo = new TextBlock
+        {
+            Text = Brasil.TextInfo.ToTitleCase(nome),
+            FontWeight = dia.Day == hoje ? FontWeights.SemiBold : FontWeights.Normal,
+            Width = 96,
+            VerticalAlignment = VerticalAlignment.Center,
+
+            // Dia não útil fica apagado: ele está na lista para explicar o vazio, não para ser
+            // considerado.
+            Foreground = new SolidColorBrush(
+                dia.IsWorkingDay ? _palette.BarForeground : _palette.Muted),
+        };
+
+        var contagem = new TextBlock
+        {
+            Text = dia.Meetings switch
+            {
+                0 => "livre",
+                1 => "1 compromisso",
+                _ => $"{dia.Meetings} compromissos",
+            },
+            FontSize = 12,
+            Foreground = new SolidColorBrush(_palette.Muted),
+        };
+
+        // A linha que responde a pergunta. Verde de "Livre" quando há janela, apagado quando não —
+        // sem cor nova entrando por causa disto (regra 1).
+        var janelas = new TextBlock
+        {
+            Text = dia.HasFree
+                ? string.Join("   ", dia.Free.Select(f => f.Label))
+                : dia.Note ?? "sem janelas",
+            FontSize = 12,
+            Margin = new Thickness(0, 1, 0, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = new SolidColorBrush(
+                dia.HasFree ? _palette.FreeForeground : _palette.Muted),
+        };
+
+        var texto = new StackPanel();
+        texto.Children.Add(contagem);
+        texto.Children.Add(janelas);
+
+        var aberto = _expanded == dia.Day;
+
+        // O galho diz que a linha abre, e para que lado. Dia sem compromisso não ganha nenhum:
+        // prometer expansão a quem não tem o que mostrar é afordância que mente.
+        var galho = new TextBlock
+        {
+            Text = dia.Meetings == 0 ? "" : aberto ? "⌄" : "›",
+            FontSize = 12,
+            Width = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(_palette.Muted),
+        };
+
+        var linha = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(galho, Dock.Left);
+        DockPanel.SetDock(titulo, Dock.Left);
+        linha.Children.Add(galho);
+        linha.Children.Add(titulo);
+        linha.Children.Add(texto);
+
+        var row = new Border
+        {
+            Child = linha,
+            Padding = new Thickness(6, 6, 6, 6),
+            CornerRadius = new CornerRadius(5),
+            Background = Brushes.Transparent,
+            Cursor = dia.Meetings == 0 ? Cursors.Arrow : Cursors.Hand,
+        };
+
+        if (dia.Meetings == 0) return row;
+
+        var hover = new SolidColorBrush(_palette.RowHover);
+        row.MouseEnter += (_, _) => row.Background = hover;
+        row.MouseLeave += (_, _) => row.Background = Brushes.Transparent;
+
+        // Abre no lugar, e não navega: ver o que há num dia é o passo do meio da decisão, e a
+        // comparação com os outros dias precisa continuar na tela. Um aberto por vez mantém a
+        // lista curta — as janelas livres, que são o que se compara, aparecem em todas as linhas
+        // o tempo todo.
+        var alvo = dia.Day;
+        row.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            _expanded = _expanded == alvo ? null : alvo;
+            Draw();
+        };
+
+        return row;
+    }
+
+    /// <summary>
+    /// O link do cabeçalho. O tratador é trocado a cada desenho, então precisa ser desligado
+    /// antes — o painel redesenha a cada sync, e sem isto acumularia um tratador por rodada.
+    /// </summary>
+    private void ShowLink(string text, Action onClick)
+    {
+        HeaderLink.Text = text;
+
+        HeaderLink.MouseLeftButtonUp -= OnHeaderLink;
+        _headerAction = onClick;
+        HeaderLink.MouseLeftButtonUp += OnHeaderLink;
+    }
+
+    private Action? _headerAction;
+
+    private void OnHeaderLink(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _headerAction?.Invoke();
     }
 
     /// <summary>Uma linha da timeline: ou uma reunião, ou uma pausa. Nunca as duas.</summary>
@@ -468,5 +757,9 @@ internal partial class AgendaPanel : Window
 
         HeaderText.Foreground = new SolidColorBrush(_palette.BarForeground);
         HeaderCount.Foreground = new SolidColorBrush(_palette.Muted);
+
+        // Azul de Info: é navegação, e a barra já usa esse tom para "algo se aproxima, sem
+        // urgência". Nenhuma cor nova entra por causa disto (regra 1).
+        HeaderLink.Foreground = new SolidColorBrush(_palette.OutlineFor(Severity.Info));
     }
 }

@@ -340,7 +340,17 @@ internal sealed class GoogleSync : IDisposable
     // ---------------------------------------------------------------- leitura
 
     /// <summary>Quantos dias além de hoje a consulta cobre, para alimentar o <see cref="Lookahead"/>.</summary>
-    private const int LookaheadDays = 8;
+    /// <summary>
+    /// Quantos dias de agenda o retrato carrega. Subiu de 8 para 15 no D-043, quando o painel
+    /// passou a mostrar os próximos dias.
+    /// <para>
+    /// <b>Alargar a janela não acrescenta requisição nenhuma</b> — continua uma por calendário por
+    /// ciclo, só com um intervalo maior, e <c>MaxResults = 250</c> cobre quinze dias com folga. Era
+    /// a alternativa a buscar sob demanda, que traria estado de carregamento, erro por dia e cache
+    /// a invalidar: três modos de falha novos por um alcance que raramente se usa.
+    /// </para>
+    /// </summary>
+    private const int LookaheadDays = 15;
 
     /// <summary>
     /// Uma única consulta cobre hoje e a semana seguinte; o resultado é fatiado depois. Duas

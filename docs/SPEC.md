@@ -99,6 +99,14 @@ Clique num evento com call abre a call — Meet, Zoom ou Teams, com o link achad
 partir de `conferenceData`, `hangoutLink`, `location` e `description` (D-017). Um **ponto colorido**
 identifica o serviço: verde Meet, azul Zoom. Evento sem ponto é presencial e não é clicável.
 
+**Não é só hoje** (D-043). "Próximos dias" troca a timeline por um resumo de 15 dias — por dia, a
+contagem de compromissos e as **janelas livres** dentro do expediente. Existe para responder a
+pergunta que vem de outra pessoa, *"você tem horário livre quinta?"*, sem abrir o Google Agenda.
+Clicar num dia abre a timeline dele; abrir o painel continua caindo em hoje.
+
+Dia não útil aparece na lista **sem** janelas, com o motivo — sábado dizendo "livre o dia todo"
+seria uma resposta errada com cara de certa.
+
 ### S4 — Toasts
 
 Notificações nativas do Windows para os eventos definidos em `SEVERITY.md` §4.

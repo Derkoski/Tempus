@@ -22,10 +22,20 @@
                    FontSize="14"
                    FontWeight="SemiBold"
                    Text="Agenda de hoje" />
-        <TextBlock x:Name="HeaderCount"
-                   HorizontalAlignment="Right"
-                   VerticalAlignment="Center"
-                   Text="" />
+
+        <StackPanel Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center">
+          <TextBlock x:Name="HeaderCount" VerticalAlignment="Center" Text="" />
+
+          <!-- Alterna entre a timeline de um dia e o resumo dos próximos (D-043). O rótulo diz
+               para onde vai, não onde está: é o que permite ler o cabeçalho de uma vez. -->
+          <TextBlock x:Name="HeaderLink"
+                     VerticalAlignment="Center"
+                     Margin="12,0,0,0"
+                     Cursor="Hand"
+                     Text="" />
+        </StackPanel>
       </Grid>
 
       <ScrollViewer Grid.Row="1"

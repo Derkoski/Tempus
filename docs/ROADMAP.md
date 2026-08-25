@@ -369,12 +369,8 @@ conversa trafegam; nenhum assunto, remetente ou corpo é lido.
   **O que mudaria a decisão:** o usuário passar a trabalhar longe da tela com frequência, ou
   aparecer uma necessidade de notificação que o Calendar não cubra. Aí o desenho começa da pergunta
   certa, não de portar este.
-- **Ver a agenda de outros dias** — pedido em 2026-08-24. Hoje o painel S3 mostra só o dia
-  corrente, e a pergunta que aparece na prática é de outra pessoa: *"você tem horário livre
-  quinta?"*. Sem isso, responder exige abrir o Google Agenda, que é exatamente a ida que a barra
-  existe para evitar. Duas coisas a decidir antes: **navegar por dia ou mostrar a semana**, e o que
-  fazer com o `GoogleSync`, que hoje consulta uma janela curta e teria de buscar sob demanda sem
-  virar polling largo (regra 9). Provavelmente merece fatia própria, não um remendo no S3
+- ~~Ver a agenda de outros dias~~ — feito no D-043. A questão que parecia difícil (buscar sob
+  demanda sem virar polling largo) evaporou: o sync já carregava a janela, bastou alargá-la
 - Reposicionar/redimensionar a barra por arrastar, com posição persistida
 - ~~Ações rápidas no toast~~ — feito no D-039
 - Registro de foco: quanto tempo em reunião vs. livre por dia

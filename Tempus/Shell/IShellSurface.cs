@@ -29,8 +29,16 @@ internal interface IShellSurface : IDisposable
     /// </summary>
     void ToggleTasks(IReadOnlyList<TaskRow> tasks);
 
-    /// <summary>Abre o painel S3, ou fecha se já estiver aberto.</summary>
-    void ToggleAgenda(IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks);
+    /// <summary>
+    /// Abre o painel S3, ou fecha se já estiver aberto.
+    /// <para>
+    /// <paramref name="agenda"/> leva <b>todos</b> os dias carregados, e não só hoje: o painel
+    /// mostra o resumo dos próximos (D-043). O expediente vem junto porque é ele que define o que
+    /// conta como janela livre.
+    /// </para>
+    /// </summary>
+    void ToggleAgenda(
+        IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks, WorkDayOptions work);
 
     /// <summary>
     /// Redesenha o painel aberto, se houver, sem alternar visibilidade. Usado quando os dados
@@ -39,7 +47,8 @@ internal interface IShellSurface : IDisposable
     void RefreshOpenPanel(
         IReadOnlyList<TaskRow> tasks,
         IReadOnlyList<AgendaItem> agenda,
-        IReadOnlyList<BreakSlot> breaks);
+        IReadOnlyList<BreakSlot> breaks,
+        WorkDayOptions work);
 
     /// <summary>Usuário clicou no alerta — "eu vi" (<c>SEVERITY.md</c> §1.1).</summary>
     event EventHandler? Acknowledged;
