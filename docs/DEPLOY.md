@@ -66,6 +66,29 @@ autoriza, e pronto. É o caminho correto.
 Se você não tiver o SDK do .NET na máquina nova, gere o pacote **aqui**, copie a pasta `publish/`
 para lá e rode o `install.ps1` sem `-Publish`.
 
+### Montar um zip para levar à mão
+
+Quando a outra máquina não tem SDK nem acesso ao repositório — o caso do notebook da empresa —, o
+que atravessa é um zip só. A disposição importa: com `publish/` e `scripts/` lado a lado, o
+`install.ps1` acha o pacote sozinho e o comando lá é o **mesmo** daqui, sem parâmetro.
+
+```powershell
+$stage = "dist\Tempus-$(Get-Date -Format yyyy-MM-dd)"
+New-Item -ItemType Directory "$stage\publish", "$stage\scripts" -Force | Out-Null
+
+Copy-Item publish\Tempus.exe, publish\appsettings.json "$stage\publish\"
+Copy-Item scripts\install.ps1, scripts\uninstall.ps1   "$stage\scripts\"
+
+Compress-Archive "$stage\*" "$stage.zip" -CompressionLevel Optimal -Force
+```
+
+Dá ~69 MB compactado. `dist/` está no `.gitignore` pelo mesmo motivo que `publish/`: binário não
+entra no repositório, e o pacote se regenera com um comando.
+
+**Não inclua o `.pdb`** — são símbolos de depuração que só pesam do outro lado. E não inclua
+`client_secret.json` nem `tokens/`: o primeiro é segredo que não anda em zip, e o segundo não
+funcionaria (DPAPI, ver acima).
+
 **Confira as notificações**, porque elas falham em silêncio:
 
 ```powershell

@@ -33,6 +33,10 @@ publish/
 *.publishsettings
 PublishProfiles/
 
+## Pacote levado à mão para a outra máquina (DEPLOY.md). ~70 MB de exe autocontido
+## — binário não entra no repositório, e o pacote se regenera com um comando.
+dist/
+
 ## Test / coverage
 [Tt]est[Rr]esult*/
 coverage*.xml
