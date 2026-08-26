@@ -2836,3 +2836,71 @@ teste de unidade prova a decisão, não a fiação.
 
 Com isto não sobra código de fase nenhuma. O que resta no roadmap é verificação de ambiente,
 decisão adiada à espera de convívio, e backlog sem compromisso.
+
+---
+
+## D-046 — O contador vai para a próxima fronteira, seja ela qual for
+
+**Status:** Aceita · 2026-08-26 · encontrada em uso
+
+### O sintoma
+
+*"tenho 2 calls conflitantes, e ao invés do Tempus me dizer quanto tempo falta para a próxima call,
+ele me fala quanto tempo ainda tenho na call atual. Preciso saber quanto tempo até a próxima call,
+pois isso é mais importante."*
+
+O dado real, medido com `--dump-agenda` antes de desenhar qualquer coisa:
+
+| Hoje, 26/08 | |
+|---|---|
+| 11:00–12:00 | Blindagem Principais Franquias *(Teams)* |
+| 11:30–12:00 | SonarQube *(Meet)* — **por dentro da anterior** |
+
+Às 11:29 a barra dizia **"faltam 31 min"** — o fim da Blindagem — enquanto o SonarQube começava
+**em 1 minuto**. O número grande convida a ficar, e o que precisava do usuário começava já.
+
+O mesmo padrão se repetia à tarde: Biweekly 15:30–16:10 com Reavaliação 16:00–17:00 por dentro.
+
+### A causa não era um bug, era uma premissa
+
+O código dizia, e o comentário confirmava: *"numa reunião o que importa é quando ela acaba"*. Isso
+é verdade **enquanto a próxima reunião vier depois** — que é o caso comum, e o único que o D-011
+tinha em mente. Com sobreposição a premissa se inverte: o fim da atual é a fronteira **errada**,
+porque você precisa sair antes dela.
+
+### A regra que substitui a premissa
+
+**O contador vai para a próxima fronteira, seja ela qual for.**
+
+Não é caso especial nem limiar arbitrário — é a mesma regra nas duas situações, e ela cai sozinha
+no comportamento antigo quando há folga:
+
+| Situação | Fronteira mais próxima | Frase |
+|---|---|---|
+| folga depois | o fim desta | `faltam 31 min · Blindagem → 15:00 Review` |
+| coladas | empatam | igual à de cima — mexer seria churn sem ganho |
+| **sobrepostas** | o início da próxima | `SonarQube em 1 min · até 12:00` |
+
+Continua havendo **um número relativo só** na frase, que era a razão do D-011 dar hora de relógio à
+seguinte. Ele só mudou de dono: agora o fim da atual é que vira relógio.
+
+### Dois cuidados que vieram junto
+
+**O clique segue o texto, não o `EventId`.** Se a frase nomeia o SonarQube, clicar tem de abrir o
+SonarQube — mandar para outra call seria exatamente o descasamento que o D-038 corrigiu. O
+`Overrun` já fazia esse par assimétrico pelo mesmo motivo, e agora o `InMeeting` também.
+
+**O `EventId` continua sendo a reunião em curso.** É nela que o usuário está, e é ela que o
+"encerrei esta reunião" (D-041) precisa achar correndo. Tem teste garantindo que o `Leavable`
+continua devolvendo a Blindagem enquanto a frase fala do SonarQube.
+
+### O que não mudou, e talvez devesse
+
+Com sobreposição chegando, o humor continua `Ocupado` — azul calmo. O alarme existe, mas mora no
+**chip**: `MeetingImminent` dispara pelo SonarQube e o `ChipEcho` não o cala, porque `InMeeting` só
+absorve `MeetingStarted` e `MeetingBackToBack`. São os dois vocabulários do §0.5 funcionando como
+projetados.
+
+Se em uso o chip provar insuficiente, a discussão é promover a sobreposição iminente a
+`EndingSoon` — e aí é mudança de severidade, com entrada na tabela do `SEVERITY.md` e revisão das
+invariantes. Não se faz de passagem.

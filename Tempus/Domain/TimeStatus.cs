@@ -246,13 +246,29 @@ internal static class TimeStatusResolver
         var endingSoon = remaining <= TimeSpan.FromMinutes(thresholds.EndingSoonMinutes)
             && !seen.Contains(OccurrenceOf(TimeMood.EndingSoon, current));
 
-        // Numa reunião o que importa é quando ela acaba, então a contagem vem antes do nome dela.
-        var summary = $"faltam {Humanize(remaining)} · {current.Title}";
+        // A REGRA: o contador vai para a próxima fronteira, seja ela qual for (D-046).
+        //
+        // Quase sempre a próxima fronteira é o fim desta reunião, e aí "faltam 22 min" é o número
+        // certo. Mas quando a seguinte **começa antes** desta acabar, ela passa na frente — e o
+        // fim da atual vira a fronteira errada. Encontrado em uso: às 11:29 a barra dizia "faltam
+        // 31 min" da Blindagem enquanto o SonarQube começava em 1 minuto. O número grande convida
+        // a ficar, e o que precisava do usuário começava já.
+        //
+        // Não é caso especial nem limiar arbitrário: é a mesma regra nas duas situações, e ela cai
+        // sozinha no comportamento antigo quando há folga entre as reuniões.
+        var invading = next is not null && next.Start < current.End;
+
+        var summary = invading
+            // Um número relativo só, como antes — mudou de dono. O fim da atual vira hora de
+            // relógio, que é o que o "→ 15:00" já fazia pela seguinte.
+            ? $"{next!.Title} em {Humanize(next.Start - now)} · até {current.End.ToLocalTime():HH:mm}"
+            : $"faltam {Humanize(remaining)} · {current.Title}";
 
         // O próximo vem com hora de relógio, e não com contagem: a frase já tem um "faltam X" para
         // a reunião atual, e dois números relativos na mesma linha obrigam a descobrir qual conta
         // para qual reunião.
-        if (next is not null) summary += $" → {next.Start.ToLocalTime():HH:mm} {next.Title}";
+        if (!invading && next is not null)
+            summary += $" → {next.Start.ToLocalTime():HH:mm} {next.Title}";
 
         return new TimeStatus
         {
@@ -261,11 +277,20 @@ internal static class TimeStatusResolver
             Summary = summary,
             NamesAnEvent = true,
             Occurrence = endingSoon ? OccurrenceOf(TimeMood.EndingSoon, current) : null,
+
+            // Continua sendo a atual: é nela que o usuário está, e é ela que o "encerrei esta
+            // reunião" (D-041) precisa encontrar em curso.
             EventId = current.Id,
-            CallUrl = current.Conference?.Url,
+
+            // Mas o clique segue o **texto**, não o EventId: com sobreposição a frase nomeia a que
+            // vai começar, e mandar o clique para outra call seria o descasamento que o D-038
+            // corrigiu. O Overrun já faz exatamente isto pelo mesmo motivo.
+            CallUrl = (invading ? next!.Conference ?? current.Conference : current.Conference)?.Url,
+
             Detail = next is null
                 ? $"Termina às {current.End.ToLocalTime():HH:mm}"
-                : $"Termina às {current.End.ToLocalTime():HH:mm} · {next.Title} às {next.Start.ToLocalTime():HH:mm}",
+                : $"{current.Title} até {current.End.ToLocalTime():HH:mm} · "
+                  + $"{next.Title} às {next.Start.ToLocalTime():HH:mm}",
         };
     }
 

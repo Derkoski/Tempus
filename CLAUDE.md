@@ -39,7 +39,7 @@ verificação de ambiente que nunca rodou (`TaskbarCreated` com restart do explo
 adiadas de propósito à espera de convívio (Q-02 do `SEVERITY.md`, toast de `Offline`, nível 3 furar
 o Não Perturbe) e o backlog sem compromisso.
 
-`Tempus.Tests` (xUnit) tem 241 testes e roda em ~350 ms. As oito invariantes I1–I8 têm teste e
+`Tempus.Tests` (xUnit) tem 248 testes e roda em ~180 ms. As oito invariantes I1–I8 têm teste e
 nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execução trava o build.
 
 ## Regras deste projeto

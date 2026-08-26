@@ -118,6 +118,7 @@ livre ou ocupado. O título da reunião vem depois, como detalhe.
 | `Approaching` | próxima em ≤15 min | `Em breve` | âmbar | texto | `Em breve · Daily em 12 min` |
 | `Imminent` | próxima em ≤5 min | `Começando` | vermelho | **preenchido** | `Começando · Daily em 4 min` |
 | `InMeeting` | em reunião, dentro do horário | `Ocupado` | azul | texto | `Ocupado · Refino, faltam 25 min → Review` |
+| ↳ com a próxima **sobreposta** | a seguinte começa antes desta acabar | `Ocupado` | azul | texto | `Ocupado · SonarQube em 1 min · até 12:00` |
 | `EndingSoon` | reunião atual acaba em ≤5 min | `Encerrando` | âmbar | **preenchido** | `Encerrando · Refino, faltam 4 min` |
 | `Overrun` | passou do fim marcado, até 10 min depois | `Estourou` | vermelho | **preenchido** | `Estourou · Weekly, passou 22 min` |
 | `OffHours` | fora do expediente, sem nada agendado | `Dia Encerrado` · `Almoço` · `Folga` | laranja | texto **negrito** | `Dia Encerrado` |
@@ -125,6 +126,10 @@ livre ou ocupado. O título da reunião vem depois, como detalhe.
 
 Notas de design:
 
+- **O contador vai para a próxima fronteira, seja ela qual for** (D-046). Quase sempre é o fim da
+  reunião atual — mas quando a seguinte começa **antes** desta acabar, ela passa na frente, e o fim
+  da atual vira hora de relógio. Continua havendo **um número relativo só** na frase; ele só muda
+  de dono. Encontrado em uso: `faltam 31 min` da reunião atual enquanto a próxima começava em 1.
 - **Verde é dessaturado de propósito.** É o estado mais frequente do dia; saturado, a barra
   gritaria o tempo todo e a cor perderia função.
 - **`OffHours` já era só rótulo** e continua sendo — ele não tem título de reunião para exibir,

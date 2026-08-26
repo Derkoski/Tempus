@@ -205,4 +205,100 @@ public class TimeStatusResolverTests
 
         Assert.Equal(TimeMood.Overrun, status.Mood);
     }
+
+    // ================================================================ a próxima fronteira (D-046)
+
+    // O caso real de 2026-08-26: Blindagem 11:00–12:00 com SonarQube 11:30–12:00 por dentro.
+    private static AgendaItem Blindagem => Meeting("Blindagem", At(11), At(12), "https://meet.google.com/aaa-bbbb-ccc");
+    private static AgendaItem SonarQube => Meeting("SonarQube", At(11, 30), At(12), "https://meet.google.com/xxx-yyyy-zzz");
+
+    /// <summary>
+    /// <b>O caso que motivou a mudança.</b> Às 11:29 a barra dizia "faltam 31 min" da Blindagem
+    /// enquanto o SonarQube começava em 1 minuto — o número grande convida a ficar, e o que
+    /// precisa de você começa já.
+    /// </summary>
+    [Fact]
+    public void Reuniao_que_comeca_antes_desta_acabar_leva_a_contagem()
+    {
+        var status = Resolve([Blindagem, SonarQube], At(11, 29));
+
+        Assert.Equal(TimeMood.InMeeting, status.Mood);
+        Assert.Contains("SonarQube em 1 min", status.Summary);
+
+        // O fim da atual continua na frase, mas como hora de relógio: um número relativo só.
+        Assert.Contains("até 12:00", status.Summary);
+        Assert.DoesNotContain("faltam", status.Summary);
+    }
+
+    /// <summary>
+    /// Com folga entre as reuniões a fronteira mais próxima volta a ser o fim desta, e a frase é
+    /// exatamente a de antes. A regra é uma só nas duas situações — não há caso especial.
+    /// </summary>
+    [Fact]
+    public void Com_folga_a_contagem_continua_sendo_o_fim_desta()
+    {
+        var status = Resolve([Blindagem, Meeting("Review", At(15), At(16))], At(11, 29));
+
+        Assert.Contains("faltam 31 min", status.Summary);
+        Assert.Contains("Blindagem", status.Summary);
+        Assert.Contains("→ 15:00 Review", status.Summary);
+    }
+
+    [Fact]
+    public void Sem_proxima_reuniao_nada_muda()
+    {
+        var status = Resolve([Blindagem], At(11, 29));
+
+        Assert.Contains("faltam 31 min", status.Summary);
+        Assert.DoesNotContain("→", status.Summary);
+    }
+
+    /// <summary>
+    /// Coladas não são invasão: a fronteira é a mesma nos dois lados, e a frase antiga já dizia
+    /// tudo. Mexer aqui seria churn sem ganho.
+    /// </summary>
+    [Fact]
+    public void Reunioes_coladas_mantem_a_frase_antiga()
+    {
+        var status = Resolve([Blindagem, Meeting("Review", At(12), At(13))], At(11, 29));
+
+        Assert.Contains("faltam 31 min", status.Summary);
+        Assert.Contains("→ 12:00 Review", status.Summary);
+    }
+
+    /// <summary>
+    /// O clique segue o <b>texto</b>. Se a frase nomeia o SonarQube, clicar tem de levar ao
+    /// SonarQube — mandar para outra call é o descasamento que o D-038 corrigiu.
+    /// </summary>
+    [Fact]
+    public void Com_sobreposicao_o_clique_vai_para_a_reuniao_que_a_frase_nomeia()
+    {
+        var status = Resolve([Blindagem, SonarQube], At(11, 29));
+
+        Assert.Contains("SonarQube", status.Summary);
+        Assert.Equal("https://meet.google.com/xxx-yyyy-zzz", status.CallUrl);
+    }
+
+    /// <summary>
+    /// O <c>EventId</c> continua sendo a reunião em curso, mesmo com a frase nomeando a próxima:
+    /// é nela que o usuário está, e é ela que o "encerrei esta reunião" (D-041) precisa achar
+    /// correndo. É o mesmo par assimétrico que o <c>Overrun</c> já usa.
+    /// </summary>
+    [Fact]
+    public void Com_sobreposicao_o_evento_do_humor_continua_sendo_o_atual()
+    {
+        var status = Resolve([Blindagem, SonarQube], At(11, 29));
+
+        Assert.Equal("Blindagem", status.EventId);
+        Assert.Equal(Blindagem, MeetingLeft.Leavable([Blindagem, SonarQube], status, At(11, 29)));
+    }
+
+    [Fact]
+    public void A_dica_traz_as_duas_reunioes_com_hora()
+    {
+        var status = Resolve([Blindagem, SonarQube], At(11, 29));
+
+        Assert.Contains("Blindagem até 12:00", status.Detail);
+        Assert.Contains("SonarQube às 11:30", status.Detail);
+    }
 }
