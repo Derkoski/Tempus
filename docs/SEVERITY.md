@@ -227,7 +227,7 @@ está na reunião é você, e você comunica isso clicando (ver D-006).
 | `MeetingStarted` | T+0 até o fim do evento | 2 | `Daily começou às 14:00` |
 | `MeetingBackToBack` | `MeetingStarted` e o próximo evento começa ≤5 min após este terminar | 1 | `Sem intervalo: Review às 15:00` |
 | `MeetingEnded` | do fim do evento até fim+3min, **sem próximo evento em curso** | 2 | `Daily acabou às 15:00` |
-| `MeetingRanIntoNext` | passou do fim **e o próximo evento já começou** | **3** | `Daily acabou — Review já começou` |
+| `MeetingRanIntoNext` | até 10 min depois do fim, **e a reunião seguinte — marcada para começar antes desta acabar — já começou** | **3** | `Daily acabou — Review já começou` |
 
 Notas de design:
 
@@ -236,9 +236,18 @@ Notas de design:
   numa reunião longa você clica uma vez e a barra fica quieta.
 - **`MeetingEnded` auto-limpa em 3 min.** Reunião isolada que termina não exige clique nenhum —
   âmbar breve e passa. Isso mantém o custo de interação baixo no caso comum.
-- **`MeetingRanIntoNext` é o vermelho principal do produto** e **não** auto-limpa: fica vermelho,
-  começa a piscar em 5 min, e só sai com clique. É o caso "estou invadindo outra call segurando
-  a atual", que era um requisito explícito. Sem detecção de mic, o clique é o que diz "já saí".
+- **`MeetingRanIntoNext` é o vermelho principal do produto** e **não** auto-limpa dentro da janela:
+  fica vermelho, começa a piscar em 5 min, e só sai com clique. É o caso "estou invadindo outra
+  call segurando a atual", que era um requisito explícito. Sem detecção de mic, o clique é o que
+  diz "já saí".
+- **A janela de 10 min e o "marcada para começar antes desta acabar" são as duas cláusulas que o
+  D-047 acrescentou**, depois de a Daily das 09:00–09:30 acender vermelho às 11:00 — quando uma
+  call sem relação nenhuma começou. Sem elas, qualquer reunião em curso servia de invasora e não
+  havia limite de quanto tempo fazia que a reunião acabara: o alarme **nascia piscando**, porque
+  `Since` é o fim marcado e já estava passado dos 5 min de escalada.
+  Passados os 10 min o app admite que não sabe se você saiu, em vez de piscar o dia inteiro. A
+  janela é a **mesma** do humor `Overrun`, e há teste travando a igualdade dos dois limiares —
+  quando eles discordam, slot e chip contam versões diferentes do mesmo fato (foi o D-037).
 - **O ciclo pode ser encerrado pelo usuário.** Call que acaba antes da hora marcada sai do ciclo
   com "Encerrei esta reunião", no menu do botão direito (D-041, §7). Sem isso a barra contava o
   tempo de uma reunião que já tinha acabado e chegava a acender `MeetingRanIntoNext` por ela. É a

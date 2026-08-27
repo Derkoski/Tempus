@@ -280,4 +280,83 @@ public class SignalsTests
 
     [Fact]
     public void Sem_sinal_ativo_nao_ha_vencedor() => Assert.Null(Arbiter.Winner([]));
+
+    // ================================================================ estouro falso (D-047)
+
+    // O dia real de 2026-08-26, que produziu o alarme falso.
+    private static AgendaItem DailyDaManha => Meeting("Daily KA", At(9), At(9, 30));
+    private static AgendaItem CallDaTarde => Meeting("Blindagem", At(11), At(12));
+
+    /// <summary>
+    /// <b>O defeito que motivou a mudança.</b> A Daily acabou às 09:30 e nada a atropelou. Às
+    /// 11:00 uma call sem relação nenhuma começou — e o vermelho de estouro acendia pela Daily,
+    /// horas depois, já passado dos 5 min de escalada: nascia piscando e com toast.
+    /// </summary>
+    [Fact]
+    public void Reuniao_da_manha_nao_estoura_por_causa_de_call_da_tarde()
+    {
+        var nomes = Names(Eval([DailyDaManha, CallDaTarde], [], At(11, 5)));
+
+        Assert.DoesNotContain("MeetingRanIntoNext", nomes);
+        Assert.Contains("MeetingStarted", nomes); // a da tarde, essa sim, está em curso
+    }
+
+    /// <summary>
+    /// O caso verdadeiro continua acendendo: a seguinte estava marcada para começar quando esta
+    /// acabava, e começou. É o vermelho principal do produto e ele não pode ter sido perdido.
+    /// </summary>
+    [Fact]
+    public void Reuniao_colada_que_comeca_com_a_anterior_no_ar_ainda_estoura()
+    {
+        var daily = Meeting("Daily", At(14), At(15));
+        var review = Meeting("Review", At(15), At(16));
+
+        Assert.Contains("MeetingRanIntoNext", Names(Eval([daily, review], [], At(15, 1))));
+    }
+
+    /// <summary>
+    /// Sobreposição de verdade <b>não</b> estoura, e isso é decisão e não descuido: o §8 tira do
+    /// ciclo as sobrepostas que não são a ativa, justamente porque "uma reunião aceita em paralelo
+    /// nunca conta como próxima invadida".
+    /// <para>
+    /// Escrevi este teste na direção oposta primeiro, e ele pegou a mim, não ao código. Fica aqui
+    /// virado para o lado certo, para a próxima pessoa não repetir a suposição.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Sobreposicao_aceita_em_paralelo_nao_estoura()
+    {
+        var daily = Meeting("Daily", At(14), At(15));
+        var outra = Meeting("Outra", At(14, 30), At(16));
+
+        Assert.DoesNotContain("MeetingRanIntoNext", Names(Eval([daily, outra], [], At(15, 1))));
+    }
+
+    /// <summary>
+    /// Passada a janela de estouro o alarme para. Sem detecção de presença (D-006) o app não sabe
+    /// se o usuário saiu — acusa por um tempo e cala, que é o que o humor <c>Overrun</c> já fazia.
+    /// Sem isto o vermelho voltava a cada reunião do dia.
+    /// </summary>
+    [Fact]
+    public void Passada_a_janela_de_estouro_o_alarme_para()
+    {
+        var daily = Meeting("Daily", At(14), At(15));
+        var review = Meeting("Review", At(15), At(16));
+
+        Assert.Contains("MeetingRanIntoNext", Names(Eval([daily, review], [], At(15, 9))));
+        Assert.DoesNotContain("MeetingRanIntoNext", Names(Eval([daily, review], [], At(15, 11))));
+    }
+
+    /// <summary>
+    /// O sinal e o humor contam o <b>mesmo fato</b> por vocabulários diferentes (§0.5). Quando os
+    /// dois limiares discordam, a barra diz uma coisa no slot e outra no chip — foi exatamente o
+    /// defeito do D-037. Este teste é o que impede a repetição.
+    /// </summary>
+    [Fact]
+    public void A_janela_de_estouro_do_sinal_e_a_do_humor_sao_a_mesma()
+    {
+        Assert.Equal(
+            TimeThresholds.Default.OverrunMinutes,
+            SignalThresholds.Default.OverrunMinutes);
+    }
 }

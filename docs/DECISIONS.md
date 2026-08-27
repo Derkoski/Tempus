@@ -2904,3 +2904,81 @@ projetados.
 Se em uso o chip provar insuficiente, a discussão é promover a sobreposição iminente a
 `EndingSoon` — e aí é mudança de severidade, com entrada na tabela do `SEVERITY.md` e revisão das
 invariantes. Não se faz de passagem.
+
+---
+
+## D-047 — O estouro falso: a Daily das 09:30 acendendo vermelho às 11:00
+
+**Status:** Aceita · 2026-08-26 · encontrada em uso
+
+### O sintoma
+
+*"tem um aviso que a Daily KA acabou, piscando e o toast também. Detalhe é que essa mensagem
+apareceu agora enquanto estou em outra call que iniciou e a daily acabou de manhã ainda."*
+
+Nível 3 falso — o pior defeito possível neste modelo. E não era a primeira vez: *"aconteceu ontem,
+mas não dei importância."*
+
+### A causa
+
+```csharp
+var invasora = events.FirstOrDefault(o => o.Id != e.Id && o.IsRunningAt(now));
+if (invasora is not null)  →  MeetingRanIntoNext (Critical)
+```
+
+Faltavam **duas** cláusulas nessa condição:
+
+1. **Qualquer** reunião em curso servia de invasora, sem precisar ter relação com a que acabou.
+2. **Não havia limite** de quanto tempo fazia que a reunião terminara.
+
+Então: Daily 09:00–09:30 acaba. Às 11:00 a Blindagem começa. Para a Daily, `sinceEnd` = 1h30 > 0 e
+existe alguém em curso → vermelho, uma hora e meia depois, por uma reunião que ninguém atropelou.
+
+E como `Since = e.End` (09:30), o sinal **nascia já passado dos 5 minutos de escalada**: piscava na
+hora e o toast saía como escalada, engolindo a entrada. Daí "piscando e o toast também".
+
+O usuário descreveu o toast como sendo "para entrar na call da Guilda" — era o de nível 3, que leva
+`Eu vi` e ganha um `Entrar na call` quando há link à mão (D-039). Por isso o `Eu vi` limpou a barra:
+ele reconheceu o alarme falso. **A interrupção foi gasta com ruído**, que é exatamente o orçamento
+que a regra 1 protege.
+
+### A correção
+
+```csharp
+var invasora = events.FirstOrDefault(
+    o => o.Id != e.Id && o.IsRunningAt(now) && o.Start <= e.End);
+
+if (invasora is not null && sinceEnd <= overrunWindow)
+```
+
+**`o.Start <= e.End`** — a invasora tem de ser uma reunião que já estava marcada para começar antes
+de esta acabar. É o que a frase do §2.1 sempre quis dizer com "o próximo evento já começou": o
+próximo, não qualquer um mais tarde no dia.
+
+**`sinceEnd <= overrunWindow`** — sem detecção de presença (D-006) o app não sabe se o usuário saiu;
+acusa por uma janela e para. Não é invenção: é literalmente o que o humor `Overrun` já fazia, e o
+comentário de lá já dava a razão. O sinal é que estava fora de compasso com ele.
+
+Isto **muda o §2.1**: `MeetingRanIntoNext` passa a ter janela. A frase "não auto-limpa" continua
+valendo dentro dela — escala, pisca e cobra clique —, mas depois de 10 minutos o app admite que não
+sabe mais, em vez de piscar o dia inteiro e voltar a cada reunião.
+
+### Os dois limiares agora têm teste
+
+`SignalThresholds.OverrunMinutes` precisa ser igual a `TimeThresholds.OverrunMinutes`: são o mesmo
+fato contado pelos dois vocabulários do §0.5, e quando discordam a barra diz uma coisa no slot e
+outra no chip. **Foi exatamente o defeito do D-037**, entre o humor `Imminent` e o sinal
+`MeetingImminent`. Desta vez a concordância está travada por teste.
+
+### Um teste meu que estava errado
+
+Escrevi um caso afirmando que sobreposição de verdade também deveria estourar. Ele falhou — e o
+código estava certo: o §8 tira do ciclo as sobrepostas que não são a ativa, porque *"uma reunião
+aceita em paralelo nunca conta como próxima invadida"*. O teste ficou no arquivo, virado para o
+lado certo, para a próxima pessoa não repetir a suposição.
+
+### Por que nenhum teste pegou isso antes
+
+Os testes de estouro sempre usaram duas reuniões coladas, que é o caso que a funcionalidade existe
+para servir. Nenhum tinha uma reunião **da manhã** e outra **da tarde** sem relação — a forma que
+um dia real tem e um teste sintético não. Os quatro casos novos são todos dessa forma.

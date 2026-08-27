@@ -46,6 +46,17 @@ internal sealed record SignalThresholds
     /// <summary>Intervalo abaixo do qual duas reuniões contam como coladas.</summary>
     public int BackToBackMinutes { get; init; } = 5;
 
+    /// <summary>
+    /// Por quanto tempo, depois do fim marcado, o estouro continua sendo acusado.
+    /// <para>
+    /// <b>Precisa ser igual ao <see cref="TimeThresholds.OverrunMinutes"/></b>, e há teste
+    /// travando isso: são o mesmo fato contado por dois vocabulários (§0.5), e quando os dois
+    /// discordam a barra diz uma coisa no slot e outra no chip — foi exatamente o defeito do
+    /// D-037, ali entre o humor e o sinal de reunião próxima.
+    /// </para>
+    /// </summary>
+    public int OverrunMinutes { get; init; } = 10;
+
     /// <summary>Até quando o checkpoint de meio-dia insiste sem reconhecimento.</summary>
     public int MiddayWindowMinutes { get; init; } = 60;
 
@@ -128,6 +139,7 @@ internal static class Signals
         var imminent = TimeSpan.FromMinutes(limits.ImminentMinutes);
         var endedWindow = TimeSpan.FromMinutes(limits.EndedWindowMinutes);
         var backToBack = TimeSpan.FromMinutes(limits.BackToBackMinutes);
+        var overrunWindow = TimeSpan.FromMinutes(limits.OverrunMinutes);
 
         foreach (var e in events)
         {
@@ -184,9 +196,18 @@ internal static class Signals
 
             if (sinceEnd <= TimeSpan.Zero) continue;
 
-            var invasora = events.FirstOrDefault(o => o.Id != e.Id && o.IsRunningAt(now));
+            // A invasora tem de ser a reunião que ESTA atropelou: uma que já estava marcada para
+            // começar antes de esta acabar, ou exatamente no fim dela. Sem o `o.Start <= e.End`,
+            // qualquer reunião mais tarde no dia servia de invasora — e a Daily das 09:00–09:30
+            // acendia vermelho às 11:00, quando a call seguinte começava (D-047).
+            var invasora = events.FirstOrDefault(
+                o => o.Id != e.Id && o.IsRunningAt(now) && o.Start <= e.End);
 
-            if (invasora is not null)
+            // E só dentro da janela de estouro. Sem detecção de presença (D-006) o app não sabe se
+            // você saiu: ele acusa por um tempo e para, que é exatamente o que o humor `Overrun`
+            // já fazia. Sem este limite o alarme voltava a cada reunião do dia, sempre já passado
+            // dos 5 min de escalada — nascia piscando.
+            if (invasora is not null && sinceEnd <= overrunWindow)
             {
                 // O vermelho principal do produto: você segurou uma call por cima de outra. Não
                 // auto-limpa — escala e só sai com clique (§2.1, regra 2).
