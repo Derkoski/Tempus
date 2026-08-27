@@ -120,12 +120,18 @@ livre ou ocupado. O título da reunião vem depois, como detalhe.
 | `InMeeting` | em reunião, dentro do horário | `Ocupado` | azul | texto | `Ocupado · Refino, faltam 25 min → Review` |
 | ↳ com a próxima **sobreposta** | a seguinte começa antes desta acabar | `Ocupado` | azul | texto | `Ocupado · SonarQube em 1 min · até 12:00` |
 | `EndingSoon` | reunião atual acaba em ≤5 min | `Encerrando` | âmbar | **preenchido** | `Encerrando · Refino, faltam 4 min` |
-| `Overrun` | passou do fim marcado, até 10 min depois | `Estourou` | vermelho | **preenchido** | `Estourou · Weekly, passou 22 min` |
+| `Overrun` | passou do fim marcado — até 10 min depois, ou **3 min se não houver mais nada no dia** | `Estourou` | vermelho | **preenchido** | `Estourou · Weekly, passou 22 min` |
 | `OffHours` | fora do expediente, sem nada agendado | `Dia Encerrado` · `Almoço` · `Folga` | laranja | texto **negrito** | `Dia Encerrado` |
 | `Unknown` | `Offline` | `—` | cinza | texto | `—` |
 
 Notas de design:
 
+- **Sem compromisso depois, o estouro dura o que o chip diz** (D-048). Segurar a última call do dia
+  não atrasa ninguém além de quem está nela, então a janela encolhe de 10 para 3 min — o mesmo
+  tempo do `MeetingEnded`, que conta o mesmo fato no chip. Depois disso o slot passa a olhar para
+  amanhã, que é a informação útil. Com compromisso depois nada muda.
+  **Este humor nunca é a invasão de verdade:** ele só é alcançado quando nada está em curso, porque
+  uma reunião correndo devolve `InMeeting` antes. A invasão mora no sinal `MeetingRanIntoNext`.
 - **O contador vai para a próxima fronteira, seja ela qual for** (D-046). Quase sempre é o fim da
   reunião atual — mas quando a seguinte começa **antes** desta acabar, ela passa na frente, e o fim
   da atual vira hora de relógio. Continua havendo **um número relativo só** na frase; ele só muda

@@ -332,8 +332,20 @@ public class InvariantTests
             End = At(15),
         };
 
+        // Com uma reunião depois, que é o cenário do vermelho principal: escalar existe para o
+        // caso "estou segurando esta e a próxima já vai começar". Sem nada depois a janela é a
+        // curta do D-048, e a escalada de 5 min nem chega a acontecer — por decisão, não por
+        // acidente.
+        var review = new AgendaItem
+        {
+            Id = "review",
+            Title = "Review",
+            Start = At(16),
+            End = At(17),
+        };
+
         TimeStatus Em(int minutosDepoisDoFim) => TimeStatusResolver.Resolve(
-            [weekly], At(15).AddMinutes(minutosDepoisDoFim), TimeThresholds.Default, Work);
+            [weekly, review], At(15).AddMinutes(minutosDepoisDoFim), TimeThresholds.Default, Work);
 
         // Vermelho sólido na primeira janela: alarma, mas não pisca.
         Assert.True(Em(1).IsFilled);
@@ -365,12 +377,22 @@ public class InvariantTests
             End = At(15),
         };
 
+        // Como no teste acima: escalada de 5 min precisa da janela longa, que existe quando há
+        // compromisso depois (D-048).
+        var review = new AgendaItem
+        {
+            Id = "review",
+            Title = "Review",
+            Start = At(16),
+            End = At(17),
+        };
+
         var escalado = TimeStatusResolver.Resolve(
-            [weekly], At(15, 7), TimeThresholds.Default, Work);
+            [weekly, review], At(15, 7), TimeThresholds.Default, Work);
         Assert.True(escalado.IsEscalated);
 
         var depois = TimeStatusResolver.Resolve(
-            [weekly], At(15, 7), TimeThresholds.Default, Work,
+            [weekly, review], At(15, 7), TimeThresholds.Default, Work,
             new HashSet<string> { escalado.Occurrence! });
 
         Assert.False(depois.IsEscalated);

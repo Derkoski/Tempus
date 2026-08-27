@@ -2982,3 +2982,66 @@ lado certo, para a próxima pessoa não repetir a suposição.
 Os testes de estouro sempre usaram duas reuniões coladas, que é o caso que a funcionalidade existe
 para servir. Nenhum tinha uma reunião **da manhã** e outra **da tarde** sem relação — a forma que
 um dia real tem e um teste sintético não. Os quatro casos novos são todos dessa forma.
+
+---
+
+## D-048 — Estourar sem nada depois dura o que o chip diz
+
+**Status:** Aceita · 2026-08-27 · encontrada em uso
+
+### O sintoma
+
+*"terminei uma call e fica aparecendo o nome dela e que acabou às 17:30... ao invés de mostrar meu
+próximo compromisso de amanhã."*
+
+Última call do dia: `Investigação problema ETL Novo`, 16:30–**17:30**. Às 17:32 o slot mostrava
+`Estourou · passou 2 min · ETL Novo` em vermelho.
+
+### Não estava travado — e isso importa
+
+O usuário avisou pouco depois: *"agora mudou pro próximo evento amanhã"*. Era a janela de 10 minutos
+do humor `Overrun` expirando sozinha às 17:40, como projetado.
+
+**A queixa continuou válida mesmo assim**, porque a reunião terminou na hora marcada: não houve
+estouro nenhum, e a barra gastou dez minutos falando do passado quando o que interessava era o dia
+seguinte.
+
+### O que a medição revelou
+
+Duas coisas que não se sabiam:
+
+1. **Slot e chip discordavam sobre o mesmo fato.** O chip (`MeetingEnded`) diz "acabou às 17:30" em
+   âmbar por **3 min** e passa sozinho; o slot dizia `Estourou` em vermelho por **10**.
+2. **O humor `Overrun` nunca representa a invasão de verdade.** Ele só é alcançado quando **nada**
+   está em curso — uma reunião correndo devolve `InMeeting` antes. A invasão real mora no sinal
+   `MeetingRanIntoNext`, que o D-047 acabou de acertar. O `invading` de dentro do `Overrun()` é,
+   por construção, sempre falso.
+
+### O freio que me fez parar
+
+A primeira tentativa foi tirar o `Overrun` sempre que não houvesse nada a invadir. Ela quebrou
+**nove testes, três deles de invariante** (I3 e I8) — o `Overrun` é o substrato delas, por ser o
+único humor que escala e aceita reconhecimento.
+
+Nove testes quebrando não é lista de tarefas: é aviso de que a decisão era deliberada. Revertido
+antes de insistir, e a escolha foi para o usuário com o custo de cada opção declarado.
+
+### A decisão
+
+**Sem nada depois no dia, a janela do vermelho encolhe de 10 para 3 minutos** — o mesmo tempo que o
+chip já usava. Com compromisso depois, nada muda: segurar esta atrasa a próxima, e aí o alarme vale
+os 10 minutos inteiros, escalada dos 5 min inclusive.
+
+O aviso não some — quem está segurando gente às 17:30 continua sendo avisado, que era o argumento
+a favor de manter. Ele só para de competir com a informação útil sete minutos antes.
+
+`TimeThresholds.OverrunAloneMinutes` tem teste travando a igualdade com
+`SignalThresholds.EndedWindowMinutes`. Terceira vez que essa trava é necessária (D-037, D-047):
+quando os dois vocabulários do §0.5 contam o mesmo fato, seus limiares não podem divergir em
+silêncio.
+
+### As invariantes ficaram melhores
+
+I3 e I8 usavam uma reunião **solitária** para exercitar o estouro. Passaram a usar uma com
+compromisso depois — que é o cenário que o vermelho principal existe para servir. A escalada de
+5 min só faz sentido quando há algo sendo atrasado, e agora o teste diz isso.

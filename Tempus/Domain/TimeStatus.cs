@@ -167,6 +167,17 @@ internal sealed record TimeThresholds
     public int OverrunMinutes { get; init; } = 10;
 
     /// <summary>
+    /// A mesma janela, quando <b>não há mais nada no dia</b> (D-048). Encolhe porque segurar a
+    /// última call não atrasa compromisso nenhum — o custo é só das pessoas que estão nela.
+    /// <para>
+    /// <b>Igual ao <see cref="SignalThresholds.EndedWindowMinutes"/></b>, e há teste travando: é o
+    /// mesmo fato que o chip conta com "acabou às 17:30", e slot e chip discordarem sobre a mesma
+    /// reunião foi o defeito do D-037 e do D-047.
+    /// </para>
+    /// </summary>
+    public int OverrunAloneMinutes { get; init; } = 3;
+
+    /// <summary>
     /// Quanto tempo um alarme aguenta sem reconhecimento antes de passar a piscar (§1.1, I8).
     /// Nunca menor que isto — a invariante fixa o piso, a configuração só pode afrouxar.
     /// </summary>
@@ -202,7 +213,14 @@ internal static class TimeStatusResolver
 
         // Reunião que acabou de passar do horário marcado. Vem antes de "próxima" porque estourar
         // é o problema mais caro que a barra conhece.
-        var overrunWindow = TimeSpan.FromMinutes(thresholds.OverrunMinutes);
+        //
+        // A janela encolhe quando não há mais nada no dia (D-048): segurar a última call não
+        // atrasa compromisso nenhum, então o aviso vale o mesmo tempo que o chip já usa para
+        // dizer "acabou às 17:30" — e depois disso a barra passa a olhar para amanhã, que é a
+        // informação útil. Encontrado em uso: a última call acabou às 17:30 e o slot ficou dez
+        // minutos em vermelho com o nome dela em vez do compromisso do dia seguinte.
+        var overrunWindow = TimeSpan.FromMinutes(
+            next is null ? thresholds.OverrunAloneMinutes : thresholds.OverrunMinutes);
         var justEnded = relevant
             .Where(e => e.End <= now && now - e.End <= overrunWindow)
             .OrderByDescending(e => e.End)

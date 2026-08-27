@@ -301,4 +301,62 @@ public class TimeStatusResolverTests
         Assert.Contains("Blindagem até 12:00", status.Detail);
         Assert.Contains("SonarQube às 11:30", status.Detail);
     }
+
+    // ================================================================ fim do dia (D-048)
+
+    private static AgendaItem UltimaDoDia => Meeting("ETL", At(16, 30), At(17, 30));
+
+    /// <summary>
+    /// <b>O caso que motivou a mudança.</b> A última call do dia acabou às 17:30 e o slot ficava
+    /// dez minutos em vermelho com o nome dela, em vez de mostrar o compromisso de amanhã. Não
+    /// havia estouro nenhum: a reunião terminou na hora marcada.
+    /// </summary>
+    [Fact]
+    public void Sem_nada_depois_o_estouro_dura_o_mesmo_que_o_chip()
+    {
+        // Dentro da janela curta ainda alarma: quem está segurando gente precisa saber.
+        Assert.Equal(TimeMood.Overrun, Resolve([UltimaDoDia], At(17, 32)).Mood);
+
+        // Passados os 3 min, a barra olha para frente em vez de para trás.
+        Assert.NotEqual(TimeMood.Overrun, Resolve([UltimaDoDia], At(17, 34)).Mood);
+    }
+
+    /// <summary>
+    /// Com compromisso depois nada muda: segurar esta atrasa a próxima, e aí o alarme vale os
+    /// 10 minutos inteiros — inclusive passando pela escalada dos 5 min (I8).
+    /// </summary>
+    [Fact]
+    public void Com_algo_depois_a_janela_longa_continua()
+    {
+        IReadOnlyList<AgendaItem> dia = [UltimaDoDia, Meeting("Retro", At(18), At(19))];
+
+        Assert.Equal(TimeMood.Overrun, Resolve(dia, At(17, 34)).Mood);
+        Assert.Equal(TimeMood.Overrun, Resolve(dia, At(17, 39)).Mood);
+        Assert.True(Resolve(dia, At(17, 36)).IsEscalated);
+    }
+
+    /// <summary>
+    /// Depois da janela curta, com o expediente encerrado, o slot vira "Dia Encerrado" — e é esse
+    /// humor que libera o lookahead de amanhã no painel. Era exatamente o que o usuário queria ver.
+    /// </summary>
+    [Fact]
+    public void Passada_a_janela_curta_o_dia_encerra_e_o_lookahead_pode_aparecer()
+    {
+        var status = Resolve([UltimaDoDia], At(17, 34));
+
+        Assert.Equal(TimeMood.OffHours, status.Mood);
+        Assert.Null(status.Summary); // Summary vazio é o que dá lugar ao "amanhã" no slot
+    }
+
+    /// <summary>
+    /// A janela curta e o âmbar do chip contam o <b>mesmo fato</b> pelos dois vocabulários (§0.5).
+    /// Quando discordam, a barra diz uma coisa no slot e outra no chip — foi o D-037 e o D-047.
+    /// </summary>
+    [Fact]
+    public void A_janela_curta_e_a_do_chip_sao_a_mesma()
+    {
+        Assert.Equal(
+            SignalThresholds.Default.EndedWindowMinutes,
+            TimeThresholds.Default.OverrunAloneMinutes);
+    }
 }
