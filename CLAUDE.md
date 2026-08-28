@@ -69,7 +69,11 @@ nenhum está com `Skip`. **Feche o app antes de compilar** — o exe em execuç�
 11. **Respeite a lista de fora-de-escopo** de `SPEC.md`. Keep e Chat foram cortados por motivos
     técnicos documentados em D-004, e a detecção de microfone por D-006 — nenhum por falta de
     tempo.
-12. **Escrita nunca falha em silêncio.** Todo gesto que muda dado no Google passa pela
+12. **`Render` de painel traz dados, nunca navegação.** Modo aberto, dia selecionado, linha em
+    edição — tudo isso inicializa na construção do painel, não a cada desenho. O sync redesenha os
+    painéis abertos, e um campo de navegação reinicializado ali desfaz o clique do usuário um
+    segundo depois de ele dar (D-049). Já mordeu dois painéis com sintomas opostos.
+13. **Escrita nunca falha em silêncio.** Todo gesto que muda dado no Google passa pela
     `WriteQueue`: aparece na tela na hora, repete sozinho, e vira "não salvou" visível se desistir
     (D-029). Nada de `catch { return false; }` com o resultado descartado por quem chamou — foi
     exatamente isso que fazia um clique sumir sem deixar rastro.

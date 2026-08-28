@@ -54,14 +54,25 @@ internal partial class AgendaPanel : Window
     private DateTimeOffset _now;
 
     /// <summary>
-    /// O dia que a timeline mostra, ou <c>null</c> quando o painel está no resumo dos próximos
-    /// dias.
+    /// Em qual dos dois modos o painel está.
     /// <para>
-    /// Estado do <b>painel</b>, e não do <c>App</c>: a seleção morre quando o painel fecha, que é
-    /// o comportamento certo para uma consulta. Reabrir cai em hoje.
+    /// Separado do dia selecionado de propósito. Enquanto um campo só carregava as duas coisas
+    /// (<c>null</c> = resumo <b>e</b> <c>null</c> = ainda não inicializado), todo <c>Render</c>
+    /// vindo do sync devolvia o painel para hoje — e abrir o painel dispara uma rodada, que
+    /// chegava um segundo depois e desfazia o clique em "Próximos dias".
+    /// </para>
+    /// <para>
+    /// Estado do <b>painel</b>, e não do <c>App</c>: morre quando o painel fecha, que é o
+    /// comportamento certo para uma consulta. Reabrir cai em hoje.
     /// </para>
     /// </summary>
-    private DateOnly? _selected;
+    private bool _resumo;
+
+    /// <summary>
+    /// O dia da timeline, ou <c>null</c> para hoje. Guardar a ausência em vez da data de hoje faz
+    /// o painel acompanhar a virada do dia sozinho.
+    /// </summary>
+    private DateOnly? _dia;
 
     /// <summary>
     /// O dia aberto no resumo, ou <c>null</c>. Um por vez: as janelas livres — que é o que se
@@ -80,18 +91,18 @@ internal partial class AgendaPanel : Window
         _work = work;
         _now = now;
 
-        // Primeira renderização cai em hoje. Abrir o painel é, na esmagadora maioria das vezes,
-        // perguntar sobre agora — trocar o padrão pelo resumo custaria um clique no caso comum
-        // para servir o ocasional.
-        _selected ??= DateOnly.FromDateTime(now.Date);
-
+        // Só dados entram aqui. Onde o usuário está navegando é decisão dele, e um retrato novo
+        // do Google não é motivo para mudá-la.
         Draw();
     }
 
     private void Draw()
     {
-        if (_selected is { } dia) DrawDay(dia);
-        else DrawWeek();
+        // O padrão é a timeline de hoje: abrir o painel é, na esmagadora maioria das vezes,
+        // perguntar sobre agora — trocá-lo pelo resumo custaria um clique no caso comum para
+        // servir o ocasional.
+        if (_resumo) DrawWeek();
+        else DrawDay(_dia ?? DateOnly.FromDateTime(_now.Date));
 
         RepositionAfterLayout();
     }
@@ -105,7 +116,7 @@ internal partial class AgendaPanel : Window
             ? "Agenda de hoje"
             : Brasil.TextInfo.ToTitleCase(day.ToString("dddd, dd/MM", Brasil));
 
-        ShowLink("Próximos dias  ›", () => { _selected = null; Draw(); });
+        ShowLink("Próximos dias  ›", () => { _resumo = true; Draw(); });
 
         // Pausas de descanso são planejamento do dia corrente. Projetá-las num dia futuro
         // inventaria compromisso que não existe.
@@ -183,7 +194,7 @@ internal partial class AgendaPanel : Window
 
         HeaderText.Text = "Próximos dias";
         HeaderCount.Text = "";
-        ShowLink("‹  Voltar", () => { _selected = hoje; Draw(); });
+        ShowLink("‹  Voltar", () => { _resumo = false; _dia = null; Draw(); });
 
         Timeline.Children.Clear();
 
@@ -260,7 +271,8 @@ internal partial class AgendaPanel : Window
         abrir.MouseLeftButtonUp += (_, e) =>
         {
             e.Handled = true;
-            _selected = day;
+            _resumo = false;
+            _dia = day;
             Draw();
         };
 

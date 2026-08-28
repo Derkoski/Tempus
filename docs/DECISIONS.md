@@ -3045,3 +3045,48 @@ silêncio.
 I3 e I8 usavam uma reunião **solitária** para exercitar o estouro. Passaram a usar uma com
 compromisso depois — que é o cenário que o vermelho principal existe para servir. A escalada de
 5 min só faz sentido quando há algo sendo atrasado, e agora o teste diz isso.
+
+---
+
+## D-049 — `Render` traz dados; nunca navegação
+
+**Data:** 2026-08-28 · **Status:** aceita
+
+### O sintoma
+
+> *"tem um bug quando clico em próximos dias, ele abre e já volta pro menu anterior rapidinho, aí
+> eu tenho que clicar uma segunda vez pra ele poder abrir e ficar para eu poder ler"*
+
+### A causa: um campo com dois significados
+
+O `AgendaPanel` guardava a navegação num campo só, e `null` queria dizer duas coisas
+irreconciliáveis — **"estou no resumo dos próximos dias"** e **"ainda não inicializei"**. Com isso,
+todo `Render` precisava do `_selected ??= hoje` para cobrir o segundo caso, e acabava desfazendo o
+primeiro.
+
+O gatilho é uma decisão boa de outro lugar: **abrir um painel força uma rodada de sync**
+(`AgendaRequested`), para o usuário nunca ler lista velha. Ela volta um ou dois segundos depois —
+exatamente em cima do clique em "Próximos dias". Na segunda tentativa não há rodada pendente, e por
+isso "funciona": o bug tinha cara de intermitente sendo perfeitamente determinístico.
+
+### A regra
+
+**`Render` recebe dados e só. Onde o usuário está navegando é decisão dele, e um retrato novo do
+Google não é motivo para mudá-la.** Estado de navegação e de edição inicializa na **construção** do
+painel, não a cada desenho.
+
+Na prática, dois campos em vez de um: `_resumo` (em qual modo) e `_dia` (qual dia, `null` = hoje).
+Guardar a ausência em vez da data de hoje é o que faz o painel acompanhar a virada do dia sozinho.
+
+### Segunda vez na mesma pedra
+
+O rename de tarefa (D-045) quebrou por parentesco disto: o `_editing` do `TasksPanel` era ligado
+antes de um `Render` que a própria guarda engolia, e o painel travava inteiro. A cura ali foi
+separar `Render` (represa) de `Draw` (sempre desenha) — a mesma separação que o `AgendaPanel` agora
+tem.
+
+Dois painéis, o mesmo erro, sintomas opostos: um travou de vez, o outro se desfez sozinho. Por isso
+virou regra escrita em vez de conserto pontual — **o próximo painel nasce assim.**
+
+Sem teste travando: `AgendaPanel` é `Window` do WPF e não sobe fora de UI. O que o teste protegeria
+está no formato — `Render` não tem mais nenhuma atribuição a estado de navegação para errar.
