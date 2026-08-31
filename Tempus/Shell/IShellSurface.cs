@@ -74,6 +74,9 @@ internal interface IShellSurface : IDisposable
     /// <summary>Usuário clicou na barra offline e quer reautenticar (<c>SEVERITY.md</c> §6).</summary>
     event EventHandler? ReauthRequested;
 
+    /// <summary>Barra cinza por sync caído: tentar de novo, sem passar pelo navegador.</summary>
+    event EventHandler? SyncRetryRequested;
+
     /// <summary>Painel de tarefas, superfície S2 do SPEC.</summary>
     event EventHandler? TasksRequested;
 

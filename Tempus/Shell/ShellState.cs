@@ -25,6 +25,19 @@ internal sealed record ShellState
     /// </summary>
     public bool IsOffline { get; init; }
 
+    /// <summary>
+    /// Estando <see cref="IsOffline"/>, se o que falta é um consent novo — e não rede.
+    /// <para>
+    /// É o que faz o clique na barra cinza seguir a <b>causa</b>: login morto abre o navegador,
+    /// sync caído tenta de novo. Antes os dois abriam o navegador, e num problema de rede isso
+    /// custava uma ida ao Google e um refresh token novo para não resolver nada.
+    /// </para>
+    /// <para>
+    /// Verdadeiro por padrão: na dúvida, oferecer o gesto que sempre existiu.
+    /// </para>
+    /// </summary>
+    public bool OfflineNeedsConsent { get; init; } = true;
+
     public Severity Severity { get; init; } = Severity.Calm;
 
     /// <summary>

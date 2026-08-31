@@ -3090,3 +3090,76 @@ virou regra escrita em vez de conserto pontual — **o próximo painel nasce ass
 
 Sem teste travando: `AgendaPanel` é `Window` do WPF e não sobe fora de UI. O que o teste protegeria
 está no formato — `Render` não tem mais nenhuma atribuição a estado de navegação para errar.
+
+---
+
+## D-050 — Rede não é login: o cinza que pedia o gesto errado
+
+**Data:** 2026-08-31 · **Status:** aceita
+
+### O sintoma
+
+> *"o Tempus está desconectando muito hoje e toda vez que eu clico em reconectar aparece isso no
+> Google"*
+
+### O que a medição mostrou
+
+A tela do Google **não era o problema**: `Prompt = "consent"` a força em todo re-consent de
+propósito (sem ela o Google pode devolver a autorização sem refresh token, e o app duraria uma
+hora), e o aviso de app não verificado é o normal do modo Testing permanente (D-003).
+
+Três medidas contaram a história de verdade:
+
+| Medida | Valor |
+|---|---|
+| Suspensões/retomadas no dia | 4 — 09:45, 10:43, 12:24, 13:24, ciclos de ~4 s |
+| Última gravação do token | 11:13:37, com o app de pé desde 09:01 e o relógio em 15:47 |
+| Estado da barra | "Abrindo o navegador…" |
+
+Um app saudável reescreve o arquivo de token a cada renovação do access token, ~1×/hora. Faltavam
+quatro. E quando o app foi reiniciado, a primeira rodada deu `Ok` **com o mesmo token de 11:13** —
+prova de que o login nunca esteve morto. O que havia era um consent aberto e nunca concluído.
+
+### Os defeitos
+
+**1. Toda exceção da conexão virava falha de login.** O `catch` do `ConnectAsync` não distinguia
+nada: rede, DNS, proxy e TLS anunciavam "Login do Google expirou". E era o pior lugar possível para
+errar, porque `NeedsAuth` **fura a tolerância de 10 minutos** do §0 — `IsUsable` só aceita `Ok` ou
+`Failing` — e apaga a barra na hora, enquanto uma falha de transporte deveria ser absorvida em
+silêncio e resolver-se sozinha no ciclo seguinte. Logo depois de uma retomada do sono é exatamente
+quando a pilha de rede ainda não subiu.
+
+**2. O clique no cinza sempre abria o navegador.** Um problema de rede custava uma ida ao Google e
+um refresh token novo para não consertar nada — e, pior, ensinava que re-consent era o remédio.
+
+**3. Um consent abandonado nunca terminava.** `ReceiveCodeAsync` esperava sem prazo. Fechada a aba,
+a barra ficava em "Abrindo o navegador…" indefinidamente, dizendo algo que já deixara de ser
+verdade (regra 10). Clicar de novo funcionava — o receptor pega outra porta — mas o anterior ficava
+escutando para sempre.
+
+**4. Nada disso deixava rastro.** O único vestígio de um dia inteiro de quedas era a data do arquivo
+de token, e dela só se deduz que o app parou de renovar.
+
+### As decisões
+
+`SyncFailure.NeedsConsent` é o único juiz de qual falha pede navegador: `TokenResponseException`
+(o `invalid_grant` dos 7 dias), consent recusado e consent abandonado. **Todo o resto é transporte**
+e vira `Failing`, que preserva o último retrato pelos 10 minutos do §0.
+
+O gesto passa a seguir a causa, via `ShellState.OfflineNeedsConsent`. A entrada **"Reconectar ao
+Google" do menu continua sempre pedindo consent** — trocar de escopo exige isso mesmo com o login
+válido, e por isso os dois gestos precisaram de eventos separados em vez de um roteamento só.
+
+O consent ganha prazo de **5 minutos** e é cancelado por um clique novo. Generoso de propósito:
+escolher conta, ler o aviso de app não verificado e passar pelo "Avançado" leva minutos legítimos.
+O prazo não existe para apressar ninguém — existe para que o abandono termine.
+
+`SyncLog` grava as **transições** de saúde em `%APPDATA%\Tempus\sync-log.txt`. Só transições: um
+retrato idêntico a cada 15 s afogaria o que se procura. Falha de escrita é engolida — é a única
+exceção honesta à regra 13, que vale para escrita que o usuário pediu, e ninguém pediu isto.
+
+### O que ficou sem resposta
+
+**Por que a barra caiu antes das 11:13 continua desconhecido.** As quatro suspensões são a
+suspeita, e a classificação nova é o que teria absorvido cada uma sem apagar a barra — mas isso é
+hipótese, não medida. É para isso que o log existe: na próxima vez, há o que ler.

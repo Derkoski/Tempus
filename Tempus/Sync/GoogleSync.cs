@@ -63,13 +63,25 @@ internal sealed class GoogleSync : IDisposable
     private int? _unreadMail;
     private DateTimeOffset _unreadAt;
 
-    public GoogleSync(GoogleAuth auth, SyncOptions options, GoogleOptions google, int completedDays = 7)
+    /// <summary>
+    /// Trilha das transições de saúde. Opcional: os testes não escrevem em disco, e o modo demo
+    /// não passa por aqui.
+    /// </summary>
+    private readonly SyncLog? _log;
+
+    public GoogleSync(
+        GoogleAuth auth,
+        SyncOptions options,
+        GoogleOptions google,
+        int completedDays = 7,
+        SyncLog? log = null)
     {
         _auth = auth;
         _options = options;
         _google = google;
         _mailQuery = google.MailQuery;
         _completedDays = completedDays;
+        _log = log;
     }
 
     public event EventHandler<SyncSnapshot>? Updated;
@@ -82,16 +94,51 @@ internal sealed class GoogleSync : IDisposable
         _ = RunAsync(_cts.Token);
     }
 
+    /// <summary>
+    /// Quanto tempo a espera pelo callback do navegador dura antes de desistir.
+    /// <para>
+    /// Generoso porque a tela do Google não é rápida: escolher a conta, ler o aviso de app não
+    /// verificado e passar pelo "Avançado" leva minutos legítimos. O prazo não existe para apressar
+    /// ninguém — existe para que um consent <b>abandonado</b> termine em vez de ficar pendurado.
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan ConsentTimeout = TimeSpan.FromMinutes(5);
+
+    /// <summary>O consent em curso, se houver. Só um por vez.</summary>
+    private CancellationTokenSource? _consent;
+
     /// <summary>Re-consent a partir de um clique. Único caminho que pode abrir o navegador.</summary>
     public async Task ReauthorizeAsync()
     {
-        var ct = _cts?.Token ?? CancellationToken.None;
+        var app = _cts?.Token ?? CancellationToken.None;
+
+        // Clicar de novo quer dizer "a anterior não deu certo, tenta outra vez". Cancelar a
+        // pendente é o que fecha o receptor de loopback que ficaria escutando para sempre.
+        _consent?.Cancel();
+
+        var consent = CancellationTokenSource.CreateLinkedTokenSource(app);
+        consent.CancelAfter(ConsentTimeout);
+        _consent = consent;
 
         // O navegador pode demorar a aparecer, e sem isto o clique não dá retorno nenhum — o
         // usuário fica sem saber se o app registrou a ação ou se ela se perdeu.
         Publish(Current with { Health = SyncHealth.NeedsAuth, Message = "Abrindo o navegador…" });
 
-        if (await ConnectAsync(interactive: true, ct)) await PollAsync(ct);
+        try
+        {
+            if (await ConnectAsync(interactive: true, consent.Token)) await PollAsync(app);
+        }
+        catch (OperationCanceledException)
+        {
+            // App fechando, ou este fluxo foi substituído por um clique novo — e nesse caso quem
+            // assumiu é que publica. Anunciar aqui sobrescreveria o estado do fluxo em curso.
+            // O prazo estourado não cai aqui: ele vira ConsentAbandonedException lá dentro, para
+            // que a mensagem venha do mesmo lugar que as outras falhas de conexão.
+        }
+        finally
+        {
+            if (ReferenceEquals(_consent, consent)) _consent = null;
+        }
     }
 
     public Task RefreshAsync() => PollAsync(_cts?.Token ?? CancellationToken.None);
@@ -276,11 +323,24 @@ internal sealed class GoogleSync : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Antes, TODA exceção daqui virava "Login do Google expirou" — inclusive rede, DNS,
+            // proxy e TLS, que consent nenhum conserta. E era o pior lugar para errar: NeedsAuth
+            // fura a tolerância de 10 min do §0 e apaga a barra na hora, enquanto Failing preserva
+            // o último retrato e deixa o ciclo seguinte se resolver sozinho.
+            var consent = SyncFailure.NeedsConsent(ex);
+
             Publish(Current with
             {
-                Health = SyncHealth.NeedsAuth,
-                Message = $"Falha ao autenticar: {ex.Message}",
+                Health = consent ? SyncHealth.NeedsAuth : SyncHealth.Failing,
+                Message = ex switch
+                {
+                    ConsentAbandonedException => "Consent não concluído — clique para tentar de novo",
+                    ConsentDeniedException => "Consent recusado — clique para tentar de novo",
+                    TokenResponseException => "Login do Google expirou — clique para entrar",
+                    _ => $"Sem conexão com o Google: {ex.Message}",
+                },
             });
+
             return false;
         }
     }
@@ -341,6 +401,11 @@ internal sealed class GoogleSync : IDisposable
 
     private void Publish(SyncSnapshot snapshot)
     {
+        // Só transição, nunca batida de relógio: um retrato igual ao anterior a cada 15 s encheria
+        // o arquivo de ruído e esconderia justamente o que se procura nele.
+        if (snapshot.Health != Current.Health || snapshot.Message != Current.Message)
+            _log?.Record(snapshot.Health, snapshot.Message);
+
         Current = snapshot;
         Updated?.Invoke(this, snapshot);
     }

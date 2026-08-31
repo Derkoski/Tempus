@@ -233,7 +233,9 @@ public partial class App : Application
         var auth = new GoogleAuth(
             GoogleOptions.ClientSecretPath, GoogleOptions.TokenDirectory, options.LoginHint);
 
-        var sync = new GoogleSync(auth, cadence, options, cadence.CompletedDays);
+        var sync = new GoogleSync(
+            auth, cadence, options, cadence.CompletedDays, SyncLog.InDataDirectory());
+
         _sync = sync;
 
         // A fila é criada aqui porque precisa do executor, que é este sync. O store, não: ele já
@@ -273,6 +275,7 @@ public partial class App : Application
         };
 
         surface.ReauthRequested += (_, _) => OnReauthRequested();
+        surface.SyncRetryRequested += (_, _) => _ = sync.RefreshAsync();
         surface.SyncRequested += (_, _) => _ = sync.RefreshAsync();
         // Abrir um painel força uma rodada: é o momento em que o usuário está de fato olhando os
         // dados, e vale a requisição extra para ele nunca ver uma lista velha.
@@ -401,6 +404,10 @@ public partial class App : Application
                 IsOffline = true,
                 Reason = OfflineReason(snapshot, now),
                 LastSyncAt = snapshot.LastSuccessAt,
+
+                // Qual gesto a barra oferece. Sync caído não se conserta com navegador.
+                OfflineNeedsConsent =
+                    snapshot.Health is SyncHealth.NeedsAuth or SyncHealth.NotConfigured,
             };
         }
 

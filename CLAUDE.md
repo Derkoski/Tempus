@@ -104,6 +104,7 @@ dotnet publish Tempus/Tempus.csproj -c Release -r win-x64 --self-contained true 
   -p:EnableCompressionInSingleFile=true -o publish
 ```
 
-Arquivos de dados (fora do repo, por máquina): `%APPDATA%\Tempus\client_secret.json` e
-`%APPDATA%\Tempus\tokens\`. O token é DPAPI vinculado a usuário **e** máquina — não copiar entre
+Arquivos de dados (fora do repo, por máquina): `%APPDATA%\Tempus\client_secret.json`,
+`%APPDATA%\Tempus\tokens\` e `%APPDATA%\Tempus\sync-log.txt` — **primeiro lugar a olhar** quando a
+barra ficar cinza sem motivo claro; guarda só as transições de saúde do sync (D-050). O token é DPAPI vinculado a usuário **e** máquina — não copiar entre
 máquinas.

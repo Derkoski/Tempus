@@ -26,6 +26,7 @@ internal sealed class FloatingBarSurface : IShellSurface
         _window.ActiveEventChosen += (_, id) => ActiveEventChosen?.Invoke(this, id);
         _window.MeetingLeftToggled += (_, occurrence) => MeetingLeftToggled?.Invoke(this, occurrence);
         _window.ReauthRequested += (_, e) => ReauthRequested?.Invoke(this, e);
+        _window.SyncRetryRequested += (_, e) => SyncRetryRequested?.Invoke(this, e);
         _window.TasksRequested += (_, e) => TasksRequested?.Invoke(this, e);
         _window.AgendaRequested += (_, e) => AgendaRequested?.Invoke(this, e);
         _window.MailRequested += (_, e) => MailRequested?.Invoke(this, e);
@@ -45,6 +46,9 @@ internal sealed class FloatingBarSurface : IShellSurface
     /// <summary>"Já saí desta reunião", ou o desfazer disso (D-041).</summary>
     public event EventHandler<string>? MeetingLeftToggled;
     public event EventHandler? ReauthRequested;
+
+    /// <summary>Barra cinza por sync caído: tentar de novo, sem passar pelo navegador.</summary>
+    public event EventHandler? SyncRetryRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
     public event EventHandler? MailRequested;

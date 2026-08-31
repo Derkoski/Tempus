@@ -143,6 +143,9 @@ internal partial class FloatingBarWindow : Window
     /// <summary>Escolha do evento ativo entre reunioes sobrepostas (SEVERITY 8). Carrega o id.</summary>
     public event EventHandler<string>? ActiveEventChosen;
     public event EventHandler? ReauthRequested;
+
+    /// <summary>Barra cinza por sync caído: o gesto é tentar de novo, não reautenticar.</summary>
+    public event EventHandler? SyncRetryRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
     public event EventHandler? MailRequested;
@@ -783,7 +786,7 @@ internal partial class FloatingBarWindow : Window
     {
         if (_state.IsOffline)
         {
-            Raise(ReauthRequested);
+            RaiseOfflineGesture();
             return;
         }
 
@@ -820,7 +823,7 @@ internal partial class FloatingBarWindow : Window
     {
         if (_state.IsOffline)
         {
-            Raise(ReauthRequested);
+            RaiseOfflineGesture();
             return;
         }
 
@@ -844,7 +847,7 @@ internal partial class FloatingBarWindow : Window
     {
         if (_state.IsOffline)
         {
-            Raise(ReauthRequested);
+            RaiseOfflineGesture();
             return;
         }
 
@@ -1034,9 +1037,17 @@ internal partial class FloatingBarWindow : Window
     /// </summary>
     private void OrReauth(EventHandler? handler)
     {
-        if (_state.IsOffline) Raise(ReauthRequested);
+        if (_state.IsOffline) RaiseOfflineGesture();
         else Raise(handler);
     }
+
+    /// <summary>
+    /// O gesto da barra cinza, escolhido pela <b>causa</b> do offline. Só aqui: a entrada
+    /// "Reconectar ao Google" do menu continua sempre pedindo consent, porque trocar de escopo
+    /// exige isso mesmo com o login válido.
+    /// </summary>
+    private void RaiseOfflineGesture() =>
+        Raise(_state.OfflineNeedsConsent ? ReauthRequested : SyncRetryRequested);
 
     // ---------------------------------------------------------------- teardown
 

@@ -112,12 +112,24 @@ internal sealed class GoogleAuth
         var flow = await CreateFlowAsync(ct);
         var receiver = new LocalServerCodeReceiver();
 
-        var response = await receiver.ReceiveCodeAsync(
-            flow.CreateAuthorizationCodeRequest(receiver.RedirectUri), ct);
+        AuthorizationCodeResponseUrl response;
+
+        try
+        {
+            response = await receiver.ReceiveCodeAsync(
+                flow.CreateAuthorizationCodeRequest(receiver.RedirectUri), ct);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // O token linkado estourou o prazo: aba fechada, ou consent deixado pela metade.
+            // Sem isto a espera não termina nunca, e a barra fica em "Abrindo o navegador…" para
+            // sempre — dizendo algo que já deixou de ser verdade, que é o que a regra 10 proíbe.
+            throw new ConsentAbandonedException();
+        }
 
         if (string.IsNullOrEmpty(response.Code))
         {
-            throw new InvalidOperationException(
+            throw new ConsentDeniedException(
                 $"consent recusado ({response.Error}) {response.ErrorDescription}".Trim());
         }
 
