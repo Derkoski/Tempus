@@ -56,6 +56,26 @@ internal sealed class FakeStateSource
             new TaskItem { Id = "t5", Title = "Avaliar migração para .NET 10", Due = today.AddDays(6) },
             new TaskItem { Id = "t6", Title = "Anotar ideias para o Tempus" },
 
+            // Os dois casos que fazem o título quebrar. O primeiro ocupa duas linhas inteiras — é
+            // o tamanho que as automações do Chat produzem, e foi o que motivou a quebra. O
+            // segundo passa das duas e tem de terminar em reticências. Sem eles no demo, o corte
+            // do título só seria visto com dado real, que é justamente onde não se testa (D-024).
+            new TaskItem
+            {
+                Id = "t9",
+                Title = "Levantar com o time de dados quais tabelas do ETL antigo ainda são lidas "
+                    + "pelo relatório de faturamento antes de agendar a virada",
+                Due = today,
+            },
+            new TaskItem
+            {
+                Id = "t10",
+                Title = "Documentar no Confluence o passo a passo de reprocessamento manual da "
+                    + "carga noturna, incluindo os parâmetros de retentativa, quem aciona fora do "
+                    + "horário comercial e como avisar o cliente quando passa das 6h",
+                Due = today.AddDays(2),
+            },
+
             // Duas já concluídas, para a seção de desfazer ter o que mostrar sem exigir que
             // alguém conclua uma antes de poder testá-la (D-030).
             new TaskItem

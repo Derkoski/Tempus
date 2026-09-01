@@ -265,14 +265,14 @@ internal partial class TasksPanel : Window
         };
         Grid.SetColumn(box, 0);
 
+        // Mesmo tratamento da linha aberta: reabrir a tarefa certa exige reconhecer qual é.
         var title = new TextBlock
         {
             Text = entry.Item.Title,
-            TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
             TextDecorations = TextDecorations.Strikethrough,
             Foreground = new SolidColorBrush(_palette.Muted),
-        };
+        }.WrappingToTwoLines();
         Grid.SetColumn(title, 1);
 
         var status = entry.HasFailed
@@ -392,10 +392,9 @@ internal partial class TasksPanel : Window
             : new TextBlock
             {
                 Text = task.Title,
-                TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = new SolidColorBrush(_palette.BarForeground),
-            };
+            }.WrappingToTwoLines();
         Grid.SetColumn(title, 1);
 
         // No lugar do vencimento, quando algo não subiu: naquele instante o que importa é o que
@@ -432,20 +431,20 @@ internal partial class TasksPanel : Window
             // está ali, e nada no caminho do olho quando não está.
             if (status.Tag is true) status.Visibility = Visibility.Visible;
 
-            rename.Visibility = Visibility.Visible;
+            // Só o lápis que a linha de fato oferece. Sem a guarda, passar o ponteiro numa linha
+            // concluída ou com escrita pendurada acendia um gesto que ela não aceita.
+            if (rename.Tag is true) rename.Visibility = Visibility.Visible;
         };
         row.MouseLeave += (_, _) =>
         {
             row.Background = Brushes.Transparent;
 
-            // Tag marcada = confirmação aberta; some só depois de resolvida.
-            if (delete.Tag is null) delete.Visibility = Visibility.Collapsed;
-
-            // Hidden, e não Collapsed: a coluna já reservou o espaço dela, e recolher faria
-            // título e ✕ pularem de lugar a cada passagem do ponteiro.
+            // Hidden, e não Collapsed, nas três: a coluna já reservou o espaço dela, e recolher
+            // faria título, ✎ e ✕ pularem de lugar a cada passagem do ponteiro.
+            // Tag marcada no ✕ = confirmação aberta; some só depois de resolvida.
+            if (delete.Tag is null) delete.Visibility = Visibility.Hidden;
             if (status.Tag is true) status.Visibility = Visibility.Hidden;
-
-            rename.Visibility = Visibility.Collapsed;
+            if (rename.Tag is true) rename.Visibility = Visibility.Hidden;
         };
         row.MouseLeftButtonUp += (_, e) =>
         {
@@ -532,7 +531,11 @@ internal partial class TasksPanel : Window
             Margin = new Thickness(10, 0, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed,
+
+            // Hidden, e não Collapsed: a coluna reserva o espaço dela o tempo todo. Recolher fazia
+            // o título crescer quando o ponteiro saía — invisível enquanto era uma linha com
+            // reticências, mas com quebra em duas o texto se rearranja debaixo do ponteiro.
+            Visibility = Visibility.Hidden,
             Background = Brushes.Transparent,
             Cursor = Cursors.Hand,
             ToolTip = idle,
@@ -612,7 +615,7 @@ internal partial class TasksPanel : Window
             Background = Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = Cursors.Hand,
-            Visibility = Visibility.Collapsed,
+            Visibility = Visibility.Hidden, // reserva a coluna; ver o motivo em BuildDeleteAction
             ToolTip = "Renomear tarefa",
             Child = new TextBlock
             {
@@ -623,12 +626,18 @@ internal partial class TasksPanel : Window
         };
 
         // Concluída não se renomeia: o gesto dela é desfazer a conclusão (D-030), e o que já
-        // acabou não merece cobrar edição.
+        // acabou não merece cobrar edição. Linha com falha pendente também não — renomear enquanto
+        // uma escrita não subiu deixaria duas intenções conflitantes na fila, que é a mesma guarda
+        // que concluir e excluir já aplicam.
         if (entry.IsPending || entry.HasFailed || entry.Item.IsCompleted)
         {
             alvo.Visibility = Visibility.Collapsed;
             return alvo;
         }
+
+        // Marca que este lápis é oferecível: sem isto o hover da linha revelava até o que os
+        // testes acima acabaram de recolher.
+        alvo.Tag = true;
 
         var hover = new SolidColorBrush(_palette.PanelBorder);
         alvo.MouseEnter += (_, _) => alvo.Background = hover;
@@ -1050,5 +1059,36 @@ internal partial class TasksPanel : Window
         ComposerHint.Foreground = new SolidColorBrush(_palette.Muted);
         NewTaskBox.Foreground = new SolidColorBrush(_palette.BarForeground);
         NewTaskBox.CaretBrush = new SolidColorBrush(_palette.BarForeground);
+    }
+}
+
+internal static class TitleText
+{
+    /// <summary>Altura de uma linha, fixada para o corte não depender da métrica da fonte.</summary>
+    private const double LineDip = 18;
+
+    /// <summary>
+    /// Título que quebra em <b>duas</b> linhas e só então usa reticências.
+    /// <para>
+    /// Uma linha só escondia metade do que vem das automações do Chat. Ilimitado seria pior: um
+    /// título patológico — uma URL colada, uma frase inteira — empurraria a lista para fora da
+    /// tela, e o painel existe para ser varrido com o olho, não lido parágrafo a parágrafo.
+    /// </para>
+    /// <para>
+    /// WPF não tem <c>MaxLines</c> (é de UWP): o corte é por altura, e por isso a linha precisa ter
+    /// altura fixa em vez da natural da fonte. <c>BlockLineHeight</c> é o que garante isso — sem
+    /// ele, um acento ou um glifo mais alto no meio do texto empurraria a segunda linha para fora
+    /// do limite e o título viraria uma linha de novo, sem explicação visível.
+    /// </para>
+    /// </summary>
+    public static TextBlock WrappingToTwoLines(this TextBlock title)
+    {
+        title.TextWrapping = TextWrapping.Wrap;
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
+        title.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+        title.LineHeight = LineDip;
+        title.MaxHeight = LineDip * 2;
+
+        return title;
     }
 }

@@ -3163,3 +3163,54 @@ exceção honesta à regra 13, que vale para escrita que o usuário pediu, e nin
 **Por que a barra caiu antes das 11:13 continua desconhecido.** As quatro suspensões são a
 suspeita, e a classificação nova é o que teria absorvido cada uma sem apagar a barra — mas isso é
 hipótese, não medida. É para isso que o log existe: na próxima vez, há o que ler.
+
+---
+
+## D-051 — Título de tarefa em duas linhas, e o que a quebra revelou
+
+**Data:** 2026-09-01 · **Status:** aceita
+
+### O pedido
+
+> *"as tarefas estão ficando com o texto muito grande e escondendo, tem como quebrar a linha ou
+> aumentar a largura atual pra ficar um pouco maior?"*
+
+As duas coisas, porque nenhuma resolvia sozinha. O painel foi de **440 para 520** — nos dois, para
+que abrir um e outro não mexa a borda. Mas título vindo das automações do Chat estoura qualquer
+largura razoável, então a largura só reduz a frequência; quem resolve é a quebra.
+
+### Duas linhas, e só então reticências
+
+Uma linha escondia metade. Ilimitado seria pior: um título patológico — uma URL colada, uma frase
+inteira — empurraria a lista para fora da tela, e o painel existe para ser **varrido com o olho**,
+não lido parágrafo a parágrafo.
+
+**WPF não tem `MaxLines`** (é de UWP), então o corte é por altura — e isso traz uma armadilha que
+valeu travar com teste: a altura da linha precisa ser **fixa**, não a natural da fonte. Sem
+`LineStackingStrategy.BlockLineHeight`, um acento ou um descendente no meio do texto engorda a
+linha, a segunda não cabe mais no limite, e o título volta a ter uma linha só — **sem nada na tela
+explicando por quê**. `TitleTextTests` mede exatamente isso.
+
+São os únicos testes do repositório que tocam WPF: medem um `TextBlock` isolado numa thread STA,
+sem abrir janela.
+
+### O que a quebra expôs
+
+O ✎ e o ✕ saíam do **layout** (`Collapsed`) quando o ponteiro deixava a linha, e voltavam ao
+entrar. Com uma linha só isso apenas movia as reticências — invisível. Com duas, o texto se
+rearranja debaixo do ponteiro a cada passagem.
+
+Os dois passaram a `Hidden`, reservando a coluna o tempo todo. Não é decisão nova: era o que o chip
+de data já fazia, com o motivo escrito ali do lado. A quebra só tornou visível o que já estava
+errado.
+
+De passagem, um defeito que apareceu na mesma linha: o hover acendia o lápis em **toda** linha,
+inclusive nas que o próprio código acabara de recolher — concluídas e com escrita pendurada.
+Renomear ali colocaria duas intenções conflitantes na fila, que é a guarda que concluir e excluir
+já aplicam.
+
+### O demo ganhou os casos difíceis
+
+Dois títulos longos entraram no `FakeStateSource`: um que ocupa duas linhas cheias e outro que
+passa disso. Sem eles, o corte só apareceria com dado real — que é justamente onde não se testa
+(D-024).
