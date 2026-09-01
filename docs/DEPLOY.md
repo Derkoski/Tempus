@@ -80,10 +80,18 @@ Copy-Item publish\Tempus.exe, publish\appsettings.json "$stage\publish\"
 Copy-Item scripts\install.ps1, scripts\uninstall.ps1   "$stage\scripts\"
 
 Compress-Archive "$stage\*" "$stage.zip" -CompressionLevel Optimal -Force
+
+# dist/ guarda UM pacote, o mais novo. O anterior sai junto com as pastas de staging.
+Get-ChildItem dist -Exclude "$(Split-Path $stage -Leaf)*" | Remove-Item -Recurse -Force
+Remove-Item $stage -Recurse -Force
 ```
 
 Dá ~69 MB compactado. `dist/` está no `.gitignore` pelo mesmo motivo que `publish/`: binário não
 entra no repositório, e o pacote se regenera com um comando.
+
+**Só o zip mais novo fica.** Dois pacotes lado a lado é convite para levar o errado ao notebook — e
+como tudo em `dist/` é cópia de `publish/` e `scripts/`, apagar não perde nada que um comando não
+refaça. A pasta de staging é intermediária e sai junto: o zip é o entregável.
 
 **Não inclua o `.pdb`** — são símbolos de depuração que só pesam do outro lado. E não inclua
 `client_secret.json` nem `tokens/`: o primeiro é segredo que não anda em zip, e o segundo não
