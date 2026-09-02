@@ -99,6 +99,10 @@ Clique num evento com call abre a call — Meet, Zoom ou Teams, com o link achad
 partir de `conferenceData`, `hangoutLink`, `location` e `description` (D-017). Um **ponto colorido**
 identifica o serviço: verde Meet, azul Zoom. Evento sem ponto é presencial e não é clicável.
 
+**Dois navegadores, porque são duas perguntas** (D-053). `‹ ›` no cabeçalho — e `←` `→` no teclado —
+andam um dia por vez, dentro da janela carregada: é o caminho de destino conhecido, como preparar a
+pauta de quinta. O resumo abaixo responde outra coisa, que setas não respondem.
+
 **Não é só hoje** (D-043). "Próximos dias" troca a timeline por um resumo de 15 dias — por dia, a
 contagem de compromissos e as **janelas livres** dentro do expediente. Existe para responder a
 pergunta que vem de outra pessoa, *"você tem horário livre quinta?"*, sem abrir o Google Agenda.

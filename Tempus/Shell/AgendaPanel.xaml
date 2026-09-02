@@ -18,12 +18,44 @@
       </Grid.RowDefinitions>
 
       <Grid Grid.Row="0" Margin="14,12,14,8">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Setas de dia (D-053). Ficam coladas no título porque é ele que elas mudam; do outro
+             lado da barra o olho não ligaria as duas coisas. Somem no resumo, onde não há dia. -->
+        <StackPanel x:Name="DayNav"
+                    Grid.Column="0"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    Margin="-4,0,8,0"
+                    Visibility="Collapsed">
+          <TextBlock x:Name="PrevDay"
+                     FontSize="16"
+                     Padding="5,0,5,2"
+                     Cursor="Hand"
+                     ToolTip="Dia anterior"
+                     Text="‹" />
+          <TextBlock x:Name="NextDay"
+                     FontSize="16"
+                     Padding="5,0,5,2"
+                     Cursor="Hand"
+                     ToolTip="Próximo dia"
+                     Text="›" />
+        </StackPanel>
+
         <TextBlock x:Name="HeaderText"
+                   Grid.Column="1"
                    FontSize="14"
                    FontWeight="SemiBold"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis"
                    Text="Agenda de hoje" />
 
-        <StackPanel Orientation="Horizontal"
+        <StackPanel Grid.Column="2"
+                    Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center">
           <TextBlock x:Name="HeaderCount" VerticalAlignment="Center" Text="" />

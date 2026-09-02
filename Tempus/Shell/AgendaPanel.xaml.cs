@@ -28,7 +28,33 @@ internal partial class AgendaPanel : Window
         _host = new PanelHost(this) { Anchor = anchor };
         _host.CloseRequested += (_, _) => Dismissed?.Invoke(this, EventArgs.Empty);
 
+        // ← e → andam de dia. Sai de graça: este painel não tem campo de texto, então as setas não
+        // disputam com nada. Quem chegou aqui para varrer a semana não vai querer voltar ao mouse
+        // a cada dia.
+        PreviewKeyDown += OnArrowKeys;
+
         ApplyPalette();
+    }
+
+    private void OnArrowKeys(object sender, KeyEventArgs e)
+    {
+        if (_resumo) return;
+
+        var hoje = DateOnly.FromDateTime(_now.Date);
+        var atual = _dia ?? hoje;
+
+        DateOnly? alvo = e.Key switch
+        {
+            Key.Left when atual > hoje => atual.AddDays(-1),
+            Key.Right when atual < hoje.AddDays(DiasNoResumo - 1) => atual.AddDays(1),
+            _ => null,
+        };
+
+        if (alvo is not { } destino) return;
+
+        e.Handled = true;
+        _dia = destino;
+        Draw();
     }
 
     /// <summary>Usuário clicou num evento com Meet. Carrega a URL.</summary>
@@ -134,6 +160,7 @@ internal partial class AgendaPanel : Window
             ? "Agenda de hoje"
             : Brasil.TextInfo.ToTitleCase(day.ToString("dddd, dd/MM", Brasil));
 
+        ShowDayNav(day, hoje);
         ShowLink("Próximos dias  ›", () => { _resumo = true; Draw(); });
 
         // Pausas de descanso são planejamento do dia corrente. Projetá-las num dia futuro
@@ -212,6 +239,7 @@ internal partial class AgendaPanel : Window
 
         HeaderText.Text = "Próximos dias";
         HeaderCount.Text = "";
+        DayNav.Visibility = Visibility.Collapsed; // não há dia para avançar aqui
         ShowLink("‹  Voltar", () => { _resumo = false; _dia = null; Draw(); });
 
         Timeline.Children.Clear();
@@ -397,6 +425,60 @@ internal partial class AgendaPanel : Window
         };
 
         return row;
+    }
+
+    /// <summary>
+    /// As setas de dia (D-053).
+    /// <para>
+    /// O D-043 as deixou de fora de propósito — "a lista da semana é o navegador, e três
+    /// afordâncias num painel pequeno é uma a mais" —, com a nota de que era fácil acrescentar se a
+    /// falta aparecesse em uso. Apareceu: para preparar a pauta de uma reunião de quinta, o caminho
+    /// era <i>Próximos dias → clicar no dia → ver o dia todo</i>. Três cliques para andar um dia.
+    /// </para>
+    /// <para>
+    /// O resumo continua existindo, e não virou redundância: ele responde <b>onde tenho janela
+    /// livre na semana</b>, que nenhuma sequência de setas responde. As setas respondem "o dia
+    /// seguinte", que era o que faltava.
+    /// </para>
+    /// <para>
+    /// Os limites são os do <b>retrato</b>, não do calendário: para trás pára em hoje e para a
+    /// frente no último dia carregado, porque fora dessa janela o painel mostraria dia vazio por
+    /// falta de dado em vez de falta de compromisso — a regra 10 aplicada a uma agenda.
+    /// </para>
+    /// </summary>
+    private void ShowDayNav(DateOnly day, DateOnly hoje)
+    {
+        DayNav.Visibility = Visibility.Visible;
+
+        Arm(PrevDay, day > hoje, day.AddDays(-1));
+        Arm(NextDay, day < hoje.AddDays(DiasNoResumo - 1), day.AddDays(1));
+    }
+
+    /// <summary>
+    /// Liga (ou apaga) uma seta. Apagada continua ocupando o lugar: recolher faria o título deslizar
+    /// para a esquerda ao chegar em hoje, e o olho leria isso como outra tela.
+    /// </summary>
+    private void Arm(TextBlock seta, bool ativa, DateOnly alvo)
+    {
+        seta.Foreground = new SolidColorBrush(
+            ativa ? _palette.OutlineFor(Severity.Info) : _palette.Muted);
+
+        seta.Opacity = ativa ? 1.0 : 0.35;
+        seta.Cursor = ativa ? Cursors.Hand : Cursors.Arrow;
+
+        seta.MouseLeftButtonUp -= OnDayNav;
+        seta.Tag = ativa ? alvo : null;
+        seta.MouseLeftButtonUp += OnDayNav;
+    }
+
+    private void OnDayNav(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+
+        if (sender is not TextBlock { Tag: DateOnly alvo }) return;
+
+        _dia = alvo;
+        Draw();
     }
 
     /// <summary>

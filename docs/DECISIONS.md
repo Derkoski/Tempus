@@ -3313,3 +3313,53 @@ verdade.
 
 Rodada em 2026-09-02 contra a conta real, tudo OK — inclusive `vazou p/ tarefas: OK`, que é a
 afirmação que justifica a funcionalidade inteira.
+
+---
+
+## D-053 — As setas de dia, que o D-043 tinha deixado para depois
+
+**Data:** 2026-09-02 · **Status:** aceita
+
+### A falta apareceu em uso
+
+> *"a navegação até chegar no dia que eu quero adicionar o comentário ficou ruim, tenho que clicar
+> em Próximos dias, depois tenho que clicar no dia que eu quero, clicar em abrir dia pra daí poder
+> ver algo que um <> no topo resolveria"*
+
+O D-043 recusou as setas **de propósito**, e a nota está lá:
+
+> *"**Setas ‹ › dentro do dia.** A lista da semana é o navegador; três afordâncias de navegação num
+> painel pequeno é uma a mais. Fácil de acrescentar depois se a falta aparecer em uso."*
+
+O raciocínio estava certo para o produto de então — o painel de agenda respondia *"onde tenho
+horário livre?"*, e para isso o resumo da semana é o navegador natural. **O D-052 mudou a pergunta.**
+Preparar a pauta de uma reunião de quinta é uma tarefa de destino conhecido, e para ela o resumo
+virou pedágio: três cliques para andar um dia.
+
+### O que ficou
+
+`‹ ›` colados no título, mais `←` e `→` no teclado. As setas ficam ao lado do texto que elas mudam;
+do outro lado do cabeçalho o olho não ligaria as duas coisas.
+
+O teclado sai de graça porque este painel **não tem campo de texto** — nada disputa as setas. Quem
+abriu o painel para varrer a semana não precisa voltar ao mouse a cada dia.
+
+**O resumo não virou redundância**, e por isso continua. Ele responde *"onde tenho janela livre na
+semana"* — pergunta que nenhuma sequência de setas responde, porque exige ver os dias lado a lado.
+As setas respondem *"o dia seguinte"*. São dois navegadores porque são duas perguntas.
+
+### Os limites são os do retrato, não do calendário
+
+Para trás pára em **hoje**; para a frente, no último dia carregado. Fora dessa janela o painel
+mostraria dia vazio por falta de **dado**, não por falta de compromisso — a regra 10 aplicada a uma
+agenda, o mesmo motivo que já limitava o resumo a 15 dias.
+
+Seta no limite fica apagada **sem sair do lugar**: recolher faria o título deslizar ao chegar em
+hoje, e o olho leria isso como outra tela.
+
+### A lição sobre adiar
+
+Este é o segundo item que o D-043 adiou e que voltou (o outro foi o detalhe do dia, no D-044). Nos
+dois casos o adiamento se pagou: a versão construída depois **sabia de coisas que a versão adiantada
+não saberia**. As setas de hoje conhecem a pauta, e é a pauta que define para onde elas precisam
+levar.
