@@ -583,6 +583,95 @@ internal sealed class GoogleSync : IDisposable
     /// calendário não lido, evento filtrado pelo §2.1, ou janela de tempo — e olhar a barra não
     /// distingue os três.
     /// </summary>
+    /// <summary>
+    /// <c>--pauta-probe</c>: exercita a pauta ponta a ponta contra a conta real e desfaz o que
+    /// criou (D-052, protocolo do D-031).
+    /// <para>
+    /// Existe porque três coisas desta funcionalidade <b>só falham com o Google de verdade</b>: a
+    /// criação da lista sob demanda, o vínculo sobrevivendo ao ida-e-volta pelo campo de notas, e —
+    /// a que mais importa — o assunto <b>não</b> aparecer entre as tarefas. Verificar isso clicando
+    /// exigiria uma reunião real acontecendo; a sonda não espera reunião nenhuma.
+    /// </para>
+    /// <para>
+    /// O assunto de teste é <b>apagado no fim</b>. A lista fica: ela é o artefato normal da
+    /// funcionalidade e nasceria de qualquer jeito no primeiro assunto de verdade.
+    /// </para>
+    /// </summary>
+    public async Task<string> ProbePautaAsync()
+    {
+        var ct = _cts?.Token ?? CancellationToken.None;
+
+        if (_tasks is null && !await ConnectAsync(interactive: false, ct))
+            return "Não conectou ao Google — sem token válido?";
+
+        var lines = new List<string>();
+        var alvo = $"probe-{Guid.NewGuid():N}";
+        string? criado = null;
+        string? listId = null;
+
+        try
+        {
+            listId = await EnsurePautaListAsync(ct);
+            lines.Add($"lista de pauta   : {Pauta.ListTitle}  id={listId}");
+
+            var inserido = await _tasks!.Tasks.Insert(
+                new GTask
+                {
+                    Title = "[sonda do Tempus] pode apagar",
+                    Notes = Pauta.NotesFor(alvo),
+                },
+                listId).ExecuteAsync(ct);
+
+            criado = inserido.Id;
+            lines.Add($"assunto criado   : id={criado}");
+
+            // A releitura é o teste de verdade: passa pelo mesmo caminho que a barra usa.
+            var read = await ReadTasksAsync(ct);
+
+            var naPauta = read.Pauta.FirstOrDefault(t => t.Id == criado);
+            var vazouParaTarefas = read.Tasks.Any(t => t.Id == criado);
+
+            lines.Add("");
+            lines.Add($"lista padrão     : {read.DefaultList}");
+            lines.Add($"  != pauta?      : {(read.DefaultList != listId ? "OK" : "FALHOU")}");
+            lines.Add($"achado na pauta  : {(naPauta is not null ? "OK" : "FALHOU")}");
+            lines.Add($"vazou p/ tarefas : {(vazouParaTarefas ? "FALHOU" : "OK")}");
+
+            var vinculo = naPauta is null ? null : Pauta.EventIdOf(naPauta);
+            lines.Add($"vínculo lido     : {vinculo ?? "(null)"}");
+            lines.Add($"  == o escrito?  : {(vinculo == alvo ? "OK" : "FALHOU")}");
+            lines.Add("");
+            lines.Add($"tarefas abertas  : {read.Tasks.Count(t => !t.IsCompleted)}  "
+                + "(tem de bater com o contador da barra)");
+            lines.Add($"assuntos na pauta: {read.Pauta.Count}");
+        }
+        catch (Exception ex)
+        {
+            lines.Add($"ERRO: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            // Limpeza, sempre — inclusive depois de erro no meio. Deixar lixo na conta do usuário
+            // por causa de um diagnóstico é o que o D-031 existe para impedir.
+            if (criado is not null && listId is not null)
+            {
+                try
+                {
+                    await _tasks!.Tasks.Delete(listId, criado).ExecuteAsync(ct);
+                    lines.Add("");
+                    lines.Add("assunto de teste apagado : OK");
+                }
+                catch (Exception ex)
+                {
+                    lines.Add($"NÃO consegui apagar o assunto de teste ({ex.Message}) — "
+                        + "apague à mão no Google Tasks.");
+                }
+            }
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
     public async Task<string> DumpAgendaAsync(string path)
     {
         var ct = _cts?.Token ?? CancellationToken.None;

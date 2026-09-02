@@ -3298,3 +3298,18 @@ ela mais importa.
 **A lista de pauta podia virar a lista padrão.** `ReadTasksAsync` elegia a primeira lista como
 destino de tarefas novas; se a de pauta viesse primeiro, toda tarefa criada pela barra nasceria como
 assunto de reunião nenhuma.
+
+### `--pauta-probe`
+
+Três coisas desta funcionalidade **só falham com o Google de verdade**: a criação da lista sob
+demanda, o vínculo sobrevivendo ao ida-e-volta pelo campo de notas, e — a que mais importa — o
+assunto **não** aparecer entre as tarefas. Verificar isso clicando exigiria uma reunião real
+acontecendo.
+
+A sonda cria um assunto descartável, relê pelo mesmo caminho que a barra usa, confere as quatro
+afirmações e **apaga o que criou**, inclusive depois de erro no meio (protocolo do D-031). A lista
+fica: ela é o artefato normal da funcionalidade e nasceria de qualquer jeito no primeiro assunto de
+verdade.
+
+Rodada em 2026-09-02 contra a conta real, tudo OK — inclusive `vazou p/ tarefas: OK`, que é a
+afirmação que justifica a funcionalidade inteira.

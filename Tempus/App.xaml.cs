@@ -112,6 +112,12 @@ public partial class App : Application
             return;
         }
 
+        if (e.Args.Contains("--pauta-probe", StringComparer.OrdinalIgnoreCase))
+        {
+            _ = RunPautaProbeAsync();
+            return;
+        }
+
         // Duas barras sobrepostas no mesmo pixel são um bug difícil de diagnosticar.
         _singleInstance = new Mutex(initiallyOwned: true, @"Local\Tempus.SingleInstance", out var isFirst);
         if (!isFirst)
@@ -941,6 +947,47 @@ public partial class App : Application
             "Tempus — sonda de notificação",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    /// <summary>
+    /// <c>--pauta-probe</c>: a pauta ponta a ponta contra a conta real, desfazendo o que criou
+    /// (D-052). Escreve o relatório em arquivo <b>e</b> em caixa, como as outras sondas.
+    /// </summary>
+    private async Task RunPautaProbeAsync()
+    {
+        var settingsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        var user = new UserSettingsStore(GoogleOptions.DataDirectory).Load();
+
+        var auth = new GoogleAuth(
+            GoogleOptions.ClientSecretPath, GoogleOptions.TokenDirectory, user.LoginHint);
+
+        using var sync = new GoogleSync(
+            auth, SyncOptions.Load(settingsPath), GoogleOptions.Load(settingsPath));
+
+        string result;
+
+        try
+        {
+            result = await sync.ProbePautaAsync();
+        }
+        catch (Exception ex)
+        {
+            result = $"{ex.GetType().Name}: {ex.Message}";
+        }
+
+        try
+        {
+            await System.IO.File.WriteAllTextAsync(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tempus-pauta-probe.txt"),
+                result);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Relatório da sonda não gravado: {ex.Message}");
+        }
+
+        MessageBox.Show(result, "Tempus — sonda de pauta", MessageBoxButton.OK);
+        Shutdown();
     }
 
     /// <summary>

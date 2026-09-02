@@ -93,6 +93,7 @@ dotnet build Tempus/Tempus.csproj              # deve terminar com 0 avisos
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --demo   # dados falsos, sem rede
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --demo --fail-writes  # escrita sempre falha
 ./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --toast-probe  # notificação: entrega E clique de volta
+./Tempus/bin/Debug/net8.0-windows10.0.19041.0/Tempus.exe --pauta-probe  # pauta ponta a ponta na conta real; apaga o que criou
 dotnet test Tempus.Tests/Tempus.Tests.csproj   # domínio e invariantes; feche o app antes
 ```
 
