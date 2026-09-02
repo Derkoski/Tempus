@@ -34,6 +34,22 @@ internal partial class AgendaPanel : Window
     /// <summary>Usuário clicou num evento com Meet. Carrega a URL.</summary>
     public event EventHandler<string>? MeetingActivated;
 
+    /// <summary>
+    /// Abrir a pauta de uma reunião (D-052). Carrega o id do evento.
+    /// <para>
+    /// É o caminho de <b>preparação</b>: dias antes, se quiser — o retrato carrega quinze (D-043).
+    /// O contador da barra serve o outro momento, o da reunião acontecendo.
+    /// </para>
+    /// </summary>
+    public event EventHandler<string>? PautaRequested;
+
+    /// <summary>
+    /// Quantos assuntos cada reunião tem, por id de evento. Só para desenhar o selo — o painel não
+    /// conhece o conteúdo da pauta, e não precisa.
+    /// </summary>
+    private IReadOnlyDictionary<string, int> _pauta =
+        new Dictionary<string, int>(StringComparer.Ordinal);
+
     /// <summary>Perdeu o foco ou levou <c>Esc</c>: a superfície deve fechar este painel.</summary>
     public event EventHandler? Dismissed;
 
@@ -84,12 +100,14 @@ internal partial class AgendaPanel : Window
         IReadOnlyList<AgendaItem> agenda,
         IReadOnlyList<BreakSlot> breaks,
         DateTimeOffset now,
-        WorkDayOptions work)
+        WorkDayOptions work,
+        IReadOnlyDictionary<string, int>? pauta = null)
     {
         _todosOsDias = agenda;
         _breaks = breaks;
         _work = work;
         _now = now;
+        _pauta = pauta ?? _pauta;
 
         // Só dados entram aqui. Onde o usuário está navegando é decisão dele, e um retrato novo
         // do Google não é motivo para mudá-la.
@@ -497,6 +515,7 @@ internal partial class AgendaPanel : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // resposta ao convite
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // origem
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // pauta
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // selo de estado
 
         // Faixa vertical marcando o evento em curso.
@@ -570,14 +589,27 @@ internal partial class AgendaPanel : Window
             grid.Children.Add(origin);
         }
 
+        var pauta = BuildPautaAction(item, isPast);
+        Grid.SetColumn(pauta, 5);
+        grid.Children.Add(pauta);
+
         var badge = BuildBadge(isRunning, isNext, isPast);
         if (badge is not null)
         {
-            Grid.SetColumn(badge, 5);
+            Grid.SetColumn(badge, 6);
             grid.Children.Add(badge);
         }
 
         row.Child = grid;
+
+        // O convite de pauta acende com o ponteiro na linha, como o ✎ e o ✕ do painel de tarefas.
+        // Reunião que já tem assunto mostra o selo o tempo todo — ali o número é informação, não
+        // convite, e escondê-lo obrigaria a passar o mouse em cada linha para saber onde há pauta.
+        if (pauta.Tag is true)
+        {
+            row.MouseEnter += (_, _) => pauta.Visibility = Visibility.Visible;
+            row.MouseLeave += (_, _) => pauta.Visibility = Visibility.Hidden;
+        }
 
         if (item.Conference is { } conference)
         {
@@ -599,6 +631,73 @@ internal partial class AgendaPanel : Window
         }
 
         return row;
+    }
+
+    /// <summary>
+    /// O selo de pauta da linha (D-052): quantos assuntos você tem para levantar nesta reunião.
+    /// <para>
+    /// Duas apresentações, e a diferença é entre informação e convite. <b>Com pauta</b>, o número
+    /// fica visível o tempo todo — escondê-lo obrigaria a passar o mouse em cada linha só para
+    /// descobrir onde há assunto marcado. <b>Sem pauta</b>, só o <c>＋</c> sob o ponteiro, porque um
+    /// convite permanente em cada uma das quinze linhas do dia é ruído.
+    /// </para>
+    /// <para>
+    /// Sem cor própria aqui. O âmbar da pauta vive na barra, onde responde "agora, nesta reunião" —
+    /// no painel isto é uma lista para consultar, e colorir quinze linhas gastaria o vocabulário
+    /// sem dizer nada de novo (regra 1).
+    /// </para>
+    /// </summary>
+    private FrameworkElement BuildPautaAction(AgendaItem item, bool isPast)
+    {
+        var count = _pauta.TryGetValue(item.Id, out var n) ? n : 0;
+        var convite = count == 0;
+
+        var alvo = new Border
+        {
+            MinWidth = 34,
+            MinHeight = 24,
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 1, 6, 1),
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            Opacity = isPast ? 0.45 : 1.0,
+
+            // Hidden, e não Collapsed: a coluna reserva o espaço o tempo todo, senão o título
+            // requebraria debaixo do ponteiro a cada passagem (D-051).
+            Visibility = convite ? Visibility.Hidden : Visibility.Visible,
+
+            ToolTip = convite
+                ? "Preparar a pauta desta reunião"
+                : $"{count} {(count == 1 ? "assunto" : "assuntos")} — clique para abrir",
+
+            Child = new TextBlock
+            {
+                Text = convite ? "≡ ＋" : $"≡ {count}",
+                FontSize = 11,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(_palette.Muted),
+            },
+        };
+
+        // Só o convite se esconde; o número fica. A linha lê esta marca para saber se deve
+        // acender algo no hover.
+        alvo.Tag = convite;
+
+        var hover = new SolidColorBrush(_palette.PanelBorder);
+        alvo.MouseEnter += (_, _) => alvo.Background = hover;
+        alvo.MouseLeave += (_, _) => alvo.Background = Brushes.Transparent;
+
+        var id = item.Id;
+        alvo.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true; // sem isto o clique borbulha para a linha e entra na call
+            PautaRequested?.Invoke(this, id);
+        };
+
+        return alvo;
     }
 
     /// <summary>

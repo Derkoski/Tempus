@@ -24,6 +24,14 @@ internal sealed class FakeStateSource
     private const int Mail = 12;
 
     private readonly List<TaskItem> _tasks;
+
+    /// <summary>
+    /// Os assuntos de pauta (D-052), na lista separada — espelho da lista dedicada no Google Tasks.
+    /// Guardá-los junto das tarefas aqui faria o demo mentir sobre o corte que a funcionalidade
+    /// inteira existe para manter.
+    /// </summary>
+    private readonly List<TaskItem> _pauta;
+
     private readonly List<AgendaItem> _agenda;
     private readonly ShellState[] _script;
     private readonly object _gate = new();
@@ -94,6 +102,36 @@ internal sealed class FakeStateSource
             },
         ];
 
+        // Pauta em duas reuniões de propósito: "e2" está em curso, então o contador âmbar da barra
+        // aparece já na subida do demo; "e4" é futura, e é o que faz o selo do painel de agenda
+        // aparecer numa linha que não é a de agora. Um dos três já riscado exercita a contagem de
+        // pendentes discordando do total, que é o caso em que o número da barra pode errar.
+        _pauta =
+        [
+            new TaskItem
+            {
+                Id = "p1", ListId = "pauta", Notes = Domain.Pauta.NotesFor("e2"),
+                Title = "Pedir prioridade para o bug do ETL noturno",
+            },
+            new TaskItem
+            {
+                Id = "p2", ListId = "pauta", Notes = Domain.Pauta.NotesFor("e2"),
+                Title = "Avisar que entro de férias em outubro",
+            },
+            new TaskItem
+            {
+                Id = "p3", ListId = "pauta", Notes = Domain.Pauta.NotesFor("e2"),
+                Title = "Combinar quem cobre o plantão do feriado",
+                IsCompleted = true,
+                CompletedAt = DateTimeOffset.Now.AddMinutes(-5),
+            },
+            new TaskItem
+            {
+                Id = "p4", ListId = "pauta", Notes = Domain.Pauta.NotesFor("e4"),
+                Title = "Levantar o retrabalho das duas últimas sprints",
+            },
+        ];
+
         _left = [];
         _agenda = BuildAgenda();
         _script = BuildScript();
@@ -109,6 +147,12 @@ internal sealed class FakeStateSource
     }
 
     public IReadOnlyList<AgendaItem> Agenda => _agenda;
+
+    /// <inheritdoc cref="Tasks"/>
+    public IReadOnlyList<TaskItem> Pauta
+    {
+        get { lock (_gate) return [.. _pauta]; }
+    }
 
     public ShellState Advance()
     {
@@ -156,16 +200,33 @@ internal sealed class FakeStateSource
 
         lock (_gate)
         {
+            // Qual lista esta escrita toca. Na criação decide a intenção; nos demais verbos, onde o
+            // item de fato está — que é o mesmo critério do executor real, para quem toda tarefa é
+            // endereçada por (lista, id).
+            var lista = write.Kind == WriteKind.Create
+                ? write.IsPauta ? _pauta : _tasks
+                : _pauta.Any(t => t.Id == write.TaskId) ? _pauta : _tasks;
+
             switch (write.Kind)
             {
                 case WriteKind.Create:
-                    _tasks.Add(new TaskItem { Id = $"t{_nextId++}", Title = write.Title ?? "" });
+                    lista.Add(new TaskItem
+                    {
+                        Id = $"t{_nextId++}",
+                        ListId = write.IsPauta ? "pauta" : null,
+                        Title = write.Title ?? "",
+
+                        // Sem as notas o assunto nasceria órfão e sumiria da pauta no instante em
+                        // que a escrita confirmasse — o defeito exato que só o demo pega.
+                        Notes = write.Notes,
+                        Due = write.Due,
+                    });
                     break;
 
                 case WriteKind.Complete:
-                    var i = _tasks.FindIndex(t => t.Id == write.TaskId);
+                    var i = lista.FindIndex(t => t.Id == write.TaskId);
                     if (i >= 0)
-                        _tasks[i] = _tasks[i] with
+                        lista[i] = lista[i] with
                         {
                             IsCompleted = true,
                             CompletedAt = DateTimeOffset.Now,
@@ -173,23 +234,23 @@ internal sealed class FakeStateSource
                     break;
 
                 case WriteKind.Reopen:
-                    var j = _tasks.FindIndex(t => t.Id == write.TaskId);
+                    var j = lista.FindIndex(t => t.Id == write.TaskId);
                     if (j >= 0)
-                        _tasks[j] = _tasks[j] with { IsCompleted = false, CompletedAt = null };
+                        lista[j] = lista[j] with { IsCompleted = false, CompletedAt = null };
                     break;
 
                 case WriteKind.Delete:
-                    _tasks.RemoveAll(t => t.Id == write.TaskId);
+                    lista.RemoveAll(t => t.Id == write.TaskId);
                     break;
 
                 case WriteKind.Reschedule:
-                    var k = _tasks.FindIndex(t => t.Id == write.TaskId);
-                    if (k >= 0) _tasks[k] = _tasks[k] with { Due = write.Due };
+                    var k = lista.FindIndex(t => t.Id == write.TaskId);
+                    if (k >= 0) lista[k] = lista[k] with { Due = write.Due };
                     break;
 
                 case WriteKind.Rename:
-                    var r = _tasks.FindIndex(t => t.Id == write.TaskId);
-                    if (r >= 0) _tasks[r] = _tasks[r] with { Title = write.Title ?? _tasks[r].Title };
+                    var r = lista.FindIndex(t => t.Id == write.TaskId);
+                    if (r >= 0) lista[r] = lista[r] with { Title = write.Title ?? lista[r].Title };
                     break;
 
                 // Verbo que o demo não conhece falha em voz alta, e não em silêncio.
@@ -239,8 +300,14 @@ internal sealed class FakeStateSource
         var encerravel = MeetingLeft.Leavable(visivel, time, now);
         var reabrivel = MeetingLeft.Reopenable(_agenda, _left, now);
 
+        // Pauta da reunião que o humor nomeia (D-052), pela projeção como o contador de tarefas.
+        var pauta = Domain.Pauta.RowsFor(TaskProjection.Apply(Pauta, _pending), time.EventId);
+
         return state with
         {
+            PautaEventId = time.EventId,
+            PautaTotal = pauta.Count,
+            PautaPending = pauta.Count(r => !r.Item.IsCompleted),
             // Pela projeção, não pela lista crua: senão o contador da barra discordaria do painel
             // enquanto uma escrita estivesse a caminho.
             OpenTasks = TaskProjection.Apply(Tasks, _pending).Count(r => !r.Item.IsCompleted),

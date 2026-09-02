@@ -38,7 +38,16 @@ internal interface IShellSurface : IDisposable
     /// </para>
     /// </summary>
     void ToggleAgenda(
-        IReadOnlyList<AgendaItem> agenda, IReadOnlyList<BreakSlot> breaks, WorkDayOptions work);
+        IReadOnlyList<AgendaItem> agenda,
+        IReadOnlyList<BreakSlot> breaks,
+        WorkDayOptions work,
+        IReadOnlyList<TaskRow> pauta);
+
+    /// <summary>
+    /// Abre a pauta de uma reunião (D-052), ou fecha se já for a mesma. Com a pauta de outra
+    /// reunião aberta, troca de reunião — é o que o gesto quer dizer.
+    /// </summary>
+    void TogglePauta(AgendaItem meeting, IReadOnlyList<TaskRow> items);
 
     /// <summary>
     /// Redesenha o painel aberto, se houver, sem alternar visibilidade. Usado quando os dados
@@ -48,7 +57,8 @@ internal interface IShellSurface : IDisposable
         IReadOnlyList<TaskRow> tasks,
         IReadOnlyList<AgendaItem> agenda,
         IReadOnlyList<BreakSlot> breaks,
-        WorkDayOptions work);
+        WorkDayOptions work,
+        IReadOnlyList<TaskRow> pauta);
 
     /// <summary>Usuário clicou no alerta — "eu vi" (<c>SEVERITY.md</c> §1.1).</summary>
     event EventHandler? Acknowledged;
@@ -76,6 +86,18 @@ internal interface IShellSurface : IDisposable
 
     /// <summary>Barra cinza por sync caído: tentar de novo, sem passar pelo navegador.</summary>
     event EventHandler? SyncRetryRequested;
+
+    /// <summary>Abrir a pauta de uma reunião (D-052). Carrega o id do evento.</summary>
+    event EventHandler<string>? PautaRequested;
+
+    /// <summary>Novo assunto de pauta. Carrega o id do evento e o texto.</summary>
+    event EventHandler<(string EventId, string Text)>? PautaItemCreated;
+
+    /// <summary>Riscar ou desriscar um assunto. Carrega o id do assunto.</summary>
+    event EventHandler<string>? PautaItemToggled;
+
+    /// <summary>Excluir um assunto. Carrega o id. Não tem volta (D-024).</summary>
+    event EventHandler<string>? PautaItemDeleted;
 
     /// <summary>Painel de tarefas, superfície S2 do SPEC.</summary>
     event EventHandler? TasksRequested;

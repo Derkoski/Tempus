@@ -144,6 +144,10 @@ internal static class TaskProjection
             Id = write.ProvisionalId,
             ListId = write.ListId,
             Title = write.Title ?? "",
+
+            // Sem isto um assunto recém-digitado sumiria do painel até a escrita confirmar: é nas
+            // notas que mora o vínculo com a reunião, e sem ele nenhuma pauta o reconhece (D-052).
+            Notes = write.Notes,
         },
         Write = write,
     };

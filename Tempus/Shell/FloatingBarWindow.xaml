@@ -27,7 +27,8 @@
       <ColumnDefinition Width="*" MinWidth="0" />
       <!-- Motivo: só o necessário, e nada quando não há alarme. -->
       <ColumnDefinition Width="Auto" />
-      <!-- Bloco fixo de indicadores, sempre à direita: pausa, tarefas, e-mail. -->
+      <!-- Bloco fixo de indicadores, sempre à direita: pausa, pauta, tarefas, e-mail. -->
+      <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="Auto" />
       <ColumnDefinition Width="Auto" />
@@ -132,9 +133,32 @@
       </StackPanel>
     </Border>
 
+    <!-- Contador de pauta (D-052). Só existe durante uma reunião que tem assuntos, e some com ela.
+         Caractere comum em vez de glifo do Segoe, como o ✓ e o ✕ dos painéis: nada aqui pode virar
+         quadradinho se a máquina tiver outra versão da fonte. -->
+    <StackPanel x:Name="PautaArea"
+                Grid.Column="4"
+                Orientation="Horizontal"
+                VerticalAlignment="Center"
+                Margin="10,0,0,0"
+                Visibility="Collapsed"
+                Cursor="Hand"
+                Background="Transparent">
+      <TextBlock x:Name="PautaIcon"
+                 FontSize="13"
+                 VerticalAlignment="Center"
+                 Margin="0,0,4,0"
+                 Text="≡" />
+      <TextBlock x:Name="PautaCount"
+                 VerticalAlignment="Center"
+                 MinWidth="10"
+                 FontWeight="SemiBold"
+                 Text="" />
+    </StackPanel>
+
     <!-- Contador de tarefas -->
     <StackPanel x:Name="TasksArea"
-                Grid.Column="4"
+                Grid.Column="5"
                 Orientation="Horizontal"
                 VerticalAlignment="Center"
                 Margin="10,0,0,0"
@@ -155,7 +179,7 @@
 
     <!-- Contador de e-mail -->
     <StackPanel x:Name="MailArea"
-                Grid.Column="5"
+                Grid.Column="6"
                 Orientation="Horizontal"
                 VerticalAlignment="Center"
                 Margin="8,0,0,0"

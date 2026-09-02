@@ -260,7 +260,7 @@ public partial class App : Application
             Rerender();
             surface.RefreshOpenPanel(
                 CurrentTasks(), AllDays(snapshot),
-                PlanBreaks(snapshot.Agenda, DateTimeOffset.Now), _workDay);
+                PlanBreaks(snapshot.Agenda, DateTimeOffset.Now), _workDay, CurrentPauta());
         });
 
         // "Eu vi." Suprime a ocorrência e volta ao normal na hora (regra 2, invariante I3).
@@ -287,7 +287,8 @@ public partial class App : Application
         surface.AgendaRequested += (_, _) =>
         {
             surface.ToggleAgenda(
-                AllDays(_snapshot), PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay);
+                AllDays(_snapshot), PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay,
+                CurrentPauta());
             _ = sync.RefreshAsync();
         };
 
@@ -314,6 +315,46 @@ public partial class App : Application
         surface.TaskWriteRetried += (_, id) => writes.Retry(id);
         surface.TaskWriteDiscarded += (_, id) => writes.Discard(id);
 
+        // ------------------------------------------------------------ pauta (D-052)
+
+        surface.PautaRequested += (_, id) =>
+        {
+            if (AllDays(_snapshot).FirstOrDefault(a => a.Id == id) is not { } meeting) return;
+
+            surface.TogglePauta(meeting, Domain.Pauta.RowsFor(CurrentPauta(), id));
+        };
+
+        surface.PautaItemCreated += (_, e) =>
+        {
+            var meeting = AllDays(_snapshot).FirstOrDefault(a => a.Id == e.EventId);
+            if (meeting is null) return;
+
+            Enqueue(surface, PendingWrite.For(WriteKind.Create, DateTimeOffset.Now) with
+            {
+                Title = e.Text,
+                Notes = Domain.Pauta.NotesFor(e.EventId),
+
+                // Nulo na primeiríssima vez: é o sinal de que a lista ainda não existe no Google, e
+                // quem a cria é o executor, no momento em que a escrita sai (D-052).
+                ListId = _snapshot.PautaListId,
+                IsPauta = true,
+
+                // A data da reunião, só para o app do Tasks no celular agrupar no dia certo. O
+                // Tempus não lê isto de volta — quem manda no vínculo são as notas.
+                Due = DateOnly.FromDateTime(meeting.Start.ToLocalTime().Date),
+            });
+        };
+
+        // Um gesto só na tela, dois verbos na API: qual deles depende de o assunto já estar riscado.
+        surface.PautaItemToggled += (_, id) =>
+        {
+            if (_snapshot.Pauta.FirstOrDefault(t => t.Id == id) is not { } item) return;
+
+            EnqueueFor(surface, item.IsCompleted ? WriteKind.Reopen : WriteKind.Complete, id);
+        };
+
+        surface.PautaItemDeleted += (_, id) => EnqueueFor(surface, WriteKind.Delete, id);
+
         surface.Render(BuildState(_snapshot));
         sync.Start();
         writes.Start();
@@ -329,13 +370,24 @@ public partial class App : Application
     private IReadOnlyList<TaskRow> CurrentTasks() =>
         TaskProjection.Apply(_snapshot.Tasks, _writes?.Pending ?? []);
 
+    /// <summary>
+    /// Os assuntos de pauta, com as intenções pendentes por cima — a mesma projeção das tarefas,
+    /// pela mesma razão: um assunto digitado no meio da reunião precisa aparecer na hora (D-029).
+    /// </summary>
+    private IReadOnlyList<TaskRow> CurrentPauta() =>
+        TaskProjection.Apply(_snapshot.Pauta, _writes?.Pending ?? []);
+
     private void EnqueueFor(
         FloatingBarSurface surface,
         WriteKind kind,
         string id,
         Func<PendingWrite, PendingWrite>? detail = null)
     {
-        var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id);
+        // Nas duas listas: para a API, um assunto de pauta é uma tarefa como outra qualquer, e os
+        // verbos que agem sobre ele são exatamente os mesmos (D-052).
+        var task = _snapshot.Tasks.FirstOrDefault(t => t.Id == id)
+            ?? _snapshot.Pauta.FirstOrDefault(t => t.Id == id);
+
         if (task is null) return;
 
         var write = PendingWrite.For(kind, DateTimeOffset.Now) with
@@ -359,7 +411,7 @@ public partial class App : Application
         Rerender();
         surface.RefreshOpenPanel(
             CurrentTasks(), AllDays(_snapshot),
-            PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay);
+            PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay, CurrentPauta());
     }
 
     /// <summary>
@@ -457,6 +509,10 @@ public partial class App : Application
         // menu precisa poder trazer de volta.
         var encerrada = MeetingLeft.Reopenable(snapshot.Agenda, _acknowledged, now);
 
+        // Pela projeção, e não pelo retrato cru: um assunto recém-digitado precisa contar no
+        // número da barra antes de o Google confirmá-lo, como toda escrita otimista (D-029).
+        var pauta = Domain.Pauta.RowsFor(CurrentPauta(), time.EventId);
+
         return new ShellState
         {
             Severity = winner?.Severity ?? Severity.Calm,
@@ -477,6 +533,13 @@ public partial class App : Application
             OpenTasks = tasks.Count(t => !t.IsCompleted),
             UnreadMail = snapshot.UnreadMail,
             Time = time,
+
+            // A pauta da reunião que o humor está nomeando (D-052) — a mesma fonte que o "já saí"
+            // usa, e que por isso já respeita a escolha do §8 em sobreposição. Uma reunião passada
+            // não acende contador: `time.EventId` só nomeia a que está em curso ou chegando.
+            PautaEventId = time.EventId,
+            PautaTotal = pauta.Count,
+            PautaPending = pauta.Count(p => !p.Item.IsCompleted),
 
             // Reconhecível quando há alarme em qualquer um dos dois vocabulários (§0.5). Sinais
             // que se limpam sozinhos ficam de fora: oferecer gesto para algo que já vai passar
@@ -783,7 +846,8 @@ public partial class App : Application
         if (_surface is FloatingBarSurface surface)
         {
             surface.ToggleAgenda(
-                AllDays(_snapshot), PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay);
+                AllDays(_snapshot), PlanBreaks(_snapshot.Agenda, DateTimeOffset.Now), _workDay,
+                CurrentPauta());
         }
     });
 
@@ -968,7 +1032,42 @@ public partial class App : Application
         surface.TasksRequested += (_, _) => surface.ToggleTasks(DemoRows(demo));
         surface.AgendaRequested += (_, _) =>
             surface.ToggleAgenda(
-                demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now), _workDay);
+                demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now), _workDay,
+                DemoPauta(demo));
+
+        surface.PautaRequested += (_, id) =>
+        {
+            if (demo.Agenda.FirstOrDefault(a => a.Id == id) is not { } meeting) return;
+
+            surface.TogglePauta(meeting, Domain.Pauta.RowsFor(DemoPauta(demo), id));
+        };
+
+        surface.PautaItemCreated += (_, e) =>
+        {
+            var meeting = demo.Agenda.FirstOrDefault(a => a.Id == e.EventId);
+            if (meeting is null) return;
+
+            EnqueueDemo(surface, demo, PendingWrite.For(
+                WriteKind.Create, DateTimeOffset.Now) with
+            {
+                Title = e.Text,
+                Notes = Domain.Pauta.NotesFor(e.EventId),
+                IsPauta = true,
+                Due = DateOnly.FromDateTime(meeting.Start.ToLocalTime().Date),
+            });
+        };
+
+        surface.PautaItemToggled += (_, id) =>
+        {
+            if (demo.Pauta.FirstOrDefault(t => t.Id == id) is not { } item) return;
+
+            EnqueueDemo(surface, demo, PendingWrite.For(
+                item.IsCompleted ? WriteKind.Reopen : WriteKind.Complete,
+                DateTimeOffset.Now) with { TaskId = id });
+        };
+
+        surface.PautaItemDeleted += (_, id) => EnqueueDemo(surface, demo, PendingWrite.For(
+            WriteKind.Delete, DateTimeOffset.Now) with { TaskId = id });
 
         surface.TaskCreated += (_, title) => EnqueueDemo(surface, demo, PendingWrite.For(
             WriteKind.Create, DateTimeOffset.Now) with { Title = title });
@@ -1005,6 +1104,9 @@ public partial class App : Application
     private IReadOnlyList<TaskRow> DemoRows(FakeStateSource demo) =>
         TaskProjection.Apply(demo.Tasks, _writes?.Pending ?? []);
 
+    private IReadOnlyList<TaskRow> DemoPauta(FakeStateSource demo) =>
+        TaskProjection.Apply(demo.Pauta, _writes?.Pending ?? []);
+
     private void EnqueueDemo(FloatingBarSurface surface, FakeStateSource demo, PendingWrite write)
     {
         _writes?.Enqueue(write);
@@ -1015,7 +1117,8 @@ public partial class App : Application
     {
         surface.Render(demo.WithPending(_writes?.Pending ?? []));
         surface.RefreshOpenPanel(
-            DemoRows(demo), demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now), _workDay);
+            DemoRows(demo), demo.Agenda, PlanBreaks(demo.Agenda, DateTimeOffset.Now), _workDay,
+            DemoPauta(demo));
     }
 
     // ---------------------------------------------------------------- utilidades

@@ -160,6 +160,28 @@ internal sealed record ShellState
     /// <inheritdoc cref="OpenTasks"/>
     public int? UnreadMail { get; init; }
 
+    /// <summary>
+    /// Quantos assuntos a reunião em curso tem ao todo (D-052). <b>Zero esconde o contador</b> — a
+    /// esmagadora maioria das reuniões não tem pauta, e um indicador permanente para elas seria
+    /// ruído fixo ao lado do que importa.
+    /// </summary>
+    public int PautaTotal { get; init; }
+
+    /// <summary>
+    /// Quantos ainda não foram ditos. É o número desenhado, e o que decide a cor: âmbar enquanto
+    /// houver assunto pendente, neutro quando chega a zero.
+    /// <para>
+    /// Não fere a invariante <b>I6</b>: ela proíbe o contador <b>herdar</b> a cor do alarme, e este
+    /// nunca muda com a severidade da barra. O âmbar é próprio, pelo mesmo motivo do ponto de
+    /// <c>Rsvp.NeedsAction</c> no painel de agenda — a mesma cor querendo dizer a mesma coisa,
+    /// "isto espera uma ação sua".
+    /// </para>
+    /// </summary>
+    public int PautaPending { get; init; }
+
+    /// <summary>A reunião a que a pauta pertence, para o clique saber qual abrir.</summary>
+    public string? PautaEventId { get; init; }
+
     public DateTimeOffset? LastSyncAt { get; init; }
 
     /// <summary>A cor efetiva ignora a escala quando estamos offline.</summary>

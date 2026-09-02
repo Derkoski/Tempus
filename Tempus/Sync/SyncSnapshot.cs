@@ -36,7 +36,17 @@ internal sealed record SyncSnapshot
     /// <summary>Compromissos de amanhã em diante. Alimenta o <see cref="Domain.Lookahead"/>.</summary>
     public IReadOnlyList<AgendaItem> Upcoming { get; init; } = [];
 
+    /// <summary>
+    /// Tarefas de verdade — <b>já sem</b> os assuntos de pauta, separados em
+    /// <see cref="Domain.Pauta.Split"/>. É o que alimenta o contador, o painel S2 e o §2.3.
+    /// </summary>
     public IReadOnlyList<TaskItem> Tasks { get; init; } = [];
+
+    /// <summary>
+    /// Os assuntos de pauta de todas as reuniões da janela (D-052). Cruzados com um evento por
+    /// <see cref="Domain.Pauta.For"/>; nunca contados como trabalho aberto.
+    /// </summary>
+    public IReadOnlyList<TaskItem> Pauta { get; init; } = [];
 
     /// <summary>Não lidos na caixa de entrada. Só a contagem — nunca conteúdo de mensagem.</summary>
     public int? UnreadMail { get; init; }
@@ -49,6 +59,12 @@ internal sealed record SyncSnapshot
 
     /// <summary>Lista padrão do Google Tasks, destino de tarefas criadas na barra.</summary>
     public string? DefaultTaskListId { get; init; }
+
+    /// <summary>
+    /// A lista <c>Tempus · pautas</c>, ou <c>null</c> enquanto ela não existir — que é o estado de
+    /// quem nunca adicionou um assunto, e nele nada muda.
+    /// </summary>
+    public string? PautaListId { get; init; }
 
     /// <summary>
     /// Dados velhos são pior que nenhum dado (regra 10): passados 10 minutos sem sync bem

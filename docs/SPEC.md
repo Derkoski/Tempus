@@ -111,12 +111,30 @@ seria uma resposta errada com cara de certa.
 
 Notificações nativas do Windows para os eventos definidos em `SEVERITY.md` §4.
 
+### S5 — Pauta de reunião (D-052)
+
+Os **assuntos que você quer levantar** numa reunião — 3 ou 4 por reunião, na prática. Um assunto
+não é uma tarefa: nasce ligado a uma reunião, vale até ela acontecer, e "resolver" é dizê-lo em voz
+alta. Antes disto eles moravam na lista de tarefas, inflando o contador de trabalho aberto.
+
+Duas portas, para os dois momentos:
+
+- **Preparar** — no painel S3, cada linha de reunião oferece a pauta sob o ponteiro; com assunto
+  já marcado, o selo `≡ n` fica visível. Vale para os 15 dias carregados.
+- **Usar** — durante a reunião, a barra ganha um terceiro contador com **só o número**, em âmbar
+  enquanto houver assunto por dizer. Clicar abre a lista; um clique risca cada assunto falado, e
+  zerar apaga a cor.
+
+Guardados numa lista dedicada do Google Tasks (`Tempus · pautas`), criada sob demanda — o que faz a
+pauta atravessar as duas máquinas e aparecer no celular. Essa lista é **cortada** de tudo que conta
+como tarefa: chip da barra, painel S2 e os sinais do `SEVERITY.md` §2.3.
+
 ## Integrações
 
 | Serviço | Uso | Direção | Escopo OAuth | Status |
 |---------|-----|---------|--------------|--------|
 | **Calendar** | Eventos do dia, horários, links de Meet | Leitura | `calendar.readonly` (sensitive) | Fase 1 |
-| **Tasks** | Tarefas abertas, criar/concluir/editar. Inclui as **atribuídas a você** em Espaços do Chat e em Docs — `showAssigned=true`, D-040 | **Bidirecional** | `tasks` (sensitive) | Fase 1 (leitura), Fase 4 (escrita) |
+| **Tasks** | Tarefas abertas, criar/concluir/editar. Inclui as **atribuídas a você** em Espaços do Chat e em Docs — `showAssigned=true`, D-040. Também hospeda a **pauta de reunião**, em lista dedicada e separada da contagem (D-052) | **Bidirecional** | `tasks` (sensitive) | Fase 1 (leitura), Fase 4 (escrita) |
 | **Gmail** | Apenas a contagem de não-lidos | Leitura | `gmail.readonly` (restricted) | Fase 5 |
 | Keep | — | — | — | **Fora de escopo** (D-004) |
 | Chat | — | — | — | **Fora de escopo** (D-004) |

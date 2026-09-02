@@ -85,6 +85,7 @@ internal partial class FloatingBarWindow : Window
         TimeArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnStatusClicked(); };
         LookaheadText.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnTimeClicked(); };
         BreakArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OrReauth(BreakTaken); };
+        PautaArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OnPautaClicked(); };
         TasksArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OrReauth(TasksRequested); };
         MailArea.MouseLeftButtonUp += (_, e) => { e.Handled = true; OrReauth(MailRequested); };
         MouseRightButtonUp += (_, e) => { e.Handled = true; ShowContextMenu(); };
@@ -146,6 +147,9 @@ internal partial class FloatingBarWindow : Window
 
     /// <summary>Barra cinza por sync caído: o gesto é tentar de novo, não reautenticar.</summary>
     public event EventHandler? SyncRetryRequested;
+
+    /// <summary>Abrir a pauta de uma reunião (D-052). Carrega o id do evento.</summary>
+    public event EventHandler<string>? PautaRequested;
     public event EventHandler? TasksRequested;
     public event EventHandler? AgendaRequested;
     public event EventHandler? MailRequested;
@@ -257,6 +261,8 @@ internal partial class FloatingBarWindow : Window
         TasksIcon.Foreground = iconBrush;
         MailIcon.Foreground = iconBrush;
 
+        RenderPauta(state, counterBrush, iconBrush);
+
         RenderTime(state);
         RenderLookahead(state);
         RenderBreak(state);
@@ -321,6 +327,55 @@ internal partial class FloatingBarWindow : Window
     /// o expediente o slot de tempo já responde o que vem a seguir, então repetir seria ruído.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// O contador de pauta (D-052): quantos assuntos você ainda não disse nesta reunião.
+    /// <para>
+    /// <b>Só existe durante uma reunião que tem pauta.</b> Reunião sem assunto nenhum não ganha
+    /// indicador — a esmagadora maioria é assim, e um contador permanente para elas seria ruído
+    /// fixo ao lado do que importa.
+    /// </para>
+    /// <para>
+    /// Âmbar enquanto houver assunto pendente, neutro quando chega a zero. Terminar a pauta apaga
+    /// a cor, e essa é a recompensa: a barra volta ao normal porque você falou tudo. Nunca pisca,
+    /// nunca escala, nunca entra na arbitragem do §4 — não é sinal, é contador.
+    /// </para>
+    /// <para>
+    /// A invariante <b>I6</b> continua valendo: ela proíbe o contador <b>herdar</b> a cor do
+    /// alarme, e este nunca muda com a severidade da barra. O âmbar é próprio, pelo mesmo motivo
+    /// do ponto de <c>Rsvp.NeedsAction</c> — a mesma cor querendo dizer a mesma coisa.
+    /// </para>
+    /// </summary>
+    private void RenderPauta(ShellState state, Brush counterBrush, Brush iconBrush)
+    {
+        // Offline não desenha número nenhum (I7): o retorno cedo do BuildState deixa PautaTotal em
+        // zero, então esta linha já cobre o caso sem precisar consultar IsOffline.
+        if (state.PautaTotal == 0)
+        {
+            PautaArea.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        PautaArea.Visibility = Visibility.Visible;
+        PautaCount.Text = state.PautaPending.ToString();
+
+        var pendente = state.PautaPending > 0;
+
+        PautaCount.Foreground = pendente
+            ? new SolidColorBrush(_palette.AttentionBackground)
+            : counterBrush;
+
+        PautaIcon.Foreground = pendente
+            ? new SolidColorBrush(_palette.AttentionBackground)
+            : iconBrush;
+
+        PautaArea.ToolTip = pendente
+            ? $"{Plural(state.PautaPending, "assunto", "assuntos")} para falar — clique para abrir"
+            : "Pauta concluída — clique para rever";
+    }
+
+    private static string Plural(int n, string um, string varios) =>
+        n == 1 ? $"1 {um}" : $"{n} {varios}";
+
     /// <summary>
     /// O slot do meio: o detalhe do compromisso de hoje ou, quando não há nenhum, o de amanhã.
     /// Um só, e o mais próximo ganha — dois lado a lado faziam a barra parecer ter duas agendas.
@@ -1048,6 +1103,17 @@ internal partial class FloatingBarWindow : Window
     /// </summary>
     private void RaiseOfflineGesture() =>
         Raise(_state.OfflineNeedsConsent ? ReauthRequested : SyncRetryRequested);
+
+    /// <summary>
+    /// Clique no contador de pauta. Sem <c>OrReauth</c> de propósito: o contador nem existe em
+    /// <c>Offline</c>, então não há o caso que aquele desvio protege.
+    /// </summary>
+    private void OnPautaClicked()
+    {
+        if (_state.PautaEventId is not { } id) return;
+
+        PautaRequested?.Invoke(this, id);
+    }
 
     // ---------------------------------------------------------------- teardown
 

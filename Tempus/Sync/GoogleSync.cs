@@ -163,15 +163,23 @@ internal sealed class GoogleSync : IDisposable
 
         // A lista pode não existir no momento do clique — o app pode ter subido sem sync ainda.
         // Resolver aqui, e não no enfileiramento, deixa a intenção sobreviver a esse intervalo.
-        var listId = write.ListId ?? Current.DefaultTaskListId;
+        // No primeiro assunto de pauta da vida ela pode nem existir no Google: é aqui que nasce.
+        var listId = write.ListId
+            ?? (write.IsPauta ? await EnsurePautaListAsync(ct) : Current.DefaultTaskListId);
+
         if (listId is null) return WriteOutcome.Failed(null, "Nenhuma lista de tarefas conhecida");
 
         try
         {
             switch (write.Kind)
             {
+                // As notas só vêm preenchidas num assunto de pauta, e é ali que mora o vínculo com
+                // a reunião (D-052). Sem elas o assunto viraria um item solto que nenhuma pauta
+                // reconhece — por isso vão no mesmo Insert, e não numa segunda chamada que pode
+                // falhar sozinha.
                 case WriteKind.Create:
-                    await _tasks.Tasks.Insert(new GTask { Title = write.Title }, listId)
+                    await _tasks.Tasks
+                        .Insert(new GTask { Title = write.Title, Notes = write.Notes }, listId)
                         .ExecuteAsync(ct);
                     break;
 
@@ -237,11 +245,17 @@ internal sealed class GoogleSync : IDisposable
 
         try
         {
-            var (tasks, defaultList) = await ReadTasksAsync(ct);
+            var read = await ReadTasksAsync(ct);
 
             // LastSuccessAt fica de fora de propósito: ele responde por "o retrato inteiro é
             // confiável", e uma leitura parcial não pode adiar a ida para Offline (§0).
-            Publish(Current with { Tasks = tasks, DefaultTaskListId = defaultList });
+            Publish(Current with
+            {
+                Tasks = read.Tasks,
+                Pauta = read.Pauta,
+                DefaultTaskListId = read.DefaultList,
+                PautaListId = read.PautaList,
+            });
         }
         catch (Exception)
         {
@@ -357,7 +371,7 @@ internal sealed class GoogleSync : IDisposable
             }
 
             var (agenda, upcoming) = await ReadAgendaAsync(ct);
-            var (tasks, defaultList) = await ReadTasksAsync(ct);
+            var read = await ReadTasksAsync(ct);
             var unread = await ReadUnreadMailAsync(ct);
 
             Publish(new SyncSnapshot
@@ -365,9 +379,11 @@ internal sealed class GoogleSync : IDisposable
                 Health = SyncHealth.Ok,
                 Agenda = agenda,
                 Upcoming = upcoming,
-                Tasks = tasks,
+                Tasks = read.Tasks,
+                Pauta = read.Pauta,
                 UnreadMail = unread,
-                DefaultTaskListId = defaultList,
+                DefaultTaskListId = read.DefaultList,
+                PautaListId = read.PautaList,
                 LastSuccessAt = DateTimeOffset.Now,
                 Message = null,
             });
@@ -679,10 +695,17 @@ internal sealed class GoogleSync : IDisposable
             ?? Conference.FindIn(ev.Description);
     }
 
-    private async Task<(IReadOnlyList<TaskItem> Tasks, string? DefaultList)>
-        ReadTasksAsync(CancellationToken ct)
+    /// <summary>O que uma rodada de leitura de tarefas produz, já com a pauta separada (D-052).</summary>
+    private readonly record struct TasksRead(
+        IReadOnlyList<TaskItem> Tasks,
+        IReadOnlyList<TaskItem> Pauta,
+        string? DefaultList,
+        string? PautaList);
+
+    private async Task<TasksRead> ReadTasksAsync(CancellationToken ct)
     {
         var lists = await GetTaskListsAsync(ct);
+        var pautaList = PautaListIn(lists);
         var result = new List<TaskItem>();
         string? defaultList = null;
 
@@ -690,7 +713,9 @@ internal sealed class GoogleSync : IDisposable
         {
             if (list.Id is null) continue;
 
-            defaultList ??= list.Id; // a primeira lista é a padrão do Google Tasks
+            // A primeira lista é a padrão do Google Tasks — mas a de pauta nunca pode sê-la, ou
+            // toda tarefa criada pela barra nasceria como assunto de reunião de ninguém.
+            if (list.Id != pautaList) defaultList ??= list.Id;
 
             var open = _tasks!.Tasks.List(list.Id);
             open.ShowCompleted = false;
@@ -720,7 +745,35 @@ internal sealed class GoogleSync : IDisposable
             result.AddRange(Read(await done.ExecuteAsync(ct), list.Id).Where(t => t.IsCompleted));
         }
 
-        return (result, defaultList);
+        var (tasks, pauta) = Pauta.Split(result, pautaList);
+        return new TasksRead(tasks, pauta, defaultList, pautaList);
+    }
+
+    /// <summary>
+    /// A lista de pauta, se já existir. Por título, que é o único identificador estável que a API
+    /// oferece — e se o usuário renomeá-la pelo celular, o Tempus passa a tratá-la como lista comum
+    /// em vez de perder os assuntos.
+    /// </summary>
+    private static string? PautaListIn(IList<GTaskList> lists) =>
+        lists.FirstOrDefault(l => l.Title == Pauta.ListTitle)?.Id;
+
+    /// <summary>
+    /// A lista de pauta, criando-a se for preciso.
+    /// <para>
+    /// <b>Sob demanda, nunca no startup.</b> Quem nunca usar a funcionalidade não ganha uma lista
+    /// estranha na conta do Google — e a conta é do usuário, não do app.
+    /// </para>
+    /// </summary>
+    private async Task<string?> EnsurePautaListAsync(CancellationToken ct)
+    {
+        if (PautaListIn(await GetTaskListsAsync(ct)) is { } existing) return existing;
+
+        var created = await _tasks!.Tasklists
+            .Insert(new GTaskList { Title = Pauta.ListTitle })
+            .ExecuteAsync(ct);
+
+        _taskLists = null; // invalida o cache: a leitura seguinte precisa enxergar a lista nova
+        return created.Id;
     }
 
     private static IEnumerable<TaskItem> Read(Google.Apis.Tasks.v1.Data.Tasks response, string listId)
@@ -735,6 +788,7 @@ internal sealed class GoogleSync : IDisposable
                 Id = task.Id,
                 ListId = listId,
                 Title = task.Title,
+                Notes = task.Notes,
                 Due = ReadDue(task),
                 IsCompleted = task.Status == "completed",
                 CompletedAt = ReadCompleted(task),

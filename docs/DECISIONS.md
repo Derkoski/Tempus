@@ -3214,3 +3214,87 @@ já aplicam.
 Dois títulos longos entraram no `FakeStateSource`: um que ocupa duas linhas cheias e outro que
 passa disso. Sem eles, o corte só apareceria com dado real — que é justamente onde não se testa
 (D-024).
+
+---
+
+## D-052 — Pauta de reunião: os assuntos que não são tarefas
+
+**Data:** 2026-09-02 · **Status:** aceita
+
+### O pedido
+
+> *"eu precisava de um lugar para adicionar informações que quero falar em uma reunião... mas hoje
+> tenho feito como tarefas, mas são comunicados que não se encaixam como tarefas, seriam 3, ou 4
+> assuntos por reunião"*
+
+**Um assunto não é uma tarefa.** Ele nasce ligado a uma reunião, vale só até ela acontecer, e
+"resolver" é dizê-lo em voz alta. Guardá-los entre as tarefas tinha dois custos: inflavam o contador
+que responde *"quanto trabalho está aberto?"* e sobreviviam à reunião como pendências que nunca
+foram pendências.
+
+### Onde os assuntos moram
+
+**Numa lista dedicada do Google Tasks**, `Tempus · pautas`, criada **sob demanda** — quem nunca usar
+a funcionalidade não ganha lista estranha na conta.
+
+Escolhido em cima da alternativa (arquivo local, como os reconhecimentos) por duas razões que só o
+usuário podia pesar: o Tempus roda em **duas máquinas**, e arquivo local não viaja; e a lista
+aparece no app do Tasks no celular, então dá para anotar um assunto longe do computador.
+
+O preço aceito é que, para a API, um assunto **é** uma tarefa. O que impede isso de recriar o
+problema é um corte único, em `Pauta.Split`: a lista de pauta sai de `SyncSnapshot.Tasks` antes de
+qualquer coisa. Sem ele os assuntos entrariam no chip da barra, no painel S2 e no `TaskOverdue` do
+§2.3 — exatamente o que a funcionalidade existe para evitar. Tem teste com esse nome.
+
+| Campo | Uso |
+|---|---|
+| `Title` | o texto do assunto |
+| `Notes` | `evento:<id>` — o vínculo |
+| `Due` | a data da reunião, só para o celular agrupar no dia certo |
+| `Status` | `completed` = já falei |
+
+**Riscar é concluir**, no sentido literal da API. O mapeamento é exato e traz de graça a reversão do
+D-030: clicar de novo desfaz.
+
+### A chave é o id do evento, não a ocorrência do §7
+
+`Signal.OccurrenceFor` embute início e fim **de propósito**, para que prorrogar uma reunião traga o
+alarme de volta. Aqui esse mesmo comportamento **apagaria a pauta se o organizador mexesse quinze
+minutos no horário** — e a pauta é trabalho preparado, não alarme.
+
+Com `SingleEvents = true`, cada ocorrência de uma recorrente já tem id próprio: o id sozinho
+distingue a Daily de hoje da de amanhã **e** sobrevive à remarcação. Um teste trava as duas metades.
+
+### O contador âmbar, e por que ele não fere a I6
+
+A escolha do usuário foi explícita: *"apenas um número quando estou na reunião, em laranja"* — a
+mesma forma dos contadores de tarefa e e-mail, sem texto.
+
+A invariante **I6** diz que contadores são renderizados em `Calm` mesmo com a barra vermelha. Ela
+continua intacta, porque proíbe o contador **herdar** a cor de um alarme alheio, não ter cor
+própria. O precedente já existia: o ponto de `Rsvp.NeedsAction` no painel de agenda usa o mesmo
+âmbar porque *"é o único que exige ação — a mesma cor querendo dizer a mesma coisa"*.
+
+Três limites mantêm o âmbar barato:
+
+- **Só durante a reunião em curso**, e só se ela tiver pauta. A esmagadora maioria não tem.
+- **Zera quando tudo é riscado.** Terminar a pauta apaga a cor — se ela seguisse o total, ficaria
+  acesa a reunião inteira e deixaria de querer dizer alguma coisa.
+- **Nunca pisca, nunca escala, nunca entra na arbitragem do §4.** Não é sinal; é contador.
+
+### Sem toast
+
+Cogitado e recusado. O toast de reunião do D-039 já dispara no início, e acrescentar a pauta nele
+dobraria o conteúdo de uma notificação que precisa ser lida de relance. O contador serve o mesmo
+momento sem gastar o recurso mais escasso do produto.
+
+### Dois defeitos que a implementação pegou antes de existirem
+
+**A linha provisória não carregava as notas.** `TaskProjection.Provisional` monta o `TaskItem` de
+uma criação ainda não confirmada, e sem `Notes` o assunto recém-digitado nascia órfão — sumiria da
+pauta até o Google responder, no meio de uma reunião. Quebraria a promessa do D-029 justamente onde
+ela mais importa.
+
+**A lista de pauta podia virar a lista padrão.** `ReadTasksAsync` elegia a primeira lista como
+destino de tarefas novas; se a de pauta viesse primeiro, toda tarefa criada pela barra nasceria como
+assunto de reunião nenhuma.

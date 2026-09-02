@@ -13,6 +13,16 @@ internal sealed record TaskItem
 
     public required string Title { get; init; }
 
+    /// <summary>
+    /// Notas da tarefa. O Tempus não as exibe em lugar nenhum — elas existem para carregar o
+    /// vínculo <c>evento:&lt;id&gt;</c> de um assunto de pauta com a reunião dele (D-052).
+    /// <para>
+    /// Lido <b>e</b> preservado: o <c>Reschedule</c> faz <c>get</c> antes de <c>update</c>
+    /// justamente para não apagar este campo, e a razão vale para qualquer escrita futura.
+    /// </para>
+    /// </summary>
+    public string? Notes { get; init; }
+
     /// <summary>Vencimento. O Google Tasks guarda data sem hora, então <see cref="DateOnly"/>.</summary>
     public DateOnly? Due { get; init; }
 

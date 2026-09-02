@@ -65,6 +65,22 @@ internal sealed record PendingWrite
     public string? Title { get; init; }
 
     /// <summary>
+    /// Notas, só na criação de um assunto de pauta — é onde mora o vínculo com a reunião (D-052).
+    /// Nenhum outro verbo mexe nelas: alterar notas não é gesto que a barra ofereça.
+    /// </summary>
+    public string? Notes { get; init; }
+
+    /// <summary>
+    /// Esta escrita vai para a lista de pauta, e não para as tarefas.
+    /// <para>
+    /// Explícito em vez de deduzido das notas: no primeiro assunto de todos a lista ainda não
+    /// existe no Google, e é esta flag que autoriza criá-la. Inferir pelo conteúdo faria uma
+    /// tarefa comum com notas nascer no lugar errado.
+    /// </para>
+    /// </summary>
+    public bool IsPauta { get; init; }
+
+    /// <summary>
     /// O vencimento pretendido, em <see cref="WriteKind.Reschedule"/>. <c>null</c> quer dizer
     /// <b>apagar a data</b> — só é lido quando o verbo é esse, então não há ambiguidade com
     /// "campo não preenchido".

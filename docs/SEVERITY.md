@@ -348,8 +348,13 @@ senão:             severidadeEfetiva = max(sinaisAtivos não suprimidos)
 - **I4.** Histerese: mínimo de 20s num nível antes de rebaixar, para não piscar em torno de uma
   fronteira. Não se aplica a reconhecimento, que é sempre imediato.
 - **I5.** Subida de nível é imediata — histerese só atrasa a descida, nunca a subida.
-- **I6.** Contadores (tarefas, e-mail) são renderizados no nível `Calm` mesmo quando a barra
+- **I6.** Contadores (tarefas, e-mail, pauta) são renderizados no nível `Calm` mesmo quando a barra
   está vermelha por outro motivo. A cor pertence ao estado, não aos números.
+  > **Emenda de 2026-09-02 (D-052).** O contador de **pauta** tem âmbar próprio, e isso não abre
+  > exceção: a invariante proíbe o contador **herdar** a cor de um alarme alheio, não ter cor. O
+  > âmbar da pauta quer dizer "estes assuntos esperam por você" — exatamente o que o ponto de
+  > `Rsvp.NeedsAction` já significa no painel de agenda, com a mesma cor. Ele não muda com a
+  > severidade da barra, nunca pisca, nunca escala e não entra na arbitragem do §4.
 - **I7.** No estado `Offline`, nenhum contador exibe número e nenhum sinal é avaliado.
 - **I8.** A escalada para piscante nunca ocorre antes de 5 min no nível 3, e nunca com período
   menor que 1s.

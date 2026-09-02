@@ -126,6 +126,46 @@ public class InvariantTests
     }
 
     /// <summary>
+    /// I6 aplicada ao contador de pauta (D-052), que é o único com cor <b>própria</b>.
+    /// <para>
+    /// A invariante proíbe o contador <i>herdar</i> a cor do alarme, não ter uma. O âmbar da pauta
+    /// significa "estes assuntos esperam por você" — o mesmo que o ponto de <c>Rsvp.NeedsAction</c>
+    /// já significa no painel de agenda. O que este teste trava é a outra metade: com a barra
+    /// vermelha por motivo alheio, os números da pauta não mudam.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void I6_contador_de_pauta_nao_herda_a_cor_do_alarme()
+    {
+        var pauta = new ShellState
+        {
+            PautaEventId = "evt-1",
+            PautaTotal = 4,
+            PautaPending = 2,
+        };
+
+        var vermelha = pauta with { Severity = Severity.Critical, Reason = "Estourou" };
+
+        Assert.Equal(pauta.PautaTotal, vermelha.PautaTotal);
+        Assert.Equal(pauta.PautaPending, vermelha.PautaPending);
+        Assert.Equal(pauta.PautaEventId, vermelha.PautaEventId);
+    }
+
+    /// <summary>
+    /// A cor do contador segue os <b>pendentes</b>, e zerá-los tem de apagá-la. Se seguisse o total,
+    /// o âmbar ficaria aceso a reunião inteira e deixaria de querer dizer alguma coisa — que é como
+    /// se gasta um vocabulário de cor (regra 1).
+    /// </summary>
+    [Fact]
+    public void Pauta_toda_dita_apaga_a_cor_sem_esconder_o_contador()
+    {
+        var terminada = new ShellState { PautaEventId = "evt-1", PautaTotal = 3, PautaPending = 0 };
+
+        Assert.Equal(0, terminada.PautaPending);  // sem âmbar
+        Assert.Equal(3, terminada.PautaTotal);    // mas o contador continua clicável
+    }
+
+    /// <summary>
     /// I7: em <c>Offline</c> nenhum contador exibe número e nenhum sinal é avaliado. Mostrar o
     /// último valor conhecido seria mentir com confiança (regra 10).
     /// </summary>
@@ -142,6 +182,13 @@ public class InvariantTests
 
         Assert.Null(offline.OpenTasks);
         Assert.Null(offline.UnreadMail);
+
+        // A pauta some junto: o retorno cedo do BuildState não preenche estes campos, e zero
+        // esconde o contador. Um número de assuntos sobrevivendo ao Offline seria dado velho com
+        // cara de atual, que é o pior modo de falha do produto (§0).
+        Assert.Equal(0, offline.PautaTotal);
+        Assert.Equal(0, offline.PautaPending);
+        Assert.Null(offline.PautaEventId);
 
         // Sem sinal avaliado: o humor é Unknown, que é o default de ShellState.
         Assert.Equal(TimeMood.Unknown, offline.Time.Mood);
